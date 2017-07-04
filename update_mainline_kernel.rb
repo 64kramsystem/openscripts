@@ -86,7 +86,7 @@ class UpdateMainlineKernel
 
     # Simulate a X.Y.0-rc0
     #
-    KernelVersion.new(major, minor, 0, 0)
+    KernelVersion.new(major, minor, 0, rc: 0)
   end
 
   def load_mainline_ppa_page
