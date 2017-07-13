@@ -69,13 +69,20 @@ class CleanKernelPackages
     package_matchers = versions.map do |version|
       version_pattern = "#{version.major}\\.#{version.minor}\\.#{version.patch}"
 
+      # Aptitude doesn't support `\d` for matching digits.
+      #
       if version.ongoing
-        version_pattern << "-#{version.ongoing}"
+        # Example: 4.10.0-14
+        version_pattern << "-#{version.ongoing}\\b"
       elsif version.rc
-        version_pattern << "-\\w+rc#{version.rc}"
+        # Example: 4.12.0-041200rc7
+        version_pattern << "-[0-9]+rc#{version.rc}\\b"
+      else
+        # Example: 4.12.0-041200
+        version_pattern << "-[0-9]+\\b"
       end
 
-      "~i^linux-(headers|image|image-extra)-#{version_pattern}\\b".shellescape
+      "~i^linux-(headers|image|image-extra)-#{version_pattern}".shellescape
     end.join(' ')
 
     `aptitude search -w 120 #{package_matchers} | cut -c 5- | awk '{print $1}'`.split("\n")
