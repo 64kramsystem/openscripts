@@ -8,7 +8,7 @@ require 'shellwords'
 
 class CleanKernelPackages
 
-  def execute(dry_run: false, keep_previous: false)
+  def execute(dry_run: false, keep_previous: false, delete_current: false)
     current_version = KernelVersion.find_current
 
     puts "Current kernel version: #{current_version}", ""
@@ -17,7 +17,7 @@ class CleanKernelPackages
 
     puts "Currently installed package versions:", *installed_versions.map { |version| "- #{version}" }, ""
 
-    versions_to_remove = find_versions_to_remove(current_version, installed_versions, keep_previous: keep_previous)
+    versions_to_remove = find_versions_to_remove(current_version, installed_versions, keep_previous: keep_previous, delete_current: delete_current)
 
     if versions_to_remove.size > 0
       packages_to_remove = find_packages_to_remove(versions_to_remove)
@@ -62,7 +62,13 @@ class CleanKernelPackages
 
     versions_to_delete.pop if options[:keep_previous]
 
-    versions_to_delete + future_versions.sort[0..-2] # Keep the latest future
+    versions_to_delete << current_version if options[:delete_current]
+
+    versions_to_delete += future_versions.sort[0..-2] # Keep the latest future
+
+    raise "No versions remaining after cleaning!" if versions_to_delete.size == installed_versions.size
+
+    versions_to_delete
   end
 
   def find_packages_to_remove(versions)
@@ -98,6 +104,7 @@ if __FILE__ == $PROGRAM_NAME
 
   options = SimpleScripting::Argv.decode(
     ['-k', '--keep-previous', "Keep one previous version (the latest)"],
+    ['-d', '--delete-current', "Delete current; requires at least another version to be present"],
     ['-n', '--dry-run', "Dry run; doesn't remove any package"],
   )
 
