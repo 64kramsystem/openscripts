@@ -76,10 +76,10 @@ class CleanKernelPackages
         version_pattern << "-#{version.ongoing}\\b"
       elsif version.rc
         # Example: 4.12.0-041200rc7
-        version_pattern << "-[0-9]+rc#{version.rc}\\b"
+        version_pattern << "-[0-9]{6}rc#{version.rc}\\b"
       else
         # Example: 4.12.0-041200
-        version_pattern << "-[0-9]+\\b"
+        version_pattern << "-[0-9]{6}\\b"
       end
 
       "~i^linux-(headers|image|image-extra)-#{version_pattern}".shellescape
