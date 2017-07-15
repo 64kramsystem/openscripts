@@ -1,0 +1,132 @@
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
+
+require 'open-uri'
+require 'open_uri_redirections'
+require 'ruby-progressbar'
+require 'uri'
+
+require 'simple_scripting/argv'
+
+class DownloadWithProgress
+
+  def execute(address, destination_file)
+    uri = URI(address)
+
+    Net::HTTP.start(uri.host) do |http|
+      response = http.request_head(address)
+
+      file_basename = File.basename(destination_file)
+      file_size = response['content-length'].to_i
+
+      progress_bar = ProgressBar.create(title: file_basename, total: file_size)
+
+      File.open(destination_file, "wb") do |file|
+        http.get(address) do |data_chunk|
+          file << data_chunk
+          progress_bar.progress += data_chunk.length
+        end
+      end
+
+      progress_bar.finish
+    end
+  end
+
+end
+
+class DownloadUbuntuPackages
+
+  INDEX_SERVER_ADDRESS = "http://packages.ubuntu.com"
+  PACKAGE_SERVER_ADDRESS = "http://de.archive.ubuntu.com"
+  ALTERNATE_PACKAGE_SERVER_ADDRESS = "http://security.ubuntu.com"
+  DEFAULT_ARCHITECTURE = "amd64"
+
+  def execute(codename, packages, download_to: Dir.pwd)
+    packages.each do |package|
+      package_download_page = find_and_open_package_download_page(codename, package)
+      package_address = find_package_address(package_download_page, package)
+      destination_file = compose_destination_file(package_address, download_to)
+
+      if File.exists?(destination_file)
+        puts ">>> File #{destination_file.inspect} existing; not downloading"
+      else
+        DownloadWithProgress.new.execute(package_address, destination_file)
+      end
+    end
+  end
+
+  private
+
+  # Tries the default architecture first; if not found, tries the `all`.
+  #
+  def find_and_open_package_download_page(codename, package)
+    # If the package has "all" architecture, using the specific architecture address
+    # will lead to a page which still has the "all" architecture links.
+    #
+    package_download_address = download_address(codename, DEFAULT_ARCHITECTURE, package)
+    package_download_page = open(package_download_address, allow_redirections: :safe).read
+
+    # Must find a better identifier than `You can download the requested file`.
+    #
+    # raise if package_download_page !~ DOWNLOAD_PAGE_IDENTIFIER
+
+    package_download_page
+  end
+
+  def download_address(codename, architecture, package)
+    "#{INDEX_SERVER_ADDRESS}/#{codename}/#{architecture}/#{package}/download"
+  end
+
+  # Sample:
+  #
+  #   http://de.archive.ubuntu.com/ubuntu/pool/<REPO>/z/zfs-linux/zfsutils-linux_.+?_amd64.deb
+  #
+  # REPO: `main`, `universe`
+  #
+  def find_package_address(package_download_page, package)
+    [PACKAGE_SERVER_ADDRESS, ALTERNATE_PACKAGE_SERVER_ADDRESS].each do |server_address|
+      package_link_regex = %r{
+        #{server_address}/ubuntu/pool/\w+/
+        \w+/.+?/
+        #{Regexp.escape(package)}_.+?_\w+.deb
+      }x
+
+      return package_download_page[package_link_regex] if package_download_page[package_link_regex]
+    end
+
+    raise "Package link match not found for #{package.inspect}"
+  end
+
+  def compose_destination_file(package_address, destination_directory)
+    file_basename = File.basename(package_address)
+    File.join(destination_directory, file_basename)
+  end
+
+end
+
+# The server, architecture, and kernel type, all have a default.
+#
+if __FILE__ == $PROGRAM_NAME
+  long_help = "\
+[packages] is in comma-separated form.
+[codename] is the Ubuntu codename (xenial, zesty, artful...).
+
+The architecture of the packages is `amd64`; the mirror is http://mirrors.kernel.org.
+
+If a package is found in the destination path, it's not downloaded.
+"
+
+  params = SimpleScripting::Argv.decode(
+    ['-d', '--download-to DIRECTORY', "Download directory; defaults to current path."],
+    'codename',
+    'packages',
+    long_help: long_help
+  )
+
+  codename = params[:codename]
+  packages = params[:packages].split(',')
+  options = params.select { |k, _| k == :download_to}
+
+  DownloadUbuntuPackages.new.execute(codename, packages, options)
+
+end

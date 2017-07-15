@@ -1,7 +1,9 @@
 GEM
   remote: https://rubygems.org/
   specs:
+    open_uri_redirections (0.2.1)
     parseconfig (1.0.8)
+    ruby-progressbar (1.8.1)
     simple_scripting (0.9.0)
       parseconfig (~> 1.0)
 
@@ -9,6 +11,8 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  open_uri_redirections
+  ruby-progressbar
   simple_scripting (~> 0.9)
 
 BUNDLED WITH
