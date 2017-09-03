@@ -33,7 +33,7 @@ fi
 
 echo "Installing $cron_file ..."
 
-cat << TEXT | sudo tee $cron_file > /dev/null
+cat <<TEXT | sudo tee $cron_file > /dev/null
 #!/bin/bash
 
 rm -f $status_file $status_file.tmp
@@ -68,7 +68,7 @@ sudo chmod 755 $cron_file
 
 echo "Installing $notification_script ..."
 
-cat << TEXT > $notification_script
+cat <<TEXT > $notification_script
 #!/bin/bash
 
 if [[ -f $status_file && \$(cat $status_file) != "" ]]; then
@@ -83,7 +83,7 @@ chmod 755 $notification_script
 
 echo "Installing $startup_application_definition ..."
 
-cat << TEXT > "$startup_application_definition"
+cat <<TEXT > "$startup_application_definition"
 [Desktop Entry]
 Encoding=UTF-8
 Version=0.9.4
