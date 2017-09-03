@@ -1,0 +1,82 @@
+#!/bin/bash
+
+set -o errexit
+
+# Variables ####################################################################
+
+username=$(who | awk '{print $1}')
+user_home=$(getent passwd $username | cut -f6 -d:)
+
+smartd_run_file=/etc/smartmontools/run.d/10mail
+message_file=/var/lib/smart_warning.txt
+notification_script=$user_home/bin/check_smart_warning.sh
+startup_application_definition="$user_home/.config/autostart/Check SMART warnings.desktop"
+
+# Help and explanation #########################################################
+
+if [[ $0 == '-h' || $1 == '--help' ]]; then
+  echo "Usage: install_smart_notifier.sh"
+  echo
+  echo "Install the scripts for warning the user whenever smartd finds a problem."
+  echo
+  echo $'For testing:    sudo perl -i -pe \'s/^(DEVICESCAN.*)/$1 -M test/\' /etc/smartd.conf'
+  echo $'For reverting:  sudo perl -i -pe \'s/^(DEVICESCAN.*) -M test/$1/\' /etc/smartd.conf'
+  echo
+  echo "WATCH OUT! Due to an issue with smartd-runner (see https://bugs.launchpad.net/bugs/1714794),"
+  echo "the original $smartd_run_file is replaced, therefore, the notification email to the root user"
+  echo "is not sent."
+  echo ""
+  echo "Files installed:"
+  echo "- $smartd_run_file: smart job that creates a message file ($message_file)"
+  echo "- $notification_script: notification script"
+  echo "- $startup_application_definition: notification script startup definition"
+  echo
+  exit
+fi
+
+# smartd run file ##############################################################
+
+echo "Installing $smartd_run_file"
+
+cat <<TEXT | sudo tee $smartd_run_file > /dev/null
+#!/bin/bash
+
+cp "\$1" $message_file
+chown $username: $message_file
+TEXT
+
+sudo chmod 755 $smartd_run_file
+
+# Notifier #####################################################################
+
+echo "Installing $notification_script ..."
+
+cat <<TEXT > $notification_script
+#!/bin/bash
+
+if [[ -f $message_file && \$(cat $message_file) != "" ]]; then
+  zenity --info --text="\$(cat $message_file)"
+  > $message_file
+fi
+TEXT
+
+chmod 755 $notification_script
+
+# Startup application definition ###############################################
+
+echo "Installing $startup_application_definition ..."
+
+cat <<TEXT > "$startup_application_definition"
+[Desktop Entry]
+Encoding=UTF-8
+Version=0.9.4
+Type=Application
+Name=Check SMART warnings
+Comment=
+Exec=$notification_script
+OnlyShowIn=XFCE;
+StartupNotify=false
+Terminal=false
+Hidden=false
+
+TEXT
