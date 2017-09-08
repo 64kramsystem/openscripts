@@ -2,6 +2,8 @@
 
 `OS` is a collection of some of my scripts for personal use:
 
+- documents
+  - `update_markdown_chapter_references.rb`: generates/updates a Table Of Contents, and navigation links, in a collection of Markdown documents
 - programming
   - `prettify_xml_files.rb`: prettifies the specified XML files
 - sysadmin
@@ -15,6 +17,7 @@ I will slowly add all the remaining ones.
 
 # Changelog #
 
+- 2017/Sep/08: added `update_markdown_chapter_references.rb`
 - 2017/Sep/03: added `install_smart_notifier.sh`
 - 2017/Jul/15: added `download_ubuntu_packages.rb`
 - 2017/Jul/10: added `install_btrfs_checker.sh`
