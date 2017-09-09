@@ -9,46 +9,102 @@ class UpdateMarkdownChapterReferences
 
     The script makes a few assumptions:
 
-    - each file starts is named `<number>_<title>.md`
-    - if a TOC file is specified, the other files must begin with number `1`
+    - each file is named `<number>_<title>.md`
     - each file has an H1 title `# <title>`
     - navigation links are at the bootom of each document, in a single line starting with `[Previous: ` (or `[Next: `)
 
-    Using the `--toc-file` option, it's possible to specify a file containing the TOC, but without having a numbered filename (eg. `README.md`).
+    Using the `--special-toc-file` option, it's possible to specify a file containing the TOC, but without having a numbered filename (eg. `README.md`).
   STR
 
-  def execute(directory: '.', toc_file: nil)
-    numbered_chapter_files = find_numbered_chapter_files(directory)
-    toc_file ||= numbered_chapter_files[0]
+  def execute(directory: '.', special_toc_file: nil, insert_file: nil)
+    directory, special_toc_file, insert_file = normalize_filenames(directory, special_toc_file, insert_file)
 
-    chapters_mapping = map_chapters(toc_file, numbered_chapter_files)
+    check_files(directory, special_toc_file, insert_file)
 
-    update_file_table_of_contents(toc_file, chapters_mapping)
+    move_chapter_files(directory, insert_file) if insert_file
 
-    chapters_mapping.keys.each_with_index do |chapter_file, file_index|
-      update_navigation_links(chapter_file, file_index, chapters_mapping)
-    end
+    chapter_files = find_numbered_chapter_files(directory)
+
+    chapter_files.unshift(special_toc_file) if special_toc_file
+
+    chapters_mapping = map_chapters(chapter_files)
+
+    update_file_table_of_contents(chapters_mapping)
+
+    update_navigation_links(chapters_mapping)
   end
 
   private
 
-  # SYSTEM LEVEL
+  # FILE RELATED
+
+  def normalize_filenames(*filenames)
+    filenames.map { |filename| File.expand_path(filename) if filename }
+  end
+
+  def check_files(directory, special_toc_file, insert_file)
+    if special_toc_file
+      raise "Special TOC file must be in the reference directory!" if File.expand_path("..", special_toc_file) != directory
+    end
+
+    if insert_file
+      raise "Insert file not found!" if ! File.exists?(insert_file)
+      raise "Insert file must be in the reference directory!" if File.expand_path("..", insert_file) != directory
+      raise "Insert file must be numbered!" if ! has_number?(insert_file)
+    end
+  end
+
+  def move_chapter_files(directory, insert_file)
+    chapter_files = find_numbered_chapter_files(directory)
+
+    chapter_files.each do |chapter_file|
+      chapter_file_number = find_chapter_number(chapter_file)
+      insert_file_number = find_chapter_number(insert_file)
+
+      if chapter_file != insert_file && chapter_file_number >= insert_file_number
+        new_chapter_file_basename = File.basename(chapter_file).sub(/^\d+/, (chapter_file_number + 1).to_s)
+        new_chapter_file_fullname = File.join(directory, new_chapter_file_basename)
+
+        File.rename(chapter_file, new_chapter_file_fullname)
+      end
+    end
+  end
 
   def find_numbered_chapter_files(directory)
     pattern = File.join(directory, '*.md')
 
     all_markdown_files = Dir[pattern]
 
-    chapter_files = all_markdown_files.select { |filename| File.basename(filename)[/^\d+_/] }
+    chapter_files = all_markdown_files.select { |filename| has_number?(filename) }
 
     raise "No files found!" if chapter_files.empty?
 
+    # Directory is expanded - we don't need to perform any more expansion.
+    #
     chapter_files.sort
   end
 
-  # FILE LEVEL
+  def has_number?(filename)
+    ! File.basename(filename)[/^\d+/].nil?
+  end
 
-  def update_file_table_of_contents(toc_file, chapters_mapping)
+  def find_chapter_number(filename)
+    File.basename(filename)[/^\d+/].to_i
+  end
+
+  # CONTENT RELATED
+
+  def map_chapters(chapter_files)
+    chapter_files.each_with_object({}) do |chapter_file, mapping|
+      chapter_content = IO.read(chapter_file)
+      title = chapter_content[/^# (.*)/, 1] || raise("Title not found in file #{chapter_file}")
+      mapping[chapter_file] = title
+    end
+  end
+
+  def update_file_table_of_contents(chapters_mapping)
+    toc_file = chapters_mapping.keys.first
+
     puts "Updating TOC in #{toc_file}..."
 
     content = IO.read(toc_file)
@@ -58,30 +114,6 @@ class UpdateMarkdownChapterReferences
     add_table_of_contents!(content, chapters_mapping)
 
     IO.write(toc_file, content)
-  end
-
-  def update_navigation_links(chapter_file, file_index, chapters_mapping)
-    puts "Updating navigation links in #{chapter_file}..."
-
-    content = IO.read(chapter_file)
-
-    remove_navigation_links!(content)
-
-    add_navigation_links!(content, file_index, chapters_mapping)
-
-    IO.write(chapter_file, content)
-  end
-
-  # CONTENT LEVEL
-
-  def map_chapters(toc_file, chapter_files)
-    all_documents = [toc_file] + chapter_files
-
-    all_documents.each_with_object({}) do |chapter_file, mapping|
-      chapter_content = IO.read(chapter_file)
-      title = chapter_content[/^# (.*)/, 1] || raise("Title not found in file #{chapter_file}")
-      mapping[chapter_file] = title
-    end
   end
 
   def remove_table_of_contents!(content)
@@ -94,7 +126,7 @@ class UpdateMarkdownChapterReferences
     table_of_contents = "## Table of contents\n\n"
 
     chapters_mapping.each do |chapter_file, chapter_title|
-      chapter_number = find_chapter_number(chapter_file, chapters_mapping.keys.first)
+      chapter_number = find_chapter_number(chapter_file) || 0
       entry = "#{chapter_number}. [#{chapter_title}](#{File.basename(chapter_file)})\n"
       table_of_contents << entry
     end
@@ -104,48 +136,47 @@ class UpdateMarkdownChapterReferences
     content.sub!(/^(# .*?)(^#|\Z)/m, "\\1#{table_of_contents}\\2")
   end
 
+  def update_navigation_links(chapters_mapping)
+    chapters_mapping.keys.each_with_index do |chapter_file, chapter_file_index|
+      puts "Updating navigation links in #{chapter_file}..."
+
+      content = IO.read(chapter_file)
+
+      remove_navigation_links!(content)
+
+      add_navigation_links!(content, chapters_mapping, chapter_file_index)
+
+      IO.write(chapter_file, content)
+    end
+  end
+
   def remove_navigation_links!(content)
     content.sub!(/^\[(Previous|Next): .*\n*\Z/, '')
   end
 
-  def add_navigation_links!(content, file_index, chapters_mapping)
+  def add_navigation_links!(content, chapters_mapping, chapter_file_index)
     navigation_links = []
 
-    if file_index > 0
-      previous_file = chapters_mapping.keys[file_index - 1]
+    if chapter_file_index > 0
+      previous_file = chapters_mapping.keys[chapter_file_index - 1]
       previous_chapter_title = chapters_mapping[previous_file]
       navigation_links << "[Previous: #{previous_chapter_title}](#{File.basename(previous_file)})"
     end
 
-    if file_index < chapters_mapping.size - 1
-      next_file = chapters_mapping.keys[file_index + 1]
+    if chapter_file_index < chapters_mapping.size - 1
+      next_file = chapters_mapping.keys[chapter_file_index + 1]
       next_chapter_title = chapters_mapping[next_file]
       navigation_links << "[Next: #{next_chapter_title}](#{File.basename(next_file)})"
     end
 
     content << navigation_links.join(" | ") << "\n"
   end
-
-  # STRING LEVEL
-
-  def find_chapter_number(chapter_file, toc_file)
-    chapter_number = File.basename(chapter_file)[/^\d+/]
-
-    # The TOC file may not have a number in the name.
-    #
-    if chapter_number
-      chapter_number
-    elsif File.expand_path(chapter_file) == File.expand_path(toc_file)
-      '0'
-    else
-      raise("Chapter number not found in file #{chapter_file}")
-    end
-  end
 end
 
 if __FILE__ == $0
   options = SimpleScripting::Argv.decode(
-    ['-t', '--toc-file FILENAME', "TOC file; if not specified, the first detected chapter file is used"],
+    ['-t', '--special-toc-file FILENAME', "TOC file; if not specified, the first detected chapter file is used"],
+    ['-i', '--insert-file FILENAME', "Insert a file, and push the subsequent ones; must be numbered."],
     '[directory]',
     long_help: UpdateMarkdownChapterReferences::LONG_HELP
   )
