@@ -37,9 +37,9 @@ class UpdateMarkdownChapterReferences
   def find_numbered_chapter_files(directory)
     pattern = File.join(directory, '*.md')
 
-    all_markdown_files = Dir[pattern].map { |filename| File.basename(filename)}
+    all_markdown_files = Dir[pattern]
 
-    chapter_files = all_markdown_files.select { |filename| filename[/^\d+_/] }
+    chapter_files = all_markdown_files.select { |filename| File.basename(filename)[/^\d+_/] }
 
     raise "No files found!" if chapter_files.empty?
 
@@ -95,7 +95,7 @@ class UpdateMarkdownChapterReferences
 
     chapters_mapping.each do |chapter_file, chapter_title|
       chapter_number = find_chapter_number(chapter_file, chapters_mapping.keys.first)
-      entry = "#{chapter_number}. [#{chapter_title}](#{chapter_file})\n"
+      entry = "#{chapter_number}. [#{chapter_title}](#{File.basename(chapter_file)})\n"
       table_of_contents << entry
     end
 
@@ -114,13 +114,13 @@ class UpdateMarkdownChapterReferences
     if file_index > 0
       previous_file = chapters_mapping.keys[file_index - 1]
       previous_chapter_title = chapters_mapping[previous_file]
-      navigation_links << "[Previous: #{previous_chapter_title}](#{previous_file})"
+      navigation_links << "[Previous: #{previous_chapter_title}](#{File.basename(previous_file)})"
     end
 
     if file_index < chapters_mapping.size - 1
       next_file = chapters_mapping.keys[file_index + 1]
       next_chapter_title = chapters_mapping[next_file]
-      navigation_links << "[Next: #{next_chapter_title}](#{next_file})"
+      navigation_links << "[Next: #{next_chapter_title}](#{File.basename(next_file)})"
     end
 
     content << navigation_links.join(" | ") << "\n"
@@ -129,13 +129,13 @@ class UpdateMarkdownChapterReferences
   # STRING LEVEL
 
   def find_chapter_number(chapter_file, toc_file)
-    chapter_number = chapter_file[/^\d+/]
+    chapter_number = File.basename(chapter_file)[/^\d+/]
 
     # The TOC file may not have a number in the name.
     #
     if chapter_number
       chapter_number
-    elsif chapter_file == toc_file
+    elsif File.expand_path(chapter_file) == File.expand_path(toc_file)
       '0'
     else
       raise("Chapter number not found in file #{chapter_file}")
