@@ -10,6 +10,7 @@ class UpdateMarkdownChapterReferences
     The script makes a few assumptions:
 
     - each file starts is named `<number>_<title>.md`
+    - if a TOC file is specified, the other files must begin with number `1`
     - each file has an H1 title `# <title>`
     - navigation links are at the bootom of each document, in a single line starting with `[Previous: ` (or `[Next: `)
 
@@ -17,10 +18,10 @@ class UpdateMarkdownChapterReferences
   STR
 
   def execute(directory: '.', toc_file: nil)
-    chapter_files = find_chapter_files(directory)
-    toc_file ||= chapter_files[0]
+    numbered_chapter_files = find_numbered_chapter_files(directory)
+    toc_file ||= numbered_chapter_files[0]
 
-    chapters_mapping = map_chapters(toc_file, chapter_files)
+    chapters_mapping = map_chapters(toc_file, numbered_chapter_files)
 
     update_file_table_of_contents(toc_file, chapters_mapping)
 
@@ -33,7 +34,7 @@ class UpdateMarkdownChapterReferences
 
   # SYSTEM LEVEL
 
-  def find_chapter_files(directory)
+  def find_numbered_chapter_files(directory)
     pattern = File.join(directory, '*.md')
 
     all_markdown_files = Dir[pattern].map { |filename| File.basename(filename)}
