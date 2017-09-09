@@ -94,7 +94,7 @@ class UpdateMarkdownChapterReferences
     table_of_contents = "## Table of contents\n\n"
 
     chapters_mapping.each do |chapter_file, chapter_title|
-      chapter_number = find_chapter_number(chapter_file, chapters_mapping)
+      chapter_number = find_chapter_number(chapter_file, chapters_mapping.keys.first)
       entry = "#{chapter_number}. [#{chapter_title}](#{chapter_file})\n"
       table_of_contents << entry
     end
@@ -128,14 +128,14 @@ class UpdateMarkdownChapterReferences
 
   # STRING LEVEL
 
-  def find_chapter_number(chapter_file, chapters_mapping)
+  def find_chapter_number(chapter_file, toc_file)
     chapter_number = chapter_file[/^\d+/]
 
     # The TOC file may not have a number in the name.
     #
     if chapter_number
       chapter_number
-    elsif chapter_file == chapters_mapping.keys[0]
+    elsif chapter_file == toc_file
       '0'
     else
       raise("Chapter number not found in file #{chapter_file}")
