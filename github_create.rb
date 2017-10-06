@@ -33,8 +33,9 @@ class ConfigurationHelper
   def decode_argv
     SimpleScripting::Argv.decode(
       'pr' => [
-        ['-n', '--no-open-pr',                          "Don't open the PR link in the browser after creation"],
-        ['-l', '--label-patterns "legacy,code review"', "Label patterns"],
+        ['-n', '--no-open-pr',                              "Don't open the PR link in the browser after creation"],
+        ['-l', '--label-patterns "legacy,code review"',     "Label patterns"],
+        ['-r', '--reviewer-patterns john,tom,adrian,kevin', "Reviewer login patterns"],
         'title',
         'description',
       ],
@@ -108,6 +109,12 @@ class GithubApiHelper
     response.map { |label_entry| label_entry['name'] }
   end
 
+  def find_collaborators
+    response = send_github_request("https://api.github.com/repos/#{@repo_helper.owner_and_repo}/collaborators", multipage: true)
+
+    response.map { |user_entry| user_entry.fetch('login') }
+  end
+
   # Returns a JSON object.
   #
   def send_pr_creation_request(title, description)
@@ -136,6 +143,13 @@ class GithubApiHelper
   def send_add_labels_to_issue_request(issue_number, labels)
     request_data = labels
     request_address = "https://api.github.com/repos/#{@repo_helper.owner_and_repo}/issues/#{issue_number}/labels"
+
+    send_github_request(request_address, data: request_data)
+  end
+
+  def send_create_review_request(issue_number, reviewers)
+    request_data = {reviewers: reviewers}
+    request_address = "https://api.github.com/repos/#{@repo_helper.owner_and_repo}/pulls/#{issue_number}/requested_reviewers"
 
     send_github_request(request_address, data: request_data)
   end
@@ -256,16 +270,28 @@ class GitHubCreatePr
 
     if options[:label_patterns]
       all_labels = api_helper.find_labels
-      selected_labels = select_labels(all_labels, options[:label_patterns])
+      selected_labels = select_entries(all_labels, options[:label_patterns], type: "labels")
+    end
+
+    if options[:reviewer_patterns]
+      all_collaborators = api_helper.find_collaborators
+      reviewers = select_entries(all_collaborators, options[:reviewer_patterns], type: "collaborators")
     end
 
     issue_number, issue_link = api_helper.send_pr_creation_request(title, description)
 
     api_helper.send_assign_user_to_issue_request(issue_number)
 
-    if selected_labels && ! selected_labels.empty?
+    if selected_labels
       issue_edit_result = api_helper.send_add_labels_to_issue_request(issue_number, selected_labels)
-      puts "Labels assigned: " + issue_edit_result.map { |entry| entry['name'].inspect }.join(', ')
+
+      puts "- labels assigned: " + issue_edit_result.map { |entry| entry['name'].inspect }.join(', ')
+    end
+
+    if reviewers
+      pr_edit_result = api_helper.send_create_review_request(issue_number, reviewers)
+
+      puts "- review requested to: " + pr_edit_result.fetch('requested_reviewers').map { |reviewer_data| reviewer_data.fetch('login') }.join(', ')
     end
 
     if options[:no_open_pr]
@@ -277,19 +303,19 @@ class GitHubCreatePr
 
   private
 
-  def select_labels(labels, raw_label_patterns)
-    patterns = raw_label_patterns.split(',')
+  def select_entries(entries, raw_patterns, type: "entries")
+    patterns = raw_patterns.split(',')
 
     patterns.map do |pattern|
-      labels_found = labels.select { |label| label =~ /#{pattern}/i }
+      entries_found = entries.select { |label| label =~ /#{pattern}/i }
 
-      case labels_found.size
+      case entries_found.size
       when 1
-        labels_found.first
+        entries_found.first
       when 0
-        raise "No labels found for pattern: #{pattern.inspect}"
+        raise "No #{type} found for pattern: #{pattern.inspect}"
       else
-        raise "Multiple labels found for pattern #{pattern.inspect}: #{labels_found}"
+        raise "Multiple #{type} found for pattern #{pattern.inspect}: #{labels_found}"
       end
     end
   end
