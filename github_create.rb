@@ -269,26 +269,38 @@ class GitHubCreatePr
     api_helper = GithubApiHelper.new(api_token, GitRepositoryHelper.new)
 
     if options[:label_patterns]
+      puts "Finding labels..."
+
       all_labels = api_helper.find_labels
       selected_labels = select_entries(all_labels, options[:label_patterns], type: "labels")
     end
 
     if options[:reviewer_patterns]
+      puts "Finding collaborators..."
+
       all_collaborators = api_helper.find_collaborators
       reviewers = select_entries(all_collaborators, options[:reviewer_patterns], type: "collaborators")
     end
 
+    puts "Creating PR..."
+
     issue_number, issue_link = api_helper.send_pr_creation_request(title, description)
+
+    puts "Assigning user to PR..."
 
     api_helper.send_assign_user_to_issue_request(issue_number)
 
     if selected_labels
+      puts "Adding labels to PR..."
+
       issue_edit_result = api_helper.send_add_labels_to_issue_request(issue_number, selected_labels)
 
       puts "- labels assigned: " + issue_edit_result.map { |entry| entry['name'].inspect }.join(', ')
     end
 
     if reviewers
+      puts "Requesting PR reviews..."
+
       pr_edit_result = api_helper.send_create_review_request(issue_number, reviewers)
 
       puts "- review requested to: " + pr_edit_result.fetch('requested_reviewers').map { |reviewer_data| reviewer_data.fetch('login') }.join(', ')
