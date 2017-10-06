@@ -69,8 +69,14 @@ class GithubApiResponseHelper
     @response_metadata = response_metadata
   end
 
+  def error?
+    status_header = find_header_content('Status')
+
+    !!(status_header =~ /^4\d\d/)
+  end
+
   def link_next_page
-    link_header = find_header('Link')
+    link_header = find_header_content('Link')
 
     return nil if link_header.nil?
 
@@ -79,8 +85,12 @@ class GithubApiResponseHelper
 
   private
 
-  def find_header(header_name)
-    @response_metadata.split("\n").detect { |header| header[/^< #{header_name}: (.*)/, 1] }
+  def find_header_content(header_name)
+    @response_metadata.split("\n").each do |header|
+      return $1 if header =~ /^< #{header_name}: (.*)/
+    end
+
+    nil
   end
 
 end
@@ -108,22 +118,10 @@ class GithubApiHelper
 
     response = send_github_request(request_address, data: request_data)
 
-    if response['message'] =~ /Failed/
-      message = "Error: #{response['message']}"
+    issue_number = response['number']
+    issue_link = response['_links']['html']['href']
 
-      if response['errors'].size.positive?
-        message << ' ('
-        message << response['errors'].map { |error| error['message'] }.join(', ')
-        message << ')'
-      end
-
-      raise(message)
-    else
-      issue_number = response['number']
-      issue_link = response['_links']['html']['href']
-
-      [issue_number, issue_link]
-    end
+    [issue_number, issue_link]
   end
 
   def send_assign_user_to_issue_request(issue_number)
@@ -185,18 +183,44 @@ class GithubApiHelper
         end
       end
 
+      response_helper = GithubApiResponseHelper.new(response_metadata)
       parsed_response = JSON.parse(response_body)
+
+      if response_helper.error?
+        formatted_error = decode_and_format_error(parsed_response)
+        raise(formatted_error)
+      end
 
       return parsed_response if ! multipage
 
       parsed_responses.concat(parsed_response)
 
-      response_helper = GithubApiResponseHelper.new(response_metadata)
-
       address = response_helper.link_next_page
 
       return parsed_responses if address.nil?
     end
+  end
+
+  def decode_and_format_error(response)
+    message = "Error! #{response['message']}"
+
+    if response.key?('errors')
+      message << ":"
+
+      error_details = response['errors'].map do |error_data|
+        error_code = error_data.fetch('code')
+
+        if error_code == "custom"
+          " #{error_data.fetch('message')}"
+        else
+          " #{error_code} (#{error_data.fetch('field')})"
+        end
+      end
+
+      message << error_details.join(", ")
+    end
+
+    message
   end
 
 end
