@@ -33,8 +33,9 @@ class ConfigurationHelper
   def decode_argv
     SimpleScripting::Argv.decode(
       'pr' => [
-        ['-n', '--no-open-pr',                          "Don't open the PR link in the browser after creation"],
-        ['-l', '--label-patterns "legacy,code review"', "Label patterns"],
+        ['-n', '--no-open-pr',                              "Don't open the PR link in the browser after creation"],
+        ['-l', '--label-patterns "legacy,code review"',     "Label patterns"],
+        ['-r', '--reviewer-patterns john,tom,adrian,kevin', "Reviewer login patterns"],
         'title',
         'description',
       ],
@@ -69,8 +70,14 @@ class GithubApiResponseHelper
     @response_metadata = response_metadata
   end
 
+  def error?
+    status_header = find_header_content('Status')
+
+    !!(status_header =~ /^4\d\d/)
+  end
+
   def link_next_page
-    link_header = find_header('Link')
+    link_header = find_header_content('Link')
 
     return nil if link_header.nil?
 
@@ -79,8 +86,12 @@ class GithubApiResponseHelper
 
   private
 
-  def find_header(header_name)
-    @response_metadata.split("\n").detect { |header| header[/^< #{header_name}: (.*)/, 1] }
+  def find_header_content(header_name)
+    @response_metadata.split("\n").each do |header|
+      return $1 if header =~ /^< #{header_name}: (.*)/
+    end
+
+    nil
   end
 
 end
@@ -98,6 +109,12 @@ class GithubApiHelper
     response.map { |label_entry| label_entry['name'] }
   end
 
+  def find_collaborators
+    response = send_github_request("https://api.github.com/repos/#{@repo_helper.owner_and_repo}/collaborators", multipage: true)
+
+    response.map { |user_entry| user_entry.fetch('login') }
+  end
+
   # Returns a JSON object.
   #
   def send_pr_creation_request(title, description)
@@ -108,22 +125,10 @@ class GithubApiHelper
 
     response = send_github_request(request_address, data: request_data)
 
-    if response['message'] =~ /Failed/
-      message = "Error: #{response['message']}"
+    issue_number = response['number']
+    issue_link = response['_links']['html']['href']
 
-      if response['errors'].size.positive?
-        message << ' ('
-        message << response['errors'].map { |error| error['message'] }.join(', ')
-        message << ')'
-      end
-
-      raise(message)
-    else
-      issue_number = response['number']
-      issue_link = response['_links']['html']['href']
-
-      [issue_number, issue_link]
-    end
+    [issue_number, issue_link]
   end
 
   def send_assign_user_to_issue_request(issue_number)
@@ -138,6 +143,13 @@ class GithubApiHelper
   def send_add_labels_to_issue_request(issue_number, labels)
     request_data = labels
     request_address = "https://api.github.com/repos/#{@repo_helper.owner_and_repo}/issues/#{issue_number}/labels"
+
+    send_github_request(request_address, data: request_data)
+  end
+
+  def send_create_review_request(issue_number, reviewers)
+    request_data = {reviewers: reviewers}
+    request_address = "https://api.github.com/repos/#{@repo_helper.owner_and_repo}/pulls/#{issue_number}/requested_reviewers"
 
     send_github_request(request_address, data: request_data)
   end
@@ -185,18 +197,44 @@ class GithubApiHelper
         end
       end
 
+      response_helper = GithubApiResponseHelper.new(response_metadata)
       parsed_response = JSON.parse(response_body)
+
+      if response_helper.error?
+        formatted_error = decode_and_format_error(parsed_response)
+        raise(formatted_error)
+      end
 
       return parsed_response if ! multipage
 
       parsed_responses.concat(parsed_response)
 
-      response_helper = GithubApiResponseHelper.new(response_metadata)
-
       address = response_helper.link_next_page
 
       return parsed_responses if address.nil?
     end
+  end
+
+  def decode_and_format_error(response)
+    message = "Error! #{response['message']}"
+
+    if response.key?('errors')
+      message << ":"
+
+      error_details = response['errors'].map do |error_data|
+        error_code = error_data.fetch('code')
+
+        if error_code == "custom"
+          " #{error_data.fetch('message')}"
+        else
+          " #{error_code} (#{error_data.fetch('field')})"
+        end
+      end
+
+      message << error_details.join(", ")
+    end
+
+    message
   end
 
 end
@@ -231,17 +269,41 @@ class GitHubCreatePr
     api_helper = GithubApiHelper.new(api_token, GitRepositoryHelper.new)
 
     if options[:label_patterns]
+      puts "Finding labels..."
+
       all_labels = api_helper.find_labels
-      selected_labels = select_labels(all_labels, options[:label_patterns])
+      selected_labels = select_entries(all_labels, options[:label_patterns], type: "labels")
     end
+
+    if options[:reviewer_patterns]
+      puts "Finding collaborators..."
+
+      all_collaborators = api_helper.find_collaborators
+      reviewers = select_entries(all_collaborators, options[:reviewer_patterns], type: "collaborators")
+    end
+
+    puts "Creating PR..."
 
     issue_number, issue_link = api_helper.send_pr_creation_request(title, description)
 
+    puts "Assigning user to PR..."
+
     api_helper.send_assign_user_to_issue_request(issue_number)
 
-    if selected_labels && ! selected_labels.empty?
+    if selected_labels
+      puts "Adding labels to PR..."
+
       issue_edit_result = api_helper.send_add_labels_to_issue_request(issue_number, selected_labels)
-      puts "Labels assigned: " + issue_edit_result.map { |entry| entry['name'].inspect }.join(', ')
+
+      puts "- labels assigned: " + issue_edit_result.map { |entry| entry['name'].inspect }.join(', ')
+    end
+
+    if reviewers
+      puts "Requesting PR reviews..."
+
+      pr_edit_result = api_helper.send_create_review_request(issue_number, reviewers)
+
+      puts "- review requested to: " + pr_edit_result.fetch('requested_reviewers').map { |reviewer_data| reviewer_data.fetch('login') }.join(', ')
     end
 
     if options[:no_open_pr]
@@ -253,19 +315,19 @@ class GitHubCreatePr
 
   private
 
-  def select_labels(labels, raw_label_patterns)
-    patterns = raw_label_patterns.split(',')
+  def select_entries(entries, raw_patterns, type: "entries")
+    patterns = raw_patterns.split(',')
 
     patterns.map do |pattern|
-      labels_found = labels.select { |label| label =~ /#{pattern}/i }
+      entries_found = entries.select { |label| label =~ /#{pattern}/i }
 
-      case labels_found.size
+      case entries_found.size
       when 1
-        labels_found.first
+        entries_found.first
       when 0
-        raise "No labels found for pattern: #{pattern.inspect}"
+        raise "No #{type} found for pattern: #{pattern.inspect}"
       else
-        raise "Multiple labels found for pattern #{pattern.inspect}: #{labels_found}"
+        raise "Multiple #{type} found for pattern #{pattern.inspect}: #{labels_found}"
       end
     end
   end
