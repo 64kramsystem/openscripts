@@ -80,7 +80,7 @@ if __FILE__ == $0
   options = SimpleScripting::Argv.decode(
     'document',
     long_help: UpdateMarkdownChapterToc::LONG_HELP
-  )
+  ) || exit
 
   UpdateMarkdownChapterToc.new.execute(options[:document])
 end

@@ -161,7 +161,7 @@ if __FILE__ == $PROGRAM_NAME
   options = SimpleScripting::Argv.decode(
     [ '-i', '--install VERSION', 'Install a certain version [format: <maj.min>]' ],
     [ '-s', '--store-path PATH', 'Store packages to path (default: /tmp)' ],
-  )
+  ) || exit
 
   UpdateMainlineKernel.new.execute(options)
 

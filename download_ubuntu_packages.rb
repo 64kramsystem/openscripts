@@ -121,7 +121,7 @@ If a package is found in the destination path, it's not downloaded.
     'codename',
     'packages',
     long_help: long_help
-  )
+  ) || exit
 
   codename = params[:codename]
   packages = params[:packages].split(',')

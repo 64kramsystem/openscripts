@@ -106,7 +106,7 @@ if __FILE__ == $PROGRAM_NAME
     ['-k', '--keep-previous', "Keep one previous version (the latest)"],
     ['-d', '--delete-current', "Delete current; requires at least another version to be present"],
     ['-n', '--dry-run', "Dry run; doesn't remove any package"],
-  )
+  ) || exit
 
   CleanKernelPackages.new.execute(options)
 

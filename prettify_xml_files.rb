@@ -40,7 +40,7 @@ if $PROGRAM_NAME == __FILE__
   params = SimpleScripting::Argv.decode(
     ['-b', '--backup', 'Backup original file, appending `.bak`'],
     '*filenames'
-  )
+  ) || exit
 
   XmlPrettifier.new.prettify_files(params[:filenames], backup: params[:backup])
 end

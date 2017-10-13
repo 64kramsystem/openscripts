@@ -179,7 +179,7 @@ if __FILE__ == $0
     ['-i', '--insert-file FILENAME', "Insert a file, and push the subsequent ones; must be numbered."],
     '[directory]',
     long_help: UpdateMarkdownChapterReferences::LONG_HELP
-  )
+  ) || exit
 
   UpdateMarkdownChapterReferences.new.execute(options)
 end
