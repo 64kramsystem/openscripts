@@ -7,6 +7,7 @@
   - `update_markdown_toc.rb`: generates/updates a Table Of Contents, for a single Markdown document
 - programming
   - `prettify_xml_files.rb`: prettifies the specified XML files
+  - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
 - sysadmin
   - `clean_kernel_packages.rb`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
   - `download_ubuntu_packages.rb`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
@@ -18,6 +19,7 @@ I will slowly add all the remaining ones.
 
 # Changelog #
 
+- 2017/Oct/20: added `ship_gem`
 - 2017/Oct/10: moved `github_create.rb` to the new `geet` project
 - 2017/Oct/06: added `github_create.rb`
 - 2017/Sep/14: added `update_markdown_toc.rb`

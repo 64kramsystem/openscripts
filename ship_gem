@@ -1,0 +1,183 @@
+#!/usr/bin/env ruby
+
+require 'date'
+require 'shellwords'
+require 'open3'
+
+require 'simple_scripting/argv'
+
+class ShipGem
+  MAJOR = 'major'
+  MINOR = 'minor'
+  PATCH = 'patch'
+
+  GEMSPEC_DATE_REGEX = /(\.date\s*=\s*)(["'])\d{4}-\d{2}-\d{2}\2/
+  VERSION_REGEX = /VERSION = (["'])(\d+\.\d+\.\d+)\1/
+  GEM_FILE_REGEX = /File: (.*\.gem)/
+
+  COMMIT_MESSAGE = ->(version) { "Bump version to #{version}" }
+  TAG_NAME       = ->(version) { "v#{version}" }
+
+  def execute(increment_type)
+    current_version, version_file = find_current_version_and_file
+    new_version = increment_version(current_version, increment_type)
+    write_version_file(version_file, new_version)
+    gemspec_file = find_gemspec_file
+    set_gemspec_date(gemspec_file)
+    commit_changes(new_version)
+    tag_commit(new_version)
+    gem_file = package_gemspec(gemspec_file)
+    push_gem(gem_file)
+    delete_gem(gem_file)
+    push_commit_and_tag
+  end
+
+  private
+
+  # MAIN STEPS #################################################################
+
+  def find_current_version_and_file
+    version_files = Dir['lib/*/version.rb']
+
+    raise "#{version_files.size} version.rb found!" if version_files.size != 1
+
+    version_file = version_files[0]
+
+    file_content = IO.read(version_file)
+
+    version_strings = file_content.scan(VERSION_REGEX)
+
+    raise "#{version_strings.size} version strings found!" if version_strings.size != 1
+
+    version = version_strings[0][1]
+
+    [version, version_file]
+  end
+
+  # Unfortunately, Gem::Version doesn't provide update methods (aside :bump).
+  def increment_version(version, increment_type)
+    version_parts = version.split('.')
+
+    if increment_type == PATCH
+      version_parts[2] = version_parts[2].to_i + 1
+    else
+      version_parts[2] = 0
+
+      if increment_type == MINOR
+        version_parts[1] = version_parts[1].to_i + 1
+      else
+        version_parts[1] = 0
+
+        if increment_type == MAJOR
+          version_parts[0] = version_parts[0].to_i + 1
+        else
+          raise "Unexpected increment type: #{increment_type}"
+        end
+      end
+    end
+
+    version_parts.join('.')
+  end
+
+  def write_version_file(version_file, new_version)
+    file_content = IO.read(version_file)
+
+    file_content = file_content.sub(VERSION_REGEX, "VERSION = \\1#{new_version}\\1")
+
+    IO.write(version_file, file_content)
+  end
+
+  def find_gemspec_file
+    gemspec_files = Dir['*.gemspec']
+
+    raise "#{gemspec_files.size} gemspec.rb found!" if gemspec_files.size != 1
+
+    gemspec_files[0]
+  end
+
+  def set_gemspec_date(gemspec_file)
+    file_content = IO.read(gemspec_file)
+
+    date_strings = file_content.scan(GEMSPEC_DATE_REGEX)
+
+    raise "#{date_strings.size} date strings found!" if date_strings.size != 1
+
+    formatted_current_date = Date.today.strftime('%F')
+
+    file_content = file_content.sub(GEMSPEC_DATE_REGEX, "\\1\\2#{formatted_current_date}\\2")
+
+    IO.write(gemspec_file, file_content)
+  end
+
+  def commit_changes(new_version)
+    commit_message = COMMIT_MESSAGE[new_version]
+    checked_execution("git add -A && git commit -m #{commit_message.shellescape}")
+  end
+
+  def tag_commit(new_version)
+    tag_name = TAG_NAME[new_version]
+    checked_execution("git tag #{tag_name.shellescape}")
+  end
+
+  def package_gemspec(gemspec_file)
+    output = checked_execution("gem build #{gemspec_file.shellescape}")
+
+    output[GEM_FILE_REGEX, 1] || raise("Gem filename not found!?")
+  end
+
+  def push_gem(gem_file)
+    checked_execution("gem push #{gem_file.shellescape}")
+  end
+
+  def delete_gem(gem_file)
+    File.delete(gem_file)
+  end
+
+  def push_commit_and_tag
+    checked_execution("git push --tags")
+  end
+
+  # HELPERS ####################################################################
+
+  def checked_execution(command)
+    Open3.popen3(command) do |_, stdout, stderr, wait_thread|
+      stdout_content, stderr_content = stdout.read, stderr.read
+
+      puts stdout_content if stdout_content != ''
+      puts stderr_content if stderr_content != ''
+
+      raise "Error (exit status: #{wait_thread.value.exitstatus})" if ! wait_thread.value.success?
+
+      stdout_content
+    end
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  long_help = <<~STR
+    Valid <increment_type> values: major, minor, patch.
+
+    This script will:
+
+    - increase the version in any file checked_execution("lib/*/version.rb")
+    - sets the current date in the checked_execution("*.gemspec` file `date") field
+    - commit, with title checked_execution("Bumped version to <new_version>")
+    - tag the commit, with name checked_execution("v<version>")
+    - package the checked_execution("*.gemspec") file
+    - pushes the checked_execution("*.gem")
+    - deletes the checked_execution("*.gem")
+    - performs a checked_execution("git push")
+
+    The script performs a series of checks, and will abort if they don't pass (eg. more than one checked_execution("version.rb")).
+
+    This script has strong assumptions about the configuration, although the Ruby projects are quite standard.
+    Probably, it can be adapted easily to variations.
+  STR
+
+  options = SimpleScripting::Argv.decode(
+    'increment_type',
+    long_help: long_help
+  ) || exit
+
+  ShipGem.new.execute(options[:increment_type])
+end
