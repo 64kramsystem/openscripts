@@ -57,7 +57,7 @@ class UpdateMarkdownChapterToc
       level_symbol, title = chapter_header.match(/^(#+) (.*)/).captures
       level = level_symbol.size
 
-      entry = "  " * (level - 2) + "- " + title + "\n"
+      entry = "  " * (level - 2) + "- [#{title}](##{markdown_chapter_link(title)})\n"
 
       toc << entry
     end
@@ -73,6 +73,10 @@ class UpdateMarkdownChapterToc
 
   def all_headers_upper_case?(chapter_headers)
     chapter_headers.join == chapter_headers.join.upcase
+  end
+
+  def markdown_chapter_link(title)
+    title.downcase.gsub(' ', '-').gsub(/[^-_\w]/, '')
   end
 end
 
