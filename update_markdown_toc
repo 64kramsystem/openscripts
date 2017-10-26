@@ -43,7 +43,12 @@ class UpdateMarkdownChapterToc
   # Returns an array of the chapter lines.
   #
   def find_chapter_headers(content)
-    content.lines.select { |line| line.start_with?('#') }
+    # Remove the code blocks, since there could be text inside matching the
+    # header syntax
+    #
+    content_without_code_blocks = content.gsub(/^```.*?^```\r?\n/m, '')
+
+    content_without_code_blocks.lines.select { |line| line.start_with?('#') }
   end
 
   def prepare_table_of_contents(content, chapter_headers)
@@ -57,6 +62,8 @@ class UpdateMarkdownChapterToc
       level_symbol, title = chapter_header.match(/^(#+) (.*)/).captures
       level = level_symbol.size
 
+      next if level == 1
+
       entry = "  " * (level - 2) + "- [#{title}](##{markdown_chapter_link(title)})\n"
 
       toc << entry
@@ -66,7 +73,13 @@ class UpdateMarkdownChapterToc
   end
 
   def prepend_table_of_contents!(content, table_of_contents)
-    content.sub!(/\A/, table_of_contents)
+    # We can't replace the beginning of the document, since there may be a title, so
+    # we put the TOC before the first chapter.
+    #
+    # If there is a code block in the title chapter, with a /^##/ matching string,
+    # it will be erroneously replace, but for now it's ok.
+    #
+    content.sub!(/^##/, table_of_contents + '##')
   end
 
   # HELPERS
