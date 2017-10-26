@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative 'kernel_packages_maintenance/kernel_version'
-require_relative 'clean_kernel_packages'
+load "#{__dir__}/clean_kernel_packages"
 
 require 'simple_scripting/argv'
 
