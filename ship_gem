@@ -26,10 +26,10 @@ class ShipGem
     set_gemspec_date(gemspec_file)
     commit_changes(new_version)
     tag_commit(new_version)
+    push_commit_and_tag
     gem_file = package_gemspec(gemspec_file)
     push_gem(gem_file)
     delete_gem(gem_file)
-    push_commit_and_tag
   end
 
   private
@@ -119,6 +119,11 @@ class ShipGem
     checked_execution("git tag #{tag_name.shellescape}")
   end
 
+  def push_commit_and_tag
+    current_branch = checked_execution("git rev-parse --abbrev-ref HEAD").strip
+    checked_execution("git push --tags origin #{current_branch}")
+  end
+
   def package_gemspec(gemspec_file)
     output = checked_execution("gem build #{gemspec_file.shellescape}")
 
@@ -131,10 +136,6 @@ class ShipGem
 
   def delete_gem(gem_file)
     File.delete(gem_file)
-  end
-
-  def push_commit_and_tag
-    checked_execution("git push --tags")
   end
 
   # HELPERS ####################################################################
