@@ -1,0 +1,80 @@
+#!/usr/bin/env ruby
+
+require 'simple_scripting/argv'
+
+require 'fileutils'
+
+require 'json'
+require 'rexml/document'
+
+class Processor
+
+  def initialize(backup: false)
+    @backup = backup
+  end
+
+  def process(filenames)
+    Array(filenames).each do |filename|
+      puts "Prettifying #{filename}..."
+
+      FileUtils.cp(filename, "#{filename}.bak") if @backup
+
+      content = IO.read(filename)
+
+      prettified_content = prettify(filename, content)
+
+      IO.write(filename, prettified_content)
+    end
+  end
+
+  private
+
+  def prettify(filename, content)
+    extension = File.basename(filename)[/\.(\w+)\Z/, 1]
+
+    case extension.downcase
+    when 'json'
+      prettifier_class = JsonPrettifier
+    when 'xml'
+      prettifier_class = XmlPrettifier
+    else
+      raise "Unsupported extension: #{extension}"
+    end
+
+    prettifier_class.new.prettify(content)
+  end
+
+end
+
+class JsonPrettifier
+
+  def prettify(content)
+    JSON.pretty_generate(JSON.parse(content))
+  end
+
+end
+
+class XmlPrettifier
+
+  def prettify(content)
+    prettified_content = ''
+
+    root = REXML::Document.new(content)
+
+    xml_formatter = REXML::Formatters::Pretty.new
+    xml_formatter.compact = true
+    xml_formatter.write(root, prettified_content)
+
+    prettified_content
+  end
+
+end
+
+if $PROGRAM_NAME == __FILE__
+  params = SimpleScripting::Argv.decode(
+    ['-b', '--backup', 'Backup original file, appending `.bak`'],
+    '*filenames'
+  ) || exit
+
+  Processor.new(backup: params[:backup]).process(params[:filenames])
+end

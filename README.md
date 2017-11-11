@@ -19,6 +19,7 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
+- 2017/Nov/11: added JSON support to `prettify_xml_files`, and renamed to `prettify` (ruby)
 - 2017/Oct/20: added `ship_gem` (ruby)
 - 2017/Oct/10: moved `github_create` to the new `geet` project
 - 2017/Oct/06: added `github_create` (ruby)
