@@ -2,6 +2,8 @@
 
 `OS` is a collection of some of my scripts for personal use:
 
+- concurrency
+  - `interruptible_job_scheduler.rb`: a scheduler for interruptible process-based job(s)
 - documents
   - `update_markdown_chapter_references`: generates/updates a Table Of Contents, and navigation links, in a collection of Markdown documents
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
@@ -19,6 +21,7 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
+- 2018/Jan/07: added `interruptible_job_scheduler.rb`
 - 2017/Nov/11: added JSON support to `prettify_xml_files`, and renamed to `prettify` (ruby)
 - 2017/Oct/20: added `ship_gem` (ruby)
 - 2017/Oct/10: moved `github_create` to the new `geet` project
