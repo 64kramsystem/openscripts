@@ -37,7 +37,7 @@ class ShipGem
   # MAIN STEPS #################################################################
 
   def find_current_version_and_file
-    version_files = Dir['lib/*/version.rb']
+    version_files = Dir['lib/**/version.rb']
 
     raise "#{version_files.size} version.rb found!" if version_files.size != 1
 
