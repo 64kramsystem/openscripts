@@ -10,6 +10,7 @@ class ShipGem
   MAJOR = 'major'
   MINOR = 'minor'
   PATCH = 'patch'
+  NONE  = 'none'
 
   GEMSPEC_DATE_REGEX = /(\.date\s*=\s*)(["'])\d{4}-\d{2}-\d{2}\2/
   VERSION_REGEX = /VERSION = (["'])(\d+\.\d+\.\d+)\1/
@@ -19,13 +20,19 @@ class ShipGem
   TAG_NAME       = ->(version) { "v#{version}" }
 
   def execute(increment_type)
+    check_increment_type(increment_type)
+
     current_version, version_file = find_current_version_and_file
-    new_version = increment_version(current_version, increment_type)
-    write_version_file(version_file, new_version)
     gemspec_file = find_gemspec_file
-    set_gemspec_date(gemspec_file)
-    commit_changes(new_version)
-    tag_commit(new_version)
+
+    if increment_type != NONE
+      new_version = increment_version(current_version, increment_type)
+      write_version_file(version_file, new_version)
+      set_gemspec_date(gemspec_file)
+      commit_changes(new_version)
+    end
+
+    tag_commit(new_version || current_version)
     push_commit_and_tag
     gem_file = package_gemspec(gemspec_file)
     push_gem(gem_file)
@@ -35,6 +42,12 @@ class ShipGem
   private
 
   # MAIN STEPS #################################################################
+
+  def check_increment_type(increment_type)
+    if ![MAJOR, MINOR, PATCH, NONE].include?(increment_type)
+      raise "Unexpected increment type: #{increment_type.inspect}"
+    end
+  end
 
   def find_current_version_and_file
     version_files = Dir['lib/**/version.rb']
@@ -156,7 +169,7 @@ end
 
 if __FILE__ == $PROGRAM_NAME
   long_help = <<~STR
-    Valid <increment_type> values: major, minor, patch.
+    Valid <increment_type> values: major, minor, patch, none.
 
     This script will:
 
@@ -170,6 +183,8 @@ if __FILE__ == $PROGRAM_NAME
     - performs a checked_execution("git push")
 
     The script performs a series of checks, and will abort if they don't pass (eg. more than one checked_execution("version.rb")).
+
+    If `none` increment type is specified, the operations related to the version change are not performed.
 
     This script has strong assumptions about the configuration, although the Ruby projects are quite standard.
     Probably, it can be adapted easily to variations.

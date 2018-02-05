@@ -7,6 +7,8 @@
 - documents
   - `update_markdown_chapter_references`: generates/updates a Table Of Contents, and navigation links, in a collection of Markdown documents
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
+- git
+  - `git_purge_empty_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in master.
 - programming
   - `prettify_xml_files`: prettifies the specified XML files
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
@@ -21,6 +23,8 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
+- 2018/Feb/11: added `none` option to `ship_gem`
+- 2018/Feb/05: added `git_purge_empty_branches`
 - 2018/Jan/07: added `interruptible_job_scheduler.rb`
 - 2017/Nov/11: added JSON support to `prettify_xml_files`, and renamed to `prettify` (ruby)
 - 2017/Oct/20: added `ship_gem` (ruby)

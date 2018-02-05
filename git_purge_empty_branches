@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -o errexit
+
+if [[ "$#" != 0 ]]; then
+  echo 'Usage: git_purge_empty_branches'
+  echo
+  echo "Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in master."
+  echo "Can be run from any branch, but requires a clean tree."
+  echo
+  echo $'It won\'t delete any branch named `master` or `deployment`'
+
+  exit 0
+fi
+
+if [[ $(git status | grep "nothing to commit, working tree clean") == "" ]]; then
+  echo 'Please commit/stash any change before proceeding!'
+  exit 1
+fi
+
+git fetch --all --prune
+
+git checkout master > /dev/null
+
+for branch in $(git branch | cut -c 3- | egrep -v '^(master|deployment)$'); do
+  # By checking against `origin/master`, we avoid having to perform a `master` rebase.
+  # There are edge cases, eg. branches having commits that are in `origin/master` but
+  # not master, but it's not worth covering them.
+  if [[ ! $(git cherry origin/master $branch | grep '^+') ]]; then
+    git branch -D $branch
+
+    if git branch -r | grep "origin/$branch\$"; then
+      git push origin :$branch
+    fi
+  fi
+done
+
+# Will fail if the user was on a now deleted branch, but doesn't really matter.
+git checkout - > /dev/null
