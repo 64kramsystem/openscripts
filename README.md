@@ -23,6 +23,7 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
+- 2018/Feb/11: added automatic README gem version update (if present) to `ship_gem`
 - 2018/Feb/11: added `none` option to `ship_gem`
 - 2018/Feb/05: added `git_purge_empty_branches`
 - 2018/Jan/07: added `interruptible_job_scheduler.rb`
