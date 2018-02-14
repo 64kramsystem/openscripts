@@ -20,13 +20,12 @@ fi
 
 git fetch --all --prune
 
-git checkout master > /dev/null
+git checkout master > /dev/null 2>&1
+
+git rebase
 
 for branch in $(git branch | cut -c 3- | egrep -v '^(master|deployment)$'); do
-  # By checking against `origin/master`, we avoid having to perform a `master` rebase.
-  # There are edge cases, eg. branches having commits that are in `origin/master` but
-  # not master, but it's not worth covering them.
-  if [[ ! $(git cherry origin/master $branch | grep '^+') ]]; then
+  if [[ ! $(git cherry master $branch | grep '^+') ]]; then
     git branch -D $branch
 
     if git branch -r | grep "origin/$branch\$"; then
@@ -36,4 +35,4 @@ for branch in $(git branch | cut -c 3- | egrep -v '^(master|deployment)$'); do
 done
 
 # Will fail if the user was on a now deleted branch, but doesn't really matter.
-git checkout - > /dev/null
+git checkout - > /dev/null 2>&1
