@@ -8,6 +8,8 @@ if [[ "$#" != 0 ]]; then
   echo "Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in master."
   echo "Can be run from any branch, but requires a clean tree."
   echo
+  echo "Before performing the purge, the repository is synced, and master is rebased."
+  echo
   echo $'It won\'t delete any branch named `master` or `deployment`'
 
   exit 0
@@ -20,20 +22,34 @@ fi
 
 # Fetch all, so that this script can be generally used for syncing the repo.
 git fetch --all --tags --prune
+echo
 
-git checkout master > /dev/null 2>&1
+saved_location=$(git rev-parse --abbrev-ref HEAD)
+
+if [[ "$saved_location" != "master" ]]; then
+  # Keep the message consistent with the one when checkout back to this branch (see script last
+  # operation).
+  git checkout master 2>&1 | head -n 1
+  echo
+fi
 
 git rebase
+echo
 
 for branch in $(git branch | cut -c 3- | egrep -v '^(master|deployment)$'); do
   if [[ ! $(git cherry master $branch | grep '^+') ]]; then
     git branch -D $branch
+    echo
 
     if git branch -r | grep "origin/$branch\$"; then
       git push origin :$branch
+      echo
     fi
   fi
 done
 
-# Will fail if the user was on a now deleted branch, but doesn't really matter.
-git checkout - > /dev/null 2>&1
+if [[ "$saved_location" != "master" ]]; then
+  # The output is very noisy for non-named branches.
+  git checkout - 2>&1 | head -n 1
+  echo
+fi
