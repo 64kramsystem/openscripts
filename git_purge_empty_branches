@@ -18,7 +18,8 @@ if [[ $(git status | grep "nothing to commit, working tree clean") == "" ]]; the
   exit 1
 fi
 
-git fetch --all --prune
+# Fetch all, so that this script can be generally used for syncing the repo.
+git fetch --all --tags --prune
 
 git checkout master > /dev/null 2>&1
 
