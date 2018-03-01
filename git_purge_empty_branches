@@ -48,7 +48,7 @@ for branch in $(git branch | cut -c 3- | egrep -v '^(master|deployment)$'); do
   fi
 done
 
-if [[ "$saved_location" != "master" ]]; then
+if [[ "$saved_location" != "master" && $(git cat-file -t "$saved_location" 2> /dev/null) ]]; then
   # The output is very noisy for non-named branches.
   git checkout - 2>&1 | head -n 1
   echo
