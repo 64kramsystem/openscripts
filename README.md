@@ -15,6 +15,7 @@
 - sysadmin
   - `clean_kernel_packages`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
   - `download_ubuntu_packages`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
+  - `ejectdisk`: unmounts and powers off a disk, like the typical desktop environment functionality
   - `install_btrfs_checker`: monthly scrubs the BTRFS partitions and notifies the user on logon
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
@@ -23,6 +24,7 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
+- 2018/Mar/23: added `ejectdisk`
 - 2018/Feb/14: tweaks to `git_purge_empty_branches`
 - 2018/Feb/11: added automatic README gem version update (if present) to `ship_gem`
 - 2018/Feb/11: added `none` option to `ship_gem`
