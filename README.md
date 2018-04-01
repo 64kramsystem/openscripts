@@ -24,6 +24,7 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
+- 2018/Apr/01: add support for manual project name to `ship_gem`
 - 2018/Mar/23: added `ejectdisk`
 - 2018/Feb/14: tweaks to `git_purge_empty_branches`
 - 2018/Feb/11: added automatic README gem version update (if present) to `ship_gem`
