@@ -21,14 +21,14 @@ class ShipGem
 
   README_FILENAME = "README.md"
 
-  def execute(increment_type)
+  def execute(increment_type, project_name: nil)
     check_increment_type(increment_type)
 
     current_version, version_file = find_current_version_and_file
     gemspec_file = find_gemspec_file
 
     if increment_type != NONE
-      project_name = find_project_name(gemspec_file)
+      project_name ||= find_project_name(gemspec_file)
       new_version = increment_version(current_version, increment_type)
       write_version_file(version_file, new_version)
       set_gemspec_date(gemspec_file)
@@ -226,9 +226,12 @@ if __FILE__ == $PROGRAM_NAME
   STR
 
   options = SimpleScripting::Argv.decode(
+    ['-n', '--project-name NAME', "Force a specific gem name, if it can't be detected"],
     'increment_type',
     long_help: long_help
   ) || exit
 
-  ShipGem.new.execute(options[:increment_type])
+  increment_type = options.delete(:increment_type)
+
+  ShipGem.new.execute(increment_type, options)
 end
