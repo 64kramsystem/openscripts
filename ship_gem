@@ -19,7 +19,7 @@ class ShipGem
   COMMIT_MESSAGE = ->(version) { "Bump version to #{version}" }
   TAG_NAME       = ->(version) { "v#{version}" }
 
-  README_FILENAME = "README.md"
+  README_FILENAMES = ["README.md", "README.rdoc"]
 
   def execute(increment_type, project_name: nil)
     check_increment_type(increment_type)
@@ -134,7 +134,8 @@ class ShipGem
   end
 
   def update_readme_installation_gem_version(project_name, increment_type, current_version, new_version)
-    current_content = IO.read(README_FILENAME)
+    readme_filename = find_readme_filename
+    current_content = IO.read(readme_filename)
 
     check_readme_gem_specification_support(current_content, project_name, current_version)
 
@@ -144,7 +145,7 @@ class ShipGem
       gem_version_statement.sub(current_version, new_version)
     end
 
-    IO.write(README_FILENAME, updated_content) if current_content != updated_content
+    IO.write(readme_filename, updated_content) if current_content != updated_content
   end
 
   def commit_changes(new_version)
@@ -198,6 +199,14 @@ class ShipGem
 
       stdout_content
     end
+  end
+
+  def find_readme_filename
+    found_filename = README_FILENAMES.detect do |filename|
+      File.exists?(filename)
+    end
+
+    found_filename || raise("Readme not found!")
   end
 end
 
