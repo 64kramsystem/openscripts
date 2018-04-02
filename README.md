@@ -24,6 +24,7 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
+- 2018/Apr/02: automatically add `/dev/` prefix, if not present
 - 2018/Apr/02: add support for `README.rdoc` to `ship_gem`
 - 2018/Apr/01: add support for manual project name to `ship_gem`
 - 2018/Mar/23: added `ejectdisk`
