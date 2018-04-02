@@ -6,13 +6,20 @@ if [[ $# -eq 0 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
   echo "Usage: ejectdisk <block_device>"
   echo
   echo "Unmounts and powers off a disk, like the typical desktop environment functionality."
+  echo $'The prefix `/dev/` is automatically added, if not present.'
 else
+  if [[ $1 =~ ^/dev/ ]]; then
+    device="$1"
+  else
+    device="/dev/$1"
+  fi
+
   # Cheap way of finding the mounted partitions of a given device.
-  for partition in $(mount | grep "^$1" | awk '{print $1}'); do
+  for partition in $(mount | grep "^$device" | awk '{print $1}'); do
     udisksctl unmount -b "$partition"
   done
 
-  udisksctl power-off -b "$1"
+  udisksctl power-off -b "$device"
 
-  echo "Device $1 powered off."
+  echo "Device $device powered off."
 fi
