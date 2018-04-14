@@ -2,6 +2,19 @@
 
 set -o errexit
 
+function unmount_device_partitions() {
+  # Cheap way of finding the mounted partitions of a given device.
+  for partition in $(mount | grep "^$device" | awk '{print $1}'); do
+    udisksctl unmount -b "$partition"
+  done
+}
+
+function power_off_device() {
+  udisksctl power-off -b "$device"
+
+  echo "Device $device powered off."
+}
+
 if [[ $# -eq 0 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
   echo "Usage: ejectdisk <block_device>"
   echo
@@ -14,12 +27,7 @@ else
     device="/dev/$1"
   fi
 
-  # Cheap way of finding the mounted partitions of a given device.
-  for partition in $(mount | grep "^$device" | awk '{print $1}'); do
-    udisksctl unmount -b "$partition"
-  done
+  unmount_device_partitions
 
-  udisksctl power-off -b "$device"
-
-  echo "Device $device powered off."
+  power_off_device
 fi
