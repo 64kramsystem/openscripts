@@ -1,0 +1,138 @@
+#!/bin/bash
+
+set -o errexit
+
+# We can't set this, otherwise the variables check will raise an error when a variable is not set.
+#
+# set -o nounset
+
+# Configuration file.
+#
+# Doesn't supports comments; spaces around the equal sign are trimmed
+#
+# Parameters required:
+#
+# - service_remote_address (eg. `https://remotehost/owncloud`)
+# - data_directory
+# - user
+# - password
+# - merge_editor (optional)
+#
+configuration_file="$HOME/.ownsync"
+
+command_params_number=$#
+
+cloud_program=
+output_prefix_pattern=
+output_operation_pattern=
+resident_client_pid=
+
+# Basic.
+#
+function parse_command_parameters {
+  if [[ $command_params_number -gt 0 ]]; then
+    echo "Usage: ownsync"
+    echo
+    echo "Syncs the owncloud/nextcloud directory, and allows the user to solve the conflicts, if there are any."
+    echo "Stops (and restarts) the resident client, if running."
+    echo
+    echo 'Requires the following parameters to be set in $HOME/.ownsync:'
+    echo
+    echo '- service_remote_address (eg. `https://remotehost/owncloud`)'
+    echo '- data_directory'
+    echo '- user'
+    echo '- password (can be also specified as $OWNSYNC_PWD)'
+    echo '- merge_editor (optional)'
+    echo
+    echo "The format is <key=value>. For more information, see this file's source code."
+
+    exit 0
+  fi
+}
+
+# Poor man's configuration parser.
+#
+function parse_configuration {
+  while IFS='= ' read -r key value || [ -n "$key" ]; do
+    if [[ ! $key =~ ^\ *# ]]; then
+      declare -g $key="$value"
+    fi
+  done < "$configuration_file"
+}
+
+function check_variables {
+  [[ "$password" == "" ]] && password="$OWNSYNC_PWD"
+
+  for config_var in service_remote_address data_directory user password; do
+    if [[ "${!config_var}" == "" ]]; then
+      echo "\$$config_var needs to be set!"
+      exit 1
+    fi
+  done
+}
+
+function prepare_client_parameters {
+  if [[ $(command -v owncloudcmd) ]]; then
+    cloud_program=owncloud
+    output_prefix_pattern='^.*?(Completed|Could not complete) propagation of '
+    output_operation_pattern='by OCC::Propagate(\w+)\(0x\w+\) with status \d'
+  elif [[ $(command -v nextcloudcmd) ]]; then
+    cloud_program=nextcloud
+    output_prefix_pattern='void OCC::SyncEngine::slotItemCompleted.*?&\) '
+    output_operation_pattern='INSTRUCTION_(\w+) \d ""'
+  else
+    echo 'No cloud_program program found!'
+    exit 1
+  fi
+}
+
+function kill_resident_client {
+  if [[ $(pgrep "$cloud_program") ]]; then
+    resident_client_pid=$(pgrep "$cloud_program")
+    kill "$resident_client_pid"
+  fi
+}
+
+function perform_sync {
+  "$cloud_program"cmd -u "$user" -p "$password" "$data_directory" "$service_remote_address" 2>&1 \
+    | grep -i complete \
+    | perl -pe "s/$output_prefix_pattern//" \
+    | perl -pe "s/$output_operation_pattern/\$1/" \
+    || true
+}
+
+function solve_conflicts {
+  while IFS= read -r -d '' conflict_file
+  do
+    if [[ "$merge_editor" != "" ]]; then
+      source_file=$(echo "$conflict_file" | perl -pe 's/_conflict-\d+-\d+//')
+      pretty_conflict_file=$(basename $(dirname "$conflict_file"))/$(basename "$conflict_file")
+
+      if [[ "$source_file" == "" ]]; then
+        echo "Couldn't find source file for $pretty_conflict_file!"
+      elif [[ ! $conflict_file =~ \.(md|txt)$ ]]; then
+        echo "$pretty_conflict_file is not a plaintext file!"
+      else
+        "$merge_editor" "$source_file" "$conflict_file"
+        mv "$conflict_file" /tmp/
+      fi
+    else
+      echo "Conflict found: $conflict_file"
+    fi
+  done < <(find "$data_directory" -iname '*_conflict-*' -print0)
+}
+
+function start_resident_client {
+  if [ "$resident_client_pid" != "" ]; then
+    "$cloud_program" &
+  fi
+}
+
+parse_command_parameters
+parse_configuration
+check_variables
+prepare_client_parameters
+kill_resident_client
+perform_sync
+solve_conflicts
+start_resident_client
