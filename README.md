@@ -16,6 +16,7 @@
   - `clean_kernel_packages`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
   - `download_ubuntu_packages`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
   - `ejectdisk`: unmounts and powers off a device, or all the connected USB storage devices
+  - `ownsync`: command line sync script for Owncloud/Nextcloud, with conflicts handling
   - `install_btrfs_checker`: monthly scrubs the BTRFS partitions and notifies the user on logon
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
@@ -24,6 +25,7 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
+- 2018/Apr/16: added `ownsync` (shell script)
 - 2018/Apr/14: `ejectdisk`: add functionality for automatically ejecting all the connected usb storage devices
 - 2018/Apr/02: `ejectdisk`: automatically add `/dev/` prefix, if not present
 - 2018/Apr/02: add support for `README.rdoc` to `ship_gem`
