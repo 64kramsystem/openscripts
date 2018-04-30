@@ -46,6 +46,10 @@ class KernelVersion
     to_i > other.to_i
   end
 
+  def >=(other)
+    to_i >= other.to_i
+  end
+
   def <=>(other)
     to_i <=> other.to_i
   end

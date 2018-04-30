@@ -144,11 +144,19 @@ class UpdateMainlineKernel
       specific_headers = kernel_page[/linux-headers-.+?-#{KERNEL_TYPE}_.+?_#{ARCHITECTURE}.deb/] || raise('spec. headers')
       image = kernel_page[/linux-image-.+?-#{KERNEL_TYPE}.+?_#{ARCHITECTURE}.deb/] || raise('image')
 
-      [
+
+      package_addresses = [
         "#{kernel_page_address}/#{common_headers}",
         "#{kernel_page_address}/#{specific_headers}",
         "#{kernel_page_address}/#{image}"
       ]
+
+      if version >= KernelVersion.new(4, 16, 4)
+        modules = kernel_page[/linux-modules-.+?-#{KERNEL_TYPE}.+?_#{ARCHITECTURE}.deb/] || raise('modules')
+        package_addresses << "#{kernel_page_address}/#{modules}"
+      end
+
+      package_addresses
     else
       []
     end
