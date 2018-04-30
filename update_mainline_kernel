@@ -44,18 +44,37 @@ class UpdateMainlineKernel
   DEFAULT_STORE_PATH = '/tmp'
 
   def execute(options = {})
-    current_kernel_version = options[:install] ? decode_version_for_install(options[:install]) : KernelVersion.find_current
     store_path = options[:store_path] || DEFAULT_STORE_PATH
 
-    puts "Current kernel version: #{current_kernel_version}"
+    case options[:install]
+    when nil
+      current_version = KernelVersion.find_current
+      install_latest_kernel_for_current_version(current_version, store_path)
+    when /^(\d+)\.(\d+)$/
+      # Simulate the system having the earliest version (rc0, not existing) of the specified
+      # version.
+      select_version_rc0 = KernelVersion.new($1, $2, 0, rc: 0)
+      install_latest_kernel_for_current_version(select_version_rc0, store_path)
+    when /^(\d+)\.(\d+)\.(\d+)$/
+      specific_version = KernelVersion.new($1, $2, $3)
+      install_specific_version(specific_version, store_path)
+    else
+      raise "Unexpected_version: #{options[:install]}"
+    end
+  end
+
+  private
+
+  def install_latest_kernel_for_current_version(current_version, store_path)
+    puts "Current kernel version: #{current_version}"
 
     mainline_ppa_page = load_mainline_ppa_page
 
-    all_patch_versions = find_all_patch_versions_for_kernel_version(mainline_ppa_page, current_kernel_version)
+    all_patch_versions = find_all_patch_versions_for_kernel_version(mainline_ppa_page, current_version)
 
     puts "Latest version: #{all_patch_versions.sort.last}"
 
-    installable_versions = all_patch_versions.select { |version| version > current_kernel_version }
+    installable_versions = all_patch_versions.select { |version| version > current_version }
 
     if installable_versions.size > 0
       any_version_installed = install_latest_possible_version(installable_versions, store_path)
@@ -65,16 +84,12 @@ class UpdateMainlineKernel
     end
   end
 
-  private
+  def install_specific_version(version, store_path)
+    mainline_ppa_page = load_mainline_ppa_page
 
-  # Format: maj.min
-  #
-  def decode_version_for_install(raw_version)
-    major, minor = raw_version.match(/^(\d)\.(\d+)$/).captures
+    version_installed = install_version(version, store_path)
 
-    # Simulate a X.Y.0-rc0
-    #
-    KernelVersion.new(major, minor, 0, rc: 0)
+    CleanKernelPackages.new.execute if version_installed
   end
 
   def load_mainline_ppa_page
@@ -99,30 +114,36 @@ class UpdateMainlineKernel
   #
   def install_latest_possible_version(installable_versions, store_path)
     installable_versions.sort.reverse.each do |installable_version|
-      puts "Version: #{installable_version}"
+      version_installed = install_version(installable_version, store_path)
 
-      puts "- finding package addresses..."
-
-      package_addresses = find_kernel_package_addresses(installable_version)
-
-      puts "- downloading packages..."
-
-      package_files = download_package_files(package_addresses, store_path)
-
-      if package_files.empty?
-        puts "- build failed! skipping..."
-
-        next
-      else
-        puts "- installing packages..."
-
-        install_packages(package_files)
-
-        return true
-      end
+      return true if version_installed
     end
 
     return false
+  end
+
+  def install_version(version, store_path)
+    puts "Version: #{version}"
+
+    puts "- finding package addresses..."
+
+    package_addresses = find_kernel_package_addresses(version)
+
+    puts "- downloading packages..."
+
+    package_files = download_package_files(package_addresses, store_path)
+
+    if package_files.empty?
+      puts "- build failed! skipping..."
+
+      return false
+    else
+      puts "- installing packages..."
+
+      install_packages(package_files)
+
+      return true
+    end
   end
 
   def find_kernel_package_addresses(version)
@@ -183,9 +204,14 @@ end
 #
 if __FILE__ == $PROGRAM_NAME
 
+  long_help = <<~HELP
+    When the user specifies --install, if the patch version is not specified, the latest <major.minor> kernel version is installed.
+  HELP
+
   options = SimpleScripting::Argv.decode(
-    [ '-i', '--install VERSION', 'Install a certain version [format: <maj.min>]' ],
+    [ '-i', '--install VERSION', 'Install a certain version [format: <maj.min[.patch]>]' ],
     [ '-s', '--store-path PATH', 'Store packages to path (default: /tmp)' ],
+    long_help: long_help,
   ) || exit
 
   UpdateMainlineKernel.new.execute(options)
