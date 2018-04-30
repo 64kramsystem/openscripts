@@ -53,27 +53,15 @@ class UpdateMainlineKernel
 
     all_patch_versions = find_all_patch_versions_for_kernel_version(mainline_ppa_page, current_kernel_version)
 
-    puts "Latest 3 patch versions found: #{all_patch_versions.sort.last(3).join(', ')}"
+    puts "Latest version: #{all_patch_versions.sort.last}"
 
-    latest_patch_version = all_patch_versions.sort.last
+    installable_versions = all_patch_versions.select { |version| version > current_kernel_version }
 
-    if latest_patch_version > current_kernel_version
-      puts "Installing: #{latest_patch_version}"
-
-      puts "Downloading packages..."
-
-      package_addresses = find_kernel_package_addresses(latest_patch_version)
-      package_files = download_package_files(package_addresses, store_path)
-
-      if package_files.size > 0
-        puts "Installing packages..."
-
-        install_packages(package_files)
-
-        CleanKernelPackages.new.execute
-      end
+    if installable_versions.size > 0
+      any_version_installed = install_latest_possible_version(installable_versions, store_path)
+      CleanKernelPackages.new.execute if any_version_installed
     else
-      puts "-> Nothing to do."
+      puts "Nothing to do."
     end
   end
 
@@ -106,6 +94,37 @@ class UpdateMainlineKernel
     end
   end
 
+  # Tries to install the latest of the passed versions.
+  # Returns true if any kernel was installed; false otherwise.
+  #
+  def install_latest_possible_version(installable_versions, store_path)
+    installable_versions.sort.reverse.each do |installable_version|
+      puts "Version: #{installable_version}"
+
+      puts "- finding package addresses..."
+
+      package_addresses = find_kernel_package_addresses(installable_version)
+
+      puts "- downloading packages..."
+
+      package_files = download_package_files(package_addresses, store_path)
+
+      if package_files.empty?
+        puts "- build failed! skipping..."
+
+        next
+      else
+        puts "- installing packages..."
+
+        install_packages(package_files)
+
+        return true
+      end
+    end
+
+    return false
+  end
+
   def find_kernel_package_addresses(version)
     kernel_page_address = "#{PPA_ADDRESS}/v#{version.major}.#{version.minor}"
 
@@ -131,8 +150,6 @@ class UpdateMainlineKernel
         "#{kernel_page_address}/#{image}"
       ]
     else
-      puts "> Build failed! Exiting."
-
       []
     end
   end
