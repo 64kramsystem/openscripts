@@ -8,15 +8,8 @@ set -o errexit
 
 # Configuration file.
 #
-# Doesn't supports comments; spaces around the equal sign are trimmed
-#
-# Parameters required:
-#
-# - service_remote_address (eg. `https://remotehost/owncloud`)
-# - data_directory
-# - user
-# - password
-# - merge_editor (optional)
+# Doesn't supports comments; spaces around the equal sign are trimmed.
+# See help for the informations.
 #
 configuration_file="$HOME/.ownsync"
 
@@ -42,7 +35,8 @@ function parse_command_parameters {
     echo '- data_directory'
     echo '- user'
     echo '- password (can be also specified as $OWNSYNC_PWD)'
-    echo '- merge_editor (optional)'
+    echo "- merge_editor (optional; if specified, the program is invoked to solve the conflicts)"
+    echo '- text_extensions (optional, colon-separated; extensions recognized for merges (in addition to `md` and `txt`)'
     echo
     echo "The format is <key=value>. For more information, see this file's source code."
 
@@ -102,6 +96,17 @@ function perform_sync {
 }
 
 function solve_conflicts {
+  declare -a all_text_extensions
+
+  all_text_extensions+=(md)
+  all_text_extensions+=(txt)
+
+  local text_extension_recognized=no
+
+  for extension in ${text_extensions//:/ }; do
+    all_text_extensions+=("$extension")
+  done
+
   while IFS= read -r -d '' conflict_file
   do
     if [[ "$merge_editor" != "" ]]; then
@@ -110,11 +115,22 @@ function solve_conflicts {
 
       if [[ "$source_file" == "" ]]; then
         echo "Couldn't find source file for $pretty_conflict_file!"
-      elif [[ ! $conflict_file =~ \.(md|txt)$ ]]; then
-        echo "$pretty_conflict_file is not a plaintext file!"
       else
-        "$merge_editor" "$source_file" "$conflict_file"
-        mv "$conflict_file" /tmp/
+        for extension in "${all_text_extensions[@]}"; do
+          if [[ $conflict_file =~ \.${extension}$ ]]; then
+            "$merge_editor" "$source_file" "$conflict_file"
+            mv "$conflict_file" /tmp/
+
+            text_extension_recognized=yes
+            break
+          fi
+        done
+
+        if [[ "$text_extension_recognized" == "no" ]]; then
+          echo "$pretty_conflict_file is not a (recognized) plaintext file!"
+        fi
+
+        text_extension_recognized=no
       fi
     else
       echo "Conflict found: $conflict_file"
