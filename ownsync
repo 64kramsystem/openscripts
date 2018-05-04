@@ -8,15 +8,8 @@ set -o errexit
 
 # Configuration file.
 #
-# Doesn't supports comments; spaces around the equal sign are trimmed
-#
-# Parameters required:
-#
-# - service_remote_address (eg. `https://remotehost/owncloud`)
-# - data_directory
-# - user
-# - password
-# - merge_editor (optional)
+# Doesn't supports comments; spaces around the equal sign are trimmed.
+# See help for the informations.
 #
 configuration_file="$HOME/.ownsync"
 
