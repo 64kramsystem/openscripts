@@ -25,7 +25,8 @@ I will slowly add remaining or new ones.
 
 # Changelog #
 
-- 2018/May/05: `ownsync`: add support for extra text extensions
+- 2018/May/05: `ejectdisk`: handle peripherals exposing multiple devices
+- 2018/May/04: `ownsync`: add support for extra text extensions
 - 2018/May/01: several updates to `update_mainline_kernel`
 - 2018/Apr/16: added `ownsync` (shell script)
 - 2018/Apr/14: `ejectdisk`: add functionality for automatically ejecting all the connected usb storage devices

@@ -24,9 +24,13 @@ function unmount_device_partitions() {
 }
 
 function power_off_device() {
-  udisksctl power-off -b "$device"
-
-  echo "Device $device powered off."
+  if [[ -e "$device" ]]; then
+    udisksctl power-off -b "$device"
+    echo "Device $device powered off."
+  else
+    # Simplified message, based on reasonable assumption (see comment below).
+    echo "Device $device already powered off."
+  fi
 }
 
 if [[ $# > 1 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
@@ -45,8 +49,16 @@ else
     v_devices+=("/dev/$1")
   fi
 
+  # Some peripherals may expose multiple devices (eg. card readers). In this case, when
+  # we power off the first device, the other ones will be implicitly powered off too.
+  # This is possibly ok (unmounting may be implicitly performed), however, for cleanness,
+  # first we umount all, then we (conditionally) power off.
+  #
   for device in "${v_devices[@]}"; do
     unmount_device_partitions
+  done
+
+  for device in "${v_devices[@]}"; do
     power_off_device
   done
 fi
