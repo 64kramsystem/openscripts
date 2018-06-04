@@ -88,7 +88,7 @@ class CleanKernelPackages
         version_pattern << "-[0-9]{6}\\b"
       end
 
-      "~i^linux-(headers|image|image-extra)-#{version_pattern}".shellescape
+      "~i^linux-(headers|image|image-extra|modules)-#{version_pattern}".shellescape
     end.join(' ')
 
     `aptitude search -w 120 #{package_matchers} | cut -c 5- | awk '{print $1}'`.split("\n")
