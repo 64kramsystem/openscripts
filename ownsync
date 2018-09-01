@@ -96,11 +96,7 @@ function perform_sync {
 }
 
 function solve_conflicts {
-  declare -a all_text_extensions
-
-  all_text_extensions+=(md)
-  all_text_extensions+=(txt)
-
+  local all_text_extensions+=(md txt sh)
   local text_extension_recognized=no
 
   for extension in ${text_extensions//:/ }; do
