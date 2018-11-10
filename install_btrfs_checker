@@ -97,3 +97,5 @@ Terminal=false
 Hidden=false
 
 TEXT
+
+chown "$username": "$startup_application_definition"
