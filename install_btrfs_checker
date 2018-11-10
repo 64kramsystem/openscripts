@@ -91,7 +91,6 @@ Type=Application
 Name=Check BTRFS scrub
 Comment=
 Exec=$notification_script
-OnlyShowIn=XFCE;
 StartupNotify=false
 Terminal=false
 Hidden=false

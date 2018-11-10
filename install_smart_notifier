@@ -74,7 +74,6 @@ Type=Application
 Name=Check SMART warnings
 Comment=
 Exec=$notification_script
-OnlyShowIn=XFCE;
 StartupNotify=false
 Terminal=false
 Hidden=false
