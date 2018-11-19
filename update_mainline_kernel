@@ -43,19 +43,21 @@ class UpdateMainlineKernel
   ARCHITECTURE = "amd64"
   DEFAULT_STORE_PATH = '/tmp'
 
-  def execute(install: nil, store_path: DEFAULT_STORE_PATH)
+  NO_ACTION_MESSAGE = 'NO ACTION: '
+
+  def execute(install: nil, dry_run: false, store_path: DEFAULT_STORE_PATH)
     case install
     when nil
       current_version = KernelVersion.find_current
-      install_latest_kernel_for_current_version(current_version, store_path)
+      install_latest_kernel_for_current_version(current_version, dry_run, store_path)
     when /^(\d+)\.(\d+)$/
       # Simulate the system having the earliest version (rc0, not existing) of the specified
       # version.
       select_version_rc0 = KernelVersion.new($1, $2, 0, rc: 0)
-      install_latest_kernel_for_current_version(select_version_rc0, store_path)
+      install_latest_kernel_for_current_version(select_version_rc0, dry_run, store_path)
     when /^(\d+)\.(\d+)\.(\d+)$/
       specific_version = KernelVersion.new($1, $2, $3)
-      install_specific_version(specific_version, store_path)
+      install_specific_version(specific_version, dry_run, store_path)
     else
       raise "Unexpected_version: #{install}"
     end
@@ -63,7 +65,7 @@ class UpdateMainlineKernel
 
   private
 
-  def install_latest_kernel_for_current_version(current_version, store_path)
+  def install_latest_kernel_for_current_version(current_version, dry_run, store_path)
     puts "Current kernel version: #{current_version}"
 
     mainline_ppa_page = load_mainline_ppa_page
@@ -75,8 +77,12 @@ class UpdateMainlineKernel
     installable_versions = all_patch_versions.select { |version| version > current_version }
 
     if installable_versions.size > 0
-      any_version_installed = install_latest_possible_version(installable_versions, store_path)
-      CleanKernelPackages.new.execute if any_version_installed
+      installed_version = install_latest_possible_version(installable_versions, dry_run, store_path)
+
+      if installed_version
+        cleaning_params = dry_run ? {dry_run: dry_run, include_versions: [installed_version]} : {}
+        CleanKernelPackages.new.execute(cleaning_params)
+      end
     else
       puts "Nothing to do."
     end
@@ -85,7 +91,7 @@ class UpdateMainlineKernel
   def install_specific_version(version, store_path)
     mainline_ppa_page = load_mainline_ppa_page
 
-    version_installed = install_version(version, store_path)
+    version_installed = install_version(version, dry_run, store_path)
 
     CleanKernelPackages.new.execute if version_installed
   end
@@ -110,17 +116,17 @@ class UpdateMainlineKernel
   # Tries to install the latest of the passed versions.
   # Returns true if any kernel was installed; false otherwise.
   #
-  def install_latest_possible_version(installable_versions, store_path)
+  def install_latest_possible_version(installable_versions, dry_run, store_path)
     installable_versions.sort.reverse.each do |installable_version|
-      version_installed = install_version(installable_version, store_path)
+      version_installed = install_version(installable_version, dry_run, store_path)
 
-      return true if version_installed
+      return installable_version if version_installed
     end
 
-    return false
+    return nil
   end
 
-  def install_version(version, store_path)
+  def install_version(version, dry_run, store_path)
     puts "Version: #{version}"
 
     puts "- finding package addresses..."
@@ -134,11 +140,11 @@ class UpdateMainlineKernel
     else
       puts "- downloading packages..."
 
-      package_files = download_package_files(package_addresses, store_path)
+      package_files = download_package_files(package_addresses, dry_run, store_path)
 
       puts "- installing packages..."
 
-      install_packages(package_files)
+      install_packages(package_files, dry_run)
 
       true
     end
@@ -181,20 +187,30 @@ class UpdateMainlineKernel
     end
   end
 
-  def download_package_files(package_addresses, destination_directory)
+  def download_package_files(package_addresses, dry_run, destination_directory)
     package_addresses.map do |package_address|
       file_basename = File.basename(package_address)
       destination_file = File.join(destination_directory, file_basename)
 
-      DownloadWithProgress.new.execute(package_address, destination_file)
+      if dry_run
+        puts "#{NO_ACTION_MESSAGE}downloading #{file_basename}..."
+      else
+        DownloadWithProgress.new.execute(package_address, destination_file)
+      end
 
       destination_file
     end
   end
 
-  def install_packages(package_files)
-    escaped_files_list = package_files.map { |filename| filename.shellescape }.join(' ')
-    `sudo dpkg -i #{escaped_files_list}`
+  def install_packages(package_files, dry_run)
+    if dry_run
+      package_files.each do |package_file|
+        puts "#{NO_ACTION_MESSAGE}installing #{package_file}..."
+      end
+    else
+      escaped_files_list = package_files.map { |filename| filename.shellescape }.join(' ')
+      `sudo dpkg -i #{escaped_files_list}`
+    end
   end
 
 end
@@ -209,6 +225,7 @@ if __FILE__ == $PROGRAM_NAME
 
   options = SimpleScripting::Argv.decode(
     ['-i', '--install VERSION', 'Install a certain version [format: <maj.min[.patch]>]'],
+    ['-n', '--dry-run',         "Don't perform download/installation"],
     ['-s', '--store-path PATH', 'Store packages to path (default: /tmp)'],
     long_help: long_help,
   ) || exit
