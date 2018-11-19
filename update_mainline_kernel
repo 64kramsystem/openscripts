@@ -130,7 +130,7 @@ class UpdateMainlineKernel
     if package_addresses.empty?
       puts "- build failed! skipping..."
 
-      return false
+      false
     else
       puts "- downloading packages..."
 
@@ -140,7 +140,7 @@ class UpdateMainlineKernel
 
       install_packages(package_files)
 
-      return true
+      true
     end
   end
 
