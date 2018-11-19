@@ -192,8 +192,9 @@ class UpdateMainlineKernel
     end
   end
 
-  def install_packages(downloaded_files)
-    `sudo dpkg -i #{downloaded_files.join(" ")}`
+  def install_packages(package_files)
+    escaped_files_list = package_files.map { |filename| filename.shellescape }.join(' ')
+    `sudo dpkg -i #{escaped_files_list}`
   end
 
 end
