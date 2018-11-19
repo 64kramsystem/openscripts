@@ -8,12 +8,15 @@ require 'shellwords'
 
 class CleanKernelPackages
 
-  def execute(dry_run: false, keep_previous: false, delete_current: false)
+  # include_versions: (Array of KernelVersion) act like the versions passed are installed; it's
+  #                   legal, but dangerous, to use this in a regular (non-dry) run.
+  #
+  def execute(dry_run: false, keep_previous: false, delete_current: false, include_versions: [])
     current_version = KernelVersion.find_current
 
     puts "Current kernel version: #{current_version}", ""
 
-    installed_versions = find_installed_versions(current_version)
+    installed_versions = find_installed_versions(current_version, include_versions: include_versions)
 
     puts "Currently installed package versions:", *installed_versions.map { |version| "- #{version}" }, ""
 
@@ -32,13 +35,15 @@ class CleanKernelPackages
 
   private
 
-  def find_installed_versions(current_version)
+  def find_installed_versions(current_version, include_versions: [])
     raw_packages_list = find_installed_packages("^linux-(headers|image|image-extra)-#{current_version.major}\\.#{current_version.minor}\\.")
 
     package_versions = raw_packages_list.map do |package_name|
       raw_version = package_name[/linux-\w+(-\w+)?-(\d+\.\d+\.\d+-\w+)/, 2] || raise("Version not identified: #{package_name}")
       KernelVersion.parse_version(raw_version)
     end
+
+    package_versions += include_versions
 
     # We catch both the linux-header and the linux-headers-generic, so we uniq them.
     #
