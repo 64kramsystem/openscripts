@@ -43,10 +43,8 @@ class UpdateMainlineKernel
   ARCHITECTURE = "amd64"
   DEFAULT_STORE_PATH = '/tmp'
 
-  def execute(options = {})
-    store_path = options[:store_path] || DEFAULT_STORE_PATH
-
-    case options[:install]
+  def execute(install: nil, store_path: DEFAULT_STORE_PATH)
+    case install
     when nil
       current_version = KernelVersion.find_current
       install_latest_kernel_for_current_version(current_version, store_path)
@@ -59,7 +57,7 @@ class UpdateMainlineKernel
       specific_version = KernelVersion.new($1, $2, $3)
       install_specific_version(specific_version, store_path)
     else
-      raise "Unexpected_version: #{options[:install]}"
+      raise "Unexpected_version: #{install}"
     end
   end
 
