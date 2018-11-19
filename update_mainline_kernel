@@ -207,8 +207,8 @@ if __FILE__ == $PROGRAM_NAME
   HELP
 
   options = SimpleScripting::Argv.decode(
-    [ '-i', '--install VERSION', 'Install a certain version [format: <maj.min[.patch]>]' ],
-    [ '-s', '--store-path PATH', 'Store packages to path (default: /tmp)' ],
+    ['-i', '--install VERSION', 'Install a certain version [format: <maj.min[.patch]>]'],
+    ['-s', '--store-path PATH', 'Store packages to path (default: /tmp)'],
     long_help: long_help,
   ) || exit
 
