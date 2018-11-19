@@ -127,15 +127,15 @@ class UpdateMainlineKernel
 
     package_addresses = find_kernel_package_addresses(version)
 
-    puts "- downloading packages..."
-
-    package_files = download_package_files(package_addresses, store_path)
-
-    if package_files.empty?
+    if package_addresses.empty?
       puts "- build failed! skipping..."
 
       return false
     else
+      puts "- downloading packages..."
+
+      package_files = download_package_files(package_addresses, store_path)
+
       puts "- installing packages..."
 
       install_packages(package_files)
