@@ -108,9 +108,9 @@ end
 if __FILE__ == $PROGRAM_NAME
 
   options = SimpleScripting::Argv.decode(
-    ['-k', '--keep-previous', "Keep one previous version (the latest)"],
+    ['-k', '--keep-previous',  "Keep one previous version (the latest)"],
     ['-d', '--delete-current', "Delete current; requires at least another version to be present"],
-    ['-n', '--no-exec', "Dry run; don't remove any package"],
+    ['-n', '--no-exec',        "Dry run; don't remove any package"],
   ) || exit
 
   CleanKernelPackages.new.execute(options)
