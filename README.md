@@ -22,29 +22,3 @@
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
 
 I will slowly add remaining or new ones.
-
-# Changelog #
-
-- 2018/May/05: `ejectdisk`: handle peripherals exposing multiple devices
-- 2018/May/04: `ownsync`: add support for extra text extensions
-- 2018/May/01: several updates to `update_mainline_kernel`
-- 2018/Apr/16: added `ownsync` (shell script)
-- 2018/Apr/14: `ejectdisk`: add functionality for automatically ejecting all the connected usb storage devices
-- 2018/Apr/02: `ejectdisk`: automatically add `/dev/` prefix, if not present
-- 2018/Apr/02: add support for `README.rdoc` to `ship_gem`
-- 2018/Apr/01: add support for manual project name to `ship_gem`
-- 2018/Mar/23: added `ejectdisk`
-- 2018/Feb/14: tweaks to `git_purge_empty_branches`
-- 2018/Feb/11: added automatic README gem version update (if present) to `ship_gem`
-- 2018/Feb/11: added `none` option to `ship_gem`
-- 2018/Feb/05: added `git_purge_empty_branches`
-- 2018/Jan/07: added `interruptible_job_scheduler.rb`
-- 2017/Nov/11: added JSON support to `prettify_xml_files`, and renamed to `prettify` (ruby)
-- 2017/Oct/20: added `ship_gem` (ruby)
-- 2017/Oct/10: moved `github_create` to the new `geet` project
-- 2017/Oct/06: added `github_create` (ruby)
-- 2017/Sep/14: added `update_markdown_toc` (ruby)
-- 2017/Sep/08: added `update_markdown_chapter_references`
-- 2017/Sep/03: added `install_smart_notifier` (shell script)
-- 2017/Jul/15: added `download_ubuntu_packages` (ruby)
-- 2017/Jul/10: added `install_btrfs_checker` (shell script)
