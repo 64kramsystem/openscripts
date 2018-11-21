@@ -11,7 +11,7 @@ class CleanKernelPackages
   # include_versions: (Array of KernelVersion) act like the versions passed are installed; it's
   #                   legal, but dangerous, to use this in a regular (non-dry) run.
   #
-  def execute(dry_run: false, keep_previous: false, delete_current: false, include_versions: [])
+  def execute(no_exec: false, keep_previous: false, delete_current: false, include_versions: [])
     current_version = KernelVersion.find_current
 
     puts "Current kernel version: #{current_version}", ""
@@ -27,7 +27,7 @@ class CleanKernelPackages
 
       puts "Removing packages:", *packages_to_remove.map { |package| "- #{package}"}, ""
 
-      remove_packages(packages_to_remove) unless dry_run
+      remove_packages(packages_to_remove) unless no_exec
     else
       puts "Nothing to remove!"
     end
@@ -108,9 +108,9 @@ end
 if __FILE__ == $PROGRAM_NAME
 
   options = SimpleScripting::Argv.decode(
-    ['-k', '--keep-previous', "Keep one previous version (the latest)"],
+    ['-k', '--keep-previous',  "Keep one previous version (the latest)"],
     ['-d', '--delete-current', "Delete current; requires at least another version to be present"],
-    ['-n', '--dry-run', "Dry run; doesn't remove any package"],
+    ['-n', '--no-exec',        "Dry run; don't remove any package"],
   ) || exit
 
   CleanKernelPackages.new.execute(options)
