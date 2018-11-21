@@ -1,3 +1,5 @@
+- 2018/Nov/19: `update_mainline_kernel`: add dry run mode
+- 2018/Nov/19: `clean_kernel_packages`: add support for including versions which are not actually installed
 - 2018/May/05: `ejectdisk`: handle peripherals exposing multiple devices
 - 2018/May/04: `ownsync`: add support for extra text extensions
 - 2018/May/01: several updates to `update_mainline_kernel`
