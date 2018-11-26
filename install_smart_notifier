@@ -34,6 +34,13 @@ if [[ $0 == '-h' || $1 == '--help' ]]; then
   exit
 fi
 
+# Checks #######################################################################
+
+if [[ "$EUID" != 0 ]]; then
+  echo "Please re-run this script as root!"
+  exit 1
+fi
+
 # smartd run file ##############################################################
 
 echo "Installing $smartd_run_file"
