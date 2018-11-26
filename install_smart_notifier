@@ -15,7 +15,7 @@ startup_application_definition="$user_home/.config/autostart/Check SMART warning
 # Help and explanation #########################################################
 
 if [[ $0 == '-h' || $1 == '--help' ]]; then
-  echo "Usage: install_smart_notifier.sh"
+  echo "Usage: sudo $(basename "$0")"
   echo
   echo "Install the scripts for warning the user whenever smartd finds a problem."
   echo
