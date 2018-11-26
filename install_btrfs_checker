@@ -85,6 +85,7 @@ fi
 TEXT
 
 chmod 755 $notification_script
+chown $username: $notification_script
 
 # Startup application definition ###############################################
 
