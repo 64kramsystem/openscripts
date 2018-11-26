@@ -17,7 +17,7 @@ startup_application_definition="$user_home/.config/autostart/Check BTRFS scrub.d
 # but it's easier just to capture the `btrfs scrub` output.
 
 if [[ $0 == '-h' || $1 == '--help' ]]; then
-  echo "Usage: install_btrfs_checker.sh"
+  echo "Usage: sudo $(basename "$0")"
   echo
   echo "Install the scripts for monthly scrubbing the BTRFS partitions and notifying the user on logon."
   echo ""

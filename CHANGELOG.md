@@ -1,3 +1,4 @@
+- 2018/Nov/26: checker scripts: ownership fixes/improvements, and cosmetic improvements
 - 2018/Nov/19: `update_mainline_kernel`: add dry run mode
 - 2018/Nov/19: `clean_kernel_packages`: add support for including versions which are not actually installed
 - 2018/May/05: `ejectdisk`: handle peripherals exposing multiple devices
