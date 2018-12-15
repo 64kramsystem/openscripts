@@ -1,3 +1,4 @@
+- 2018/Dec/15: `update_mainline_kernel`: use HTTPS
 - 2018/Nov/26: checker scripts: ownership fixes/improvements, and cosmetic improvements
 - 2018/Nov/19: `update_mainline_kernel`: add dry run mode
 - 2018/Nov/19: `clean_kernel_packages`: add support for including versions which are not actually installed

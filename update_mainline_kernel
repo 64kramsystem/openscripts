@@ -15,7 +15,7 @@ class DownloadWithProgress
   def execute(address, destination_file)
     uri = URI(address)
 
-    Net::HTTP.start(uri.host) do |http|
+    Net::HTTP.start(uri.host, use_ssl: true) do |http|
       response = http.request_head(address)
 
       file_basename = File.basename(destination_file)
@@ -38,7 +38,7 @@ end
 
 class UpdateMainlineKernel
 
-  PPA_ADDRESS = "http://kernel.ubuntu.com/~kernel-ppa/mainline"
+  PPA_ADDRESS = "https://kernel.ubuntu.com/~kernel-ppa/mainline"
   KERNEL_TYPE = "generic"
   ARCHITECTURE = "amd64"
   DEFAULT_STORE_PATH = '/tmp'
