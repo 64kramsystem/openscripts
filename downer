@@ -1,0 +1,82 @@
+#!/usr/bin/env ruby
+
+require 'open-uri'
+require 'open_uri_redirections'
+require 'simple_scripting/argv'
+
+class Downer
+
+  def execute(page_address, file_link_pattern, options = {})
+    file_link = find_file_link(page_address, file_link_pattern, relative_path: options[:relative_path])
+    package_file = download_file(file_link)
+    install(package_file, application: options[:application])
+    File.delete(package_file) if package_file
+  end
+
+  private
+
+  def download_page(address)
+    puts "Address: #{address}"
+
+    open(address, allow_redirections: :all).read
+  end
+
+  def find_file_link(page_address, file_link_pattern, relative_path:)
+    page_content = download_page(page_address)
+
+    file_link = page_content[file_link_pattern] || (puts page_content; raise('File link not Found!'))
+
+    if relative_path
+      "#{URI(page_address).scheme}://#{URI(page_address).host}#{file_link}"
+    else
+      file_link
+    end
+  end
+
+  def download_file(file_link)
+    puts "- downloading link #{file_link}..."
+
+    file = open(file_link)
+    file.close
+
+    new_filename = "/tmp/#{File.basename(file_link)}"
+
+    File.rename(file.path, new_filename)
+
+    new_filename
+  end
+
+  def install(package_file, application: nil)
+    puts "- installing #{package_file}..."
+
+    if application
+      `#{application} #{package_file}`
+    else
+      case package_file
+      when /\.deb$/
+        `gdebi --non-interactive #{package_file}`
+      else
+        raise "File format not recognized: #{package_file}"
+      end
+    end
+
+    raise 'Error while installing package' if !$?.success?
+  end
+
+end
+
+if __FILE__ == $0
+
+  options = SimpleScripting::Argv.decode(
+    ['-a', '--application APPLICATION', 'Use the given application'],
+    ['-r', '--relative-path',           'Assume that the URL path is relative'],
+    'page_address',
+    'file_link_pattern',
+  ) || exit
+
+  page_address, file_link_pattern = options.fetch_values(:page_address, :file_link_pattern)
+  file_link_pattern = /#{file_link_pattern}/
+
+  Downer.new.execute(page_address, file_link_pattern, options)
+
+end
