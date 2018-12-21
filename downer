@@ -54,7 +54,7 @@ class Downer
     else
       case package_file
       when /\.deb$/
-        `gdebi --non-interactive #{package_file}`
+        `sudo gdebi --non-interactive #{package_file}`
       else
         raise "File format not recognized: #{package_file}"
       end
