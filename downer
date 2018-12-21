@@ -3,6 +3,7 @@
 require 'open-uri'
 require 'open_uri_redirections'
 require 'simple_scripting/argv'
+require 'shellwords'
 
 class Downer
 
@@ -54,7 +55,7 @@ class Downer
     else
       case package_file
       when /\.deb$/
-        `sudo gdebi --non-interactive #{package_file}`
+        `sudo gdebi --non-interactive #{package_file.shellescape}`
       else
         raise "File format not recognized: #{package_file}"
       end
