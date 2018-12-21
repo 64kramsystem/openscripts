@@ -14,6 +14,7 @@
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
 - sysadmin
   - `clean_kernel_packages`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
+  - `downer`: download and automatically install packages/images from web pages
   - `download_ubuntu_packages`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
   - `ejectdisk`: unmounts and powers off a device, or all the connected USB storage devices
   - `ownsync`: command line sync script for Owncloud/Nextcloud, with conflicts handling
