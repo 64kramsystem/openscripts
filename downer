@@ -48,20 +48,29 @@ class Downer
   end
 
   def install(package_file, application: nil)
-    puts "- installing #{package_file}..."
-
     if application
       `#{application} #{package_file}`
     else
-      case package_file
-      when /\.deb$/
-        `sudo gdebi --non-interactive #{package_file.shellescape}`
+      # This script is for internal usages only, so we don't need to perform whitelisting. This is
+      # clarified in the help.
+      #
+      package_extension = package_file[/\w+$/] || raise("Package package_extension not found")
+      method_name = "install_#{package_extension}_package"
+
+      if respond_to?(method_name, true)
+        send(method_name, package_file)
       else
-        raise "File format not recognized: #{package_file}"
+        raise "Package extension not supported: #{package_extension}"
       end
     end
 
     raise 'Error while installing package' if !$?.success?
+  end
+
+  def install_deb_package(package_file)
+    puts "- installing #{package_file}..."
+
+    `sudo gdebi --non-interactive #{package_file.shellescape}`
   end
 
 end
@@ -73,6 +82,7 @@ if __FILE__ == $0
     ['-r', '--relative-path',           'Assume that the URL path is relative'],
     'page_address',
     'file_link_pattern',
+    long_help: "This script is meant to be used only internally; it doesn't employ any form of protection against malicious attacks."
   ) || exit
 
   page_address, file_link_pattern = options.fetch_values(:page_address, :file_link_pattern)
