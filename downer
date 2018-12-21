@@ -1,0 +1,126 @@
+#!/usr/bin/env ruby
+
+require 'open-uri'
+require 'open_uri_redirections'
+require 'simple_scripting/argv'
+require 'shellwords'
+
+class Downer
+
+  def execute(page_address, file_link_pattern, options = {})
+    file_link = find_file_link(page_address, file_link_pattern, relative_path: options[:relative_path])
+    package_file = download_file(file_link)
+    install(package_file, application: options[:application])
+    File.delete(package_file) if package_file
+  end
+
+  private
+
+  def download_page(address)
+    puts "Address: #{address}"
+
+    open(address, allow_redirections: :all).read
+  end
+
+  def find_file_link(page_address, file_link_pattern, relative_path:)
+    page_content = download_page(page_address)
+
+    file_link = page_content[file_link_pattern] || (puts page_content; raise('File link not Found!'))
+
+    if relative_path
+      "#{URI(page_address).scheme}://#{URI(page_address).host}#{file_link}"
+    else
+      file_link
+    end
+  end
+
+  def download_file(file_link)
+    puts "- downloading link #{file_link}..."
+
+    file = open(file_link)
+    file.close
+
+    new_filename = "/tmp/#{File.basename(file_link)}"
+
+    File.rename(file.path, new_filename)
+
+    new_filename
+  end
+
+  def install(package_file, application: nil)
+    if application
+      `#{application} #{package_file}`
+    else
+      # This script is for internal usages only, so we don't need to perform whitelisting. This is
+      # clarified in the help.
+      #
+      package_extension = package_file[/\w+$/] || raise("Package package_extension not found")
+      method_name = "install_#{package_extension}_package"
+
+      if respond_to?(method_name, true)
+        send(method_name, package_file)
+      else
+        raise "Package extension not supported: #{package_extension}"
+      end
+    end
+
+    raise 'Error while installing package' if !$?.success?
+  end
+
+  def install_deb_package(package_file)
+    puts "- installing #{package_file}..."
+
+    `sudo gdebi --non-interactive #{package_file.shellescape}`
+  end
+
+  # This is not straightforward. Currently, we support only the most common case of dmg+pkg.
+  #
+  # A general outline is provided at https://apple.stackexchange.com/q/73926.
+  #
+  def install_dmg_package(package_file)
+    puts "- attaching #{package_file}..."
+
+    attachment_output = `sudo hdiutil attach #{package_file.shellescape}`
+
+    # Got encoding problem on Mac VM. This is the simplest way to make sure that the output string
+    # encoding is correct.
+    #
+    attachment_output.force_encoding('UTF-8')
+
+    volumes_attached = attachment_output.scan(%r(/Volumes/.*$))
+    raise "Only single-partition DMG images are supported!" if volumes_attached.size != 1
+    installer_volume = volumes_attached[0]
+
+    pkg_files = Dir["#{installer_volume}/*.pkg"]
+    raise "Only volumes with a single PKG file aresupported!" if pkg_files.size != 1
+    installation_pkg_file = pkg_files[0]
+
+    install_pkg_package(installation_pkg_file)
+  ensure
+    volumes_attached.to_a.each { |volume| `sudo hdiutil detach #{volume.shellescape}` }
+  end
+
+  def install_pkg_package(package_file)
+    puts "- installing #{installation_pkg_file}..."
+
+    `sudo installer -package #{installation_pkg_file.shellescape} -target /`
+  end
+
+end
+
+if __FILE__ == $0
+
+  options = SimpleScripting::Argv.decode(
+    ['-a', '--application APPLICATION', 'Use the given application'],
+    ['-r', '--relative-path',           'Assume that the URL path is relative'],
+    'page_address',
+    'file_link_pattern',
+    long_help: "This script is meant to be used only internally; it doesn't employ any form of protection against malicious attacks."
+  ) || exit
+
+  page_address, file_link_pattern = options.fetch_values(:page_address, :file_link_pattern)
+  file_link_pattern = /#{file_link_pattern}/
+
+  Downer.new.execute(page_address, file_link_pattern, options)
+
+end
