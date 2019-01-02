@@ -48,20 +48,7 @@ rm -f $status_file $status_file.tmp
 btrfs_mountpoints=\$(findmnt -nt btrfs | awk '{print \$1}')
 
 for mountpoint in \$btrfs_mountpoints; do
-  btrfs scrub start \$mountpoint
-
-  # For a little, the output will be \`no stats available\`, so we start with
-  # the sleep.
-  #
-  while true; do
-    sleep 60
-
-    if [[ \$(btrfs scrub status \$mountpoint) != *running* ]]; then
-      break
-    fi
-  done
-
-  btrfs scrub status \$mountpoint >> $status_file.tmp
+  btrfs scrub start -B \$mountpoint >> $status_file.tmp
 done
 
 chown $username: $status_file.tmp
