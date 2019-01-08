@@ -1,3 +1,4 @@
+- 2019/Jan/02: `install_btrfs_checker`: add support for RAID volumes, and code simplification
 - 2018/Dec/21: added `downer` (ruby), with extra Mac DMG/PKG support
 - 2018/Dec/15: `update_mainline_kernel`: use HTTPS
 - 2018/Nov/26: checker scripts: ownership fixes/improvements, and cosmetic improvements
