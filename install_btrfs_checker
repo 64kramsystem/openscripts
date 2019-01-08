@@ -19,7 +19,7 @@ startup_application_definition="$user_home/.config/autostart/Check BTRFS scrub.d
 if [[ $0 == '-h' || $1 == '--help' ]]; then
   echo "Usage: sudo $(basename "$0")"
   echo
-  echo "Install the scripts for monthly scrubbing the BTRFS partitions and notifying the user on logon."
+  echo "Install the scripts for monthly scrubbing the BTRFS volumes and notifying the user on logon."
   echo ""
   echo "Files installed:"
   echo "- $cron_file: cron job for monthly check"
@@ -45,23 +45,10 @@ cat <<TEXT | sudo tee $cron_file > /dev/null
 
 rm -f $status_file $status_file.tmp
 
-btrfs_partitions=\$(mount | grep btrfs | awk '{print \$1}')
+btrfs_mountpoints=\$(findmnt -nt btrfs | awk '{print \$1}')
 
-for partition in \$btrfs_partitions; do
-  btrfs scrub start \$partition
-
-  # For a little, the output will be \`no stats available\`, so we start with
-  # the sleep.
-  #
-  while true; do
-    sleep 60
-
-    if [[ \$(btrfs scrub status \$partition) != *running* ]]; then
-      break
-    fi
-  done
-
-  btrfs scrub status \$partition >> $status_file.tmp
+for mountpoint in \$btrfs_mountpoints; do
+  btrfs scrub start -B \$mountpoint >> $status_file.tmp
 done
 
 chown $username: $status_file.tmp
