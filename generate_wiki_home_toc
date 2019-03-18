@@ -1,0 +1,95 @@
+#!/usr/bin/env ruby
+
+require 'simple_scripting/argv'
+
+class GenerateWikiHomeToc
+  DEFAULT_DIRECTORY = '.'
+  HOME_DIRECTORY_HEADER = "# Home\n\n"
+  HOME_FILE = 'Home.md'
+
+  LONG_HELP = <<~STR
+    Generate the `Home.md` file of a wiki repository, with a table of contents.
+
+    Each directory is an HTML header level, and the files contained are an entry in the section.
+    Files come before directories; for each type, the entries are sorted case-insensitively.
+
+    If a document has an H1 header, it's used as entry description, otherwise, the filename is used (with minor editing).
+  STR
+
+  def execute(directory: DEFAULT_DIRECTORY)
+    Dir.chdir(directory)
+
+    output = HOME_DIRECTORY_HEADER
+    output += print_formatted_directory('.')
+
+    IO.write(HOME_FILE, output)
+  end
+
+  private
+
+  def print_formatted_directory(path)
+    if File.file?(path)
+      if path == "./#{HOME_FILE}"
+        ""
+      else
+        format_file_entry(path)
+      end
+    else
+      output = format_directory_entry(path)
+
+      directory_content = find_and_sort_directory_content(path)
+
+      directory_content.each do |child_path|
+        output += print_formatted_directory(child_path)
+      end
+
+      output
+    end
+  end
+
+  def format_file_entry(file_path)
+    if file_path.end_with?('.md')
+      description = IO.read(file_path)[/^# (.*)/, 1] || File.basename(file_path).chomp('.md')
+    end
+
+    description ||= File.basename(file_path)
+
+    file_url = file_path.sub(%r(^\./), "")
+
+    "- " + "[#{description}](#{file_url})" + "\n"
+  end
+
+  def format_directory_entry(dir_path)
+    parents_count = dir_path.split('/').size
+
+    # Exclude the [wiki] root directory.
+    #
+    if parents_count == 1
+      ""
+    else
+      "\n" + ('#' * parents_count) + " " + File.basename(dir_path) + "\n\n"
+    end
+  end
+
+  def find_and_sort_directory_content(dir_path)
+    Dir["#{dir_path}/*"].sort do |path_1, path_2|
+      if File.file?(path_1) && File.directory?(path_2)
+        -1
+      elsif File.directory?(path_1) && File.file?(path_2)
+        1
+      else
+        File.basename(path_1).downcase <=> File.basename(path_2).downcase
+      end
+    end
+  end
+
+end
+
+if __FILE__ == $0
+  options = SimpleScripting::Argv.decode(
+    '[directory]',
+    long_help: GenerateWikiHomeToc::LONG_HELP
+  ) || exit
+
+  GenerateWikiHomeToc.new.execute(options)
+end
