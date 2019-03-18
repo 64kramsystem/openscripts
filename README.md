@@ -5,6 +5,7 @@
 - concurrency
   - `interruptible_job_scheduler.rb`: a scheduler for interruptible process-based job(s)
 - documents
+  - `generate_wiki_home_toc`: generates the `Home.md` file of a (GitHub) wiki repository, with a table of contents
   - `update_markdown_chapter_references`: generates/updates a Table Of Contents, and navigation links, in a collection of Markdown documents
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
 - git
