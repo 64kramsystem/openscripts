@@ -6,7 +6,34 @@ require 'simple_scripting/argv'
 
 require 'shellwords'
 
+module KernelVersionPackageMatcher
+
+  refine KernelVersion do
+
+    def package_matcher
+      version_pattern = "#{major}\\.#{minor}\\.#{patch}"
+
+      # Aptitude doesn't support `\d` for matching digits.
+      #
+      if ongoing
+        # Example: 4.10.0-14
+        version_pattern + "-#{ongoing}\\b"
+      elsif rc
+        # Example: 4.12.0-041200rc7
+        version_pattern + "-[0-9]{6}rc#{rc}\\b"
+      else
+        # Example: 4.12.0-041200
+        version_pattern + "-[0-9]{6}\\b"
+      end
+    end
+
+  end
+
+end
+
 class CleanKernelPackages
+
+  using KernelVersionPackageMatcher
 
   # include_versions: (Array of KernelVersion) act like the versions passed are installed; it's
   #                   legal, but dangerous, to use this in a regular (non-dry) run.
@@ -78,22 +105,7 @@ class CleanKernelPackages
 
   def find_packages_to_remove(versions)
     package_matchers = versions.map do |version|
-      version_pattern = "#{version.major}\\.#{version.minor}\\.#{version.patch}"
-
-      # Aptitude doesn't support `\d` for matching digits.
-      #
-      if version.ongoing
-        # Example: 4.10.0-14
-        version_pattern << "-#{version.ongoing}\\b"
-      elsif version.rc
-        # Example: 4.12.0-041200rc7
-        version_pattern << "-[0-9]{6}rc#{version.rc}\\b"
-      else
-        # Example: 4.12.0-041200
-        version_pattern << "-[0-9]{6}\\b"
-      end
-
-      "~i^linux-(headers|image|image-extra|modules)-#{version_pattern}".shellescape
+      "~i^linux-(headers|image|image-extra|modules)-#{version.package_matcher}".shellescape
     end.join(' ')
 
     `aptitude search -w 120 #{package_matchers} | cut -c 5- | awk '{print $1}'`.split("\n")
