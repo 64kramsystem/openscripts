@@ -4,6 +4,7 @@ require_relative 'kernel_packages_maintenance/kernel_version'
 
 require 'simple_scripting/argv'
 
+require 'fileutils'
 require 'shellwords'
 
 module KernelVersionPackageMatcher
@@ -33,6 +34,8 @@ end
 
 class CleanKernelPackages
 
+  MODULES_DIRECTORY = '/lib/modules'
+
   using KernelVersionPackageMatcher
 
   # include_versions: (Array of KernelVersion) act like the versions passed are installed; it's
@@ -51,10 +54,14 @@ class CleanKernelPackages
 
     if versions_to_remove.size > 0
       packages_to_remove = find_packages_to_remove(versions_to_remove)
+      module_directories_to_remove = find_module_directories_to_remove(versions_to_remove, packages_to_remove)
 
       puts "Removing packages:", *packages_to_remove.map { |package| "- #{package}"}, ""
 
-      remove_packages(packages_to_remove) unless no_exec
+      unless no_exec
+        remove_packages(packages_to_remove)
+        remove_module_directories(module_directories_to_remove)
+      end
     else
       puts "Nothing to remove!"
     end
@@ -111,8 +118,36 @@ class CleanKernelPackages
     `aptitude search -w 120 #{package_matchers} | cut -c 5- | awk '{print $1}'`.split("\n")
   end
 
+  # Sample of returned directory: `/lib/modules/5.0.2-050002-generic`
+  #
+  def find_module_directories_to_remove(versions_to_remove, packages_to_remove)
+    versions_matcher = "(?:" + versions_to_remove.map(&:package_matcher).join('|') + ")"
+
+    # Example of image package names:
+    #
+    # - linux-image-4.15.0-1004-oem
+    # - linux-image-unsigned-5.0.4-050004-generic
+    #
+    # There is always the kernel type suffix, but not always `-unsigned`
+    #
+    module_base_directories = packages_to_remove.join("\n").scan(/^linux-image(?:-unsigned)?-(#{versions_matcher}-\w+)/).flatten
+
+    module_base_directories.map { |module_directory| File.join(MODULES_DIRECTORY, module_directory) }
+  end
+
   def remove_packages(packages)
     system("sudo aptitude purge -y #{packages.join(' ')}")
+  end
+
+  def remove_module_directories(module_directories_to_remove)
+    puts "Removing module directories..."
+
+    module_directories_to_remove.each do |directory|
+      if Dir.exists?(directory)
+        puts "- #{directory}"
+        FileUtils.rm_f(directory)
+      end
+    end
   end
 
 end
