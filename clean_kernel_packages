@@ -58,10 +58,8 @@ class CleanKernelPackages
 
       puts "Removing packages:", *packages_to_remove.map { |package| "- #{package}"}, ""
 
-      unless no_exec
-        remove_packages(packages_to_remove)
-        remove_module_directories(module_directories_to_remove)
-      end
+      remove_packages(packages_to_remove, simulate: no_exec)
+      remove_module_directories(module_directories_to_remove, simulate: no_exec)
     else
       puts "Nothing to remove!"
     end
@@ -135,17 +133,18 @@ class CleanKernelPackages
     module_base_directories.map { |module_directory| File.join(MODULES_DIRECTORY, module_directory) }
   end
 
-  def remove_packages(packages)
-    system("sudo aptitude purge -y #{packages.join(' ')}")
+  def remove_packages(packages, simulate:)
+    simulate_option = "-s" if simulate
+    system("sudo aptitude purge -y #{simulate_option} #{packages.join(' ')}")
   end
 
-  def remove_module_directories(module_directories_to_remove)
+  def remove_module_directories(module_directories_to_remove, simulate:)
     puts "Removing module directories..."
 
     module_directories_to_remove.each do |directory|
       if Dir.exists?(directory)
         puts "- #{directory}"
-        FileUtils.rm_f(directory)
+        FileUtils.rm_f(directory) unless simulate
       end
     end
   end
