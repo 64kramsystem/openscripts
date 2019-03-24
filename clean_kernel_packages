@@ -105,7 +105,7 @@ class CleanKernelPackages
 
   def find_packages_to_remove(versions)
     package_matchers = versions.map do |version|
-      "~i^linux-(headers|image|image-extra|modules)-#{version.package_matcher}".shellescape
+      "~i^linux-(headers|image|image-extra|modules|modules-extra)-#{version.package_matcher}".shellescape
     end.join(' ')
 
     `aptitude search -w 120 #{package_matchers} | cut -c 5- | awk '{print $1}'`.split("\n")
