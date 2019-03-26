@@ -1,0 +1,269 @@
+#!/usr/bin/env ruby
+
+require 'simple_scripting/argv'
+require 'simple_scripting/configuration'
+
+require 'open3'
+require 'io/wait'
+require 'shellwords'
+
+class ApplicationConfiguration
+  def load_arguments_and_configuration
+    devices_configuration = load_devices_configuration
+
+    long_help = <<~HELP
+      Connect an audio BT device to the system.
+
+      Besides providing a mean to perform the operation, the script helps the user working around the extremely annoying issues with the steaming pile of trash that are Bluetooth, Bluez, and the Ubuntu BT support.
+
+      The combination of the above is very unreliable, and repeated attempts are often necessary to connect a device.
+      In addition, Ubuntu has shipped a broken stack in any version, including any LTS. A specific workaround is provided for working around a bug in Ubuntu 16.04.
+
+      The script will preserve the Bluetooth server devices status, so if BT is disabled, the script will enable it, and disable it on exit.
+
+      Switches:
+
+      <device>: Prefix of the device name to connect to.
+
+      Configured devices: #{devices_configuration.keys.map { |name| name + (name == devices_configuration.keys.first ? " (default)" : "") }.join(', ')}
+
+      Configuration:
+
+      The configuration file ("$HOME/.connect_bt_device") is a typical configfile with each line being `<device_name> = <device_id>`.
+      The first line is the default device.
+    HELP
+
+    options = SimpleScripting::Argv.decode(
+      [ '-a', '--reset-a2dp-profile',   'Reset the A2DP profile (Ubuntu 16.04 workaround)' ],
+      '[device]',
+      long_help: long_help
+    ) || exit
+
+    device_id = find_device_id(devices_configuration, options[:device])
+
+    [device_id, !!options[:reset_a2dp_profile]]
+  end
+
+  private
+
+  def load_devices_configuration
+    devices_configuration = SimpleScripting::Configuration.load.to_h.map { |name, id| [name.to_s, id] }.to_h
+
+    if devices_configuration.empty?
+      raise "No devices configured!"
+    else
+      devices_configuration
+    end
+  end
+
+  def find_device_id(devices_configuration, device_prefix)
+    if device_prefix
+      # simplified algorithm
+      matching_devices = devices_configuration.select { |name, _| name.start_with?(device_prefix) }
+
+      case matching_devices.size
+      when 0
+        raise "No matching devices found!"
+      when 1
+        matching_devices.values.first
+      when 2
+        raise "Multiple devices found: #{matching_devices.map(&:first)}"
+      end
+    else
+      devices_configuration.values.first
+    end
+  end
+end # ApplicationConfiguration
+
+module BluetoothDevicesConnectionHelper
+  def connect_audio_device(bt_device_id, pa_card_name, reset_a2dp_profile: false)
+    with_bluetooth_ctl do |stdin, stdout|
+      connect_bt_device_loop(bt_device_id, stdin, stdout)
+
+      if reset_a2dp_profile
+        set_pa_card_profile(pa_card_name, 'off')
+
+        disconnect_bt_device_loop(bt_device_id, stdin, stdout)
+        connect_bt_device_loop(bt_device_id, stdin, stdout)
+
+        set_pa_card_profile(pa_card_name, 'a2dp_sink')
+      end
+    end
+  end
+
+  def disconnect_device(bt_device_id)
+    with_bluetooth_ctl do |stdin, stdout|
+      disconnect_bt_device_loop(bt_device_id, stdin, stdout)
+    end
+  end
+
+  private
+
+  # :readline will block if there is no input available, while :readX will raise an error; in order
+  # to solve this problem easily, the 'io/wait' library makes `IO#ready?` available.
+  #
+  def read_available_io(io)
+    buffer = ''
+    buffer << io.readchar while io.ready?
+    buffer
+  end
+
+  def with_bluetooth_ctl(&block)
+    Open3.popen3('bluetoothctl') do |stdin, stdout, _, _|
+      puts read_available_io(stdout)
+      yield(stdin, stdout)
+    end
+  end
+
+  def connect_bt_device_loop(bt_device_id, bt_ctl_in, bt_ctl_out)
+    loop do
+      bt_ctl_in.puts("connect #{bt_device_id}")
+
+      while true
+        output = read_available_io(bt_ctl_out)
+
+        puts output if output != ''
+
+        case output
+        when /Connection successful/
+          puts
+          return
+        when /Failed to connect/
+          break
+        else
+          sleep 0.5
+        end
+      end
+    end
+  end # connect_bt_device_loop
+
+  def set_pa_card_profile(card, profile)
+    puts "Setting PA card profile: #{profile}"
+
+    Open3.popen3("pactl set-card-profile #{card} #{profile}") do |_, _, stderr, wait_thread|
+      if ! wait_thread.value.success?
+        puts stderr.readlines.join
+        exit
+      end
+    end
+
+    puts
+  end
+
+  def disconnect_bt_device_loop(bt_device_id, bt_ctl_in, bt_ctl_out)
+    loop do
+      bt_ctl_in.puts("disconnect #{bt_device_id}")
+
+      while true
+        output = read_available_io(bt_ctl_out)
+
+        puts output if output != ''
+
+        # Disconnection will always be successful, when the device is available.
+        #
+        case output
+        when /Successful disconnected/
+          puts
+          return
+        when /Device [0-9A-F:] not available/
+          raise "Dafuq!!"
+        else
+          sleep 0.5
+        end
+      end
+    end
+  end # :disconnect_bt_device_loop
+end # BluetoothDevicesConnectionHelper
+
+class BluetoothStateManager
+  WIRELESS_DEVICE_BLOCKED = 'blocked'
+
+  include BluetoothDevicesConnectionHelper
+
+  def with_bluetooth_enabled
+    wireless_device_start_statuses = find_wireless_device_statuses
+
+    check_device_statuses!(wireless_device_start_statuses)
+
+    enable_bluetooth if bt_blocked?(wireless_device_start_statuses)
+
+    bt_device_id = yield
+
+    if bt_blocked?(wireless_device_start_statuses)
+      pause
+
+      disconnect_device(bt_device_id)
+
+      disable_bluetooth
+    end
+  end
+
+  private
+
+  # Returns:
+  #
+  #   { "device_id" => ("blocked"|"unblocked")}
+  #
+  def find_wireless_device_statuses
+    statuses = `rfkill`.scan(/^ *\d+ bluetooth (\w+) +(\w+)/)
+
+    if statuses.empty?
+      raise "No BT wireless devices found!"
+    else
+      statuses.to_h
+    end
+  end
+
+  # Allow only all blocked or all unblocked.
+  #
+  def check_device_statuses!(statuses)
+    raise "Mixed statuses found!" if statuses.values.uniq.size != 1
+  end
+
+  def bt_blocked?(statuses)
+    statuses.values.uniq == [WIRELESS_DEVICE_BLOCKED]
+  end
+
+  def enable_bluetooth
+    puts "Enabling BT..."
+
+    `rfkill unblock bluetooth`
+  end
+
+  def pause
+    print 'Press Enter to disable BT and exit...'
+    gets
+  end
+
+  def disable_bluetooth
+    `rfkill block bluetooth`
+  end
+end # BluetoothStateManager
+
+class BluetoothDevicesConnectionManager
+  include BluetoothDevicesConnectionHelper
+
+  def connect(bt_device_id, reset_a2dp_profile: false)
+    bluez_pa_card_name = generate_bluez_pa_card_name(bt_device_id)
+
+    connect_audio_device(bt_device_id, bluez_pa_card_name, reset_a2dp_profile: reset_a2dp_profile)
+  end
+
+  private
+
+  # Example:
+  #
+  #   00:1B:66:7F:E6:F3 -> bluez_card.00_1B_66_7F_E6_F3
+  #
+  def generate_bluez_pa_card_name(bt_device_id)
+    "bluez_card." + bt_device_id.gsub(':', '_')
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  device_id, reset_a2dp_profile = ApplicationConfiguration.new.load_arguments_and_configuration
+
+  BluetoothStateManager.new.with_bluetooth_enabled do
+    BluetoothDevicesConnectionManager.new.connect(device_id, reset_a2dp_profile: reset_a2dp_profile)
+  end
+end
