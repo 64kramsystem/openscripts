@@ -14,6 +14,7 @@
   - `prettify_xml_files`: prettifies the specified XML files
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
 - system (user facing)
+  - `connect_bt_device`: connects a BT device, working around the complete garbage that is Bluetooth, Bluez, and the BT Ubuntu support
   - `ejectdisk`: unmounts and powers off a device, or all the connected USB storage devices
   - `ownsync`: command line sync script for Owncloud/Nextcloud, with conflicts handling
 - system (sysadmin)
