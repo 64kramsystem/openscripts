@@ -13,6 +13,8 @@
 - programming
   - `prettify`: prettifies files; supports XML and JSON
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
+- "real-world"
+  - `mk_invoice`: prepares a generic (software engineering) invoice in Office Open XML format, using a template, and the data provided in the configuration file
 - system (user facing)
   - `connect_bt_device`: connects a BT device, working around the complete garbage that is Bluetooth, Bluez, and the BT Ubuntu support
   - `ejectdisk`: unmounts and powers off a device, or all the connected USB storage devices
