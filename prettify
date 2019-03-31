@@ -15,7 +15,7 @@ class Processor
     @backup = backup
   end
 
-  def process(filenames)
+  def process(filenames, format: nil)
     Array(filenames).each do |filename|
       puts "Prettifying #{filename}..."
 
@@ -23,7 +23,7 @@ class Processor
 
       content = IO.read(filename)
 
-      prettified_content = prettify(filename, content)
+      prettified_content = prettify(filename, content, format: format)
 
       IO.write(filename, prettified_content)
     end
@@ -31,8 +31,8 @@ class Processor
 
   private
 
-  def prettify(filename, content)
-    format = File.basename(filename)[/\.(\w+)\Z/, 1].downcase
+  def prettify(filename, content, format: nil)
+    format ||= File.basename(filename)[/\.(\w+)\Z/, 1]&.downcase || ""
 
     raise "Unsupported file type/extension: #{format}" if !SUPPORTED_FORMATS.include?(format)
 
@@ -69,10 +69,11 @@ end
 
 if $PROGRAM_NAME == __FILE__
   params = SimpleScripting::Argv.decode(
-    ['-b', '--backup', 'Backup original file, appending `.bak`'],
+    ['-b', '--backup',        'Backup original file, appending `.bak`'],
+    ['-f', '--format FORMAT', "Forces the format; valid values: #{Processor::SUPPORTED_FORMATS.join(', ')}"],
     '*filenames',
-    long_help: "Prettifies JSON and XML files (relies on the file extension for detecting the format)."
+    long_help: "Prettifies #{Processor::SUPPORTED_FORMATS.join('/')} files (relies on the file extension for detecting the format)."
   ) || exit
 
-  Processor.new(backup: params[:backup]).process(params[:filenames])
+  Processor.new(backup: params[:backup]).process(params[:filenames], format: params[:format])
 end
