@@ -9,6 +9,8 @@ require 'rexml/document'
 
 class Processor
 
+  SUPPORTED_FORMATS = %w(json xml)
+
   def initialize(backup: false)
     @backup = backup
   end
@@ -32,14 +34,9 @@ class Processor
   def prettify(filename, content)
     format = File.basename(filename)[/\.(\w+)\Z/, 1].downcase
 
-    case format
-    when 'json'
-      prettifier_class = JsonPrettifier
-    when 'xml'
-      prettifier_class = XmlPrettifier
-    else
-      raise "Unsupported format: #{format}"
-    end
+    raise "Unsupported file type/extension: #{format}" if !SUPPORTED_FORMATS.include?(format)
+
+    prettifier_class = Object.const_get("#{format.capitalize}Prettifier")
 
     prettifier_class.new.prettify(content)
   end
