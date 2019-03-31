@@ -30,15 +30,15 @@ class Processor
   private
 
   def prettify(filename, content)
-    extension = File.basename(filename)[/\.(\w+)\Z/, 1]
+    format = File.basename(filename)[/\.(\w+)\Z/, 1].downcase
 
-    case extension.downcase
+    case format
     when 'json'
       prettifier_class = JsonPrettifier
     when 'xml'
       prettifier_class = XmlPrettifier
     else
-      raise "Unsupported extension: #{extension}"
+      raise "Unsupported format: #{format}"
     end
 
     prettifier_class.new.prettify(content)
@@ -73,7 +73,8 @@ end
 if $PROGRAM_NAME == __FILE__
   params = SimpleScripting::Argv.decode(
     ['-b', '--backup', 'Backup original file, appending `.bak`'],
-    '*filenames'
+    '*filenames',
+    long_help: "Prettifies JSON and XML files (relies on the file extension for detecting the format)."
   ) || exit
 
   Processor.new(backup: params[:backup]).process(params[:filenames])
