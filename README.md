@@ -11,7 +11,7 @@
 - git
   - `git_purge_empty_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in master.
 - programming
-  - `prettify_xml_files`: prettifies the specified XML files
+  - `prettify`: prettifies files; supports XML and JSON
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
 - system (user facing)
   - `connect_bt_device`: connects a BT device, working around the complete garbage that is Bluetooth, Bluez, and the BT Ubuntu support
