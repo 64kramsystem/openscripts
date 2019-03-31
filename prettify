@@ -9,11 +9,13 @@ require 'rexml/document'
 
 class Processor
 
+  SUPPORTED_FORMATS = %w(json xml)
+
   def initialize(backup: false)
     @backup = backup
   end
 
-  def process(filenames)
+  def process(filenames, format: nil)
     Array(filenames).each do |filename|
       puts "Prettifying #{filename}..."
 
@@ -21,7 +23,7 @@ class Processor
 
       content = IO.read(filename)
 
-      prettified_content = prettify(filename, content)
+      prettified_content = prettify(filename, content, format: format)
 
       IO.write(filename, prettified_content)
     end
@@ -29,17 +31,12 @@ class Processor
 
   private
 
-  def prettify(filename, content)
-    extension = File.basename(filename)[/\.(\w+)\Z/, 1]
+  def prettify(filename, content, format: nil)
+    format ||= File.basename(filename)[/\.(\w+)\Z/, 1]&.downcase || ""
 
-    case extension.downcase
-    when 'json'
-      prettifier_class = JsonPrettifier
-    when 'xml'
-      prettifier_class = XmlPrettifier
-    else
-      raise "Unsupported extension: #{extension}"
-    end
+    raise "Unsupported file type/extension: #{format}" if !SUPPORTED_FORMATS.include?(format)
+
+    prettifier_class = Object.const_get("#{format.capitalize}Prettifier")
 
     prettifier_class.new.prettify(content)
   end
@@ -72,9 +69,11 @@ end
 
 if $PROGRAM_NAME == __FILE__
   params = SimpleScripting::Argv.decode(
-    ['-b', '--backup', 'Backup original file, appending `.bak`'],
-    '*filenames'
+    ['-b', '--backup',        'Backup original file, appending `.bak`'],
+    ['-f', '--format FORMAT', "Forces the format; valid values: #{Processor::SUPPORTED_FORMATS.join(', ')}"],
+    '*filenames',
+    long_help: "Prettifies #{Processor::SUPPORTED_FORMATS.join('/')} files (relies on the file extension for detecting the format)."
   ) || exit
 
-  Processor.new(backup: params[:backup]).process(params[:filenames])
+  Processor.new(backup: params[:backup]).process(params[:filenames], format: params[:format])
 end
