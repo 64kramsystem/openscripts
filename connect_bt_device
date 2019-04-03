@@ -93,7 +93,7 @@ module BluetoothDevicesConnectionHelper
 
   def disconnect_device(bt_device_id)
     with_bluetooth_ctl do |stdin, stdout|
-      disconnect_bt_device_loop(bt_device_id, stdin, stdout)
+      disconnect_bt_device_loop(bt_device_id, stdin, stdout) if bt_device_connected?(bt_device_id, stdin, stdout)
     end
   end
 
@@ -171,6 +171,14 @@ module BluetoothDevicesConnectionHelper
     end
 
     puts
+  end
+
+  def bt_device_connected?(bt_device_id, bt_ctl_in, bt_ctl_out)
+    bt_ctl_in.puts("info #{bt_device_id}")
+
+    device_information = read_available_io(bt_ctl_out, wait_pattern: /^\s+Connected: \w+$/)
+
+    device_information =~ /^\s+Connected: yes$/
   end
 
   def disconnect_bt_device_loop(bt_device_id, bt_ctl_in, bt_ctl_out)
