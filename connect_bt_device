@@ -102,15 +102,38 @@ module BluetoothDevicesConnectionHelper
   # :readline will block if there is no input available, while :readX will raise an error; in order
   # to solve this problem easily, the 'io/wait' library makes `IO#ready?` available.
   #
-  def read_available_io(io)
+  # params:
+  #   wait_pattern: keep reading until the expected pattern is found
+  #   timeout: in seconds; used only when :wait_pattern is specified
+  #
+  #
+  def read_available_io(io, wait_pattern: nil, timeout: 1)
     buffer = ''
-    buffer << io.readchar while io.ready?
+    start_time = Time.now.to_f
+
+    while true
+      buffer << io.readchar while io.ready?
+
+      if wait_pattern
+        if buffer =~ wait_pattern
+          break
+        elsif timeout && Time.now.to_f >= start_time + timeout
+          raise "Timout while waiting for pattern #{wait_pattern} not found; current buffer: #{buffer}"
+        else
+          sleep 0.1
+        end
+      else
+        break
+      end
+    end
+
     buffer
   end
 
   def with_bluetooth_ctl(&block)
     Open3.popen3('bluetoothctl') do |stdin, stdout, _, _|
-      puts read_available_io(stdout)
+      puts read_available_io(stdout, wait_pattern: /^Agent registered/)
+
       yield(stdin, stdout)
     end
   end
