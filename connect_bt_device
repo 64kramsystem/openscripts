@@ -243,10 +243,14 @@ end # BluetoothStateManager
 class BluetoothDevicesConnectionManager
   include BluetoothDevicesConnectionHelper
 
+  # Returns the device id (mostly, for convenience).
+  #
   def connect(bt_device_id, reset_a2dp_profile: false)
     bluez_pa_card_name = generate_bluez_pa_card_name(bt_device_id)
 
     connect_audio_device(bt_device_id, bluez_pa_card_name, reset_a2dp_profile: reset_a2dp_profile)
+
+    bt_device_id
   end
 
   private
