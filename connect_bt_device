@@ -93,7 +93,7 @@ module BluetoothDevicesConnectionHelper
 
   def disconnect_device(bt_device_id)
     with_bluetooth_ctl do |stdin, stdout|
-      disconnect_bt_device_loop(bt_device_id, stdin, stdout)
+      disconnect_bt_device_loop(bt_device_id, stdin, stdout) if bt_device_connected?(bt_device_id, stdin, stdout)
     end
   end
 
@@ -102,15 +102,38 @@ module BluetoothDevicesConnectionHelper
   # :readline will block if there is no input available, while :readX will raise an error; in order
   # to solve this problem easily, the 'io/wait' library makes `IO#ready?` available.
   #
-  def read_available_io(io)
+  # params:
+  #   wait_pattern: keep reading until the expected pattern is found
+  #   timeout: in seconds; used only when :wait_pattern is specified
+  #
+  #
+  def read_available_io(io, wait_pattern: nil, timeout: 1)
     buffer = ''
-    buffer << io.readchar while io.ready?
+    start_time = Time.now.to_f
+
+    while true
+      buffer << io.readchar while io.ready?
+
+      if wait_pattern
+        if buffer =~ wait_pattern
+          break
+        elsif timeout && Time.now.to_f >= start_time + timeout
+          raise "Timout while waiting for pattern #{wait_pattern} not found; current buffer: #{buffer}"
+        else
+          sleep 0.1
+        end
+      else
+        break
+      end
+    end
+
     buffer
   end
 
   def with_bluetooth_ctl(&block)
     Open3.popen3('bluetoothctl') do |stdin, stdout, _, _|
-      puts read_available_io(stdout)
+      puts read_available_io(stdout, wait_pattern: /^Agent registered/)
+
       yield(stdin, stdout)
     end
   end
@@ -148,6 +171,14 @@ module BluetoothDevicesConnectionHelper
     end
 
     puts
+  end
+
+  def bt_device_connected?(bt_device_id, bt_ctl_in, bt_ctl_out)
+    bt_ctl_in.puts("info #{bt_device_id}")
+
+    device_information = read_available_io(bt_ctl_out, wait_pattern: /^\s+Connected: \w+$/)
+
+    device_information =~ /^\s+Connected: yes$/
   end
 
   def disconnect_bt_device_loop(bt_device_id, bt_ctl_in, bt_ctl_out)
@@ -243,10 +274,14 @@ end # BluetoothStateManager
 class BluetoothDevicesConnectionManager
   include BluetoothDevicesConnectionHelper
 
+  # Returns the device id (mostly, for convenience).
+  #
   def connect(bt_device_id, reset_a2dp_profile: false)
     bluez_pa_card_name = generate_bluez_pa_card_name(bt_device_id)
 
     connect_audio_device(bt_device_id, bluez_pa_card_name, reset_a2dp_profile: reset_a2dp_profile)
+
+    bt_device_id
   end
 
   private
