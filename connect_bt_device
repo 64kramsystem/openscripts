@@ -9,7 +9,7 @@ require 'shellwords'
 
 class ApplicationConfiguration
   def load_arguments_and_configuration
-    devices_configuration = load_devices_configuration
+    master_device, slave_devices = load_and_check_devices_configuration
 
     long_help = <<~HELP
       Connect an audio BT device (referred as "slave") to the system (referred as "master").
@@ -25,12 +25,24 @@ class ApplicationConfiguration
 
       <device>: Prefix of the slave device name to connect.
 
-      Configured slave devices: #{devices_configuration.keys.map { |name| name + (name == devices_configuration.keys.first ? " (default)" : "") }.join(', ')}
+      Configured slave devices: #{slave_devices.keys.map { |name| name + (name == slave_devices.keys.first ? " (default)" : "") }.join(', ')}
 
       Configuration:
 
-      The configuration file ("$HOME/.connect_bt_device") is a typical configfile with each line being `<device_name> = <device_id>`.
-      The first line is the default device.
+      The configuration file ("$HOME/.connect_bt_device") has the following structure:
+
+      ```
+      [master]
+      master_device = <rfkill_device>
+
+      [slaves]
+      <device_name_1> = <device_id_1>
+      <device_name_2> = <device_id_2>
+      ...
+      ```
+
+      The first line in the [slaves] group is the default device.
+      The [master] group is optional; the master device is the `DEVICE` entry of the `rfkill` command.
     HELP
 
     options = SimpleScripting::Argv.decode(
@@ -39,27 +51,32 @@ class ApplicationConfiguration
       long_help: long_help
     ) || exit
 
-    slave_device_id = find_slave_device_id(devices_configuration, options[:device])
+    slave_device_id = find_slave_device_id(slave_devices, options[:device])
 
-    [slave_device_id, !!options[:reset_a2dp_profile]]
+    [master_device, slave_device_id, !!options[:reset_a2dp_profile]]
   end
 
   private
 
-  def load_devices_configuration
-    devices_configuration = SimpleScripting::Configuration.load.to_h.map { |name, id| [name.to_s, id] }.to_h
+  # Returns [slave_devices (Hash), master_device].
+  #
+  def load_and_check_devices_configuration
+    configuration = SimpleScripting::Configuration.load
 
-    if devices_configuration.empty?
-      raise "No devices configured!"
+    if configuration['slaves'].to_h.empty?
+      raise "No slave devices configured!"
     else
-      devices_configuration
+      master_device = configuration['master']&.master_device
+      slave_devices = configuration['slaves'].to_h.map { |name, id| [name.to_s, id] }.to_h
+
+      [master_device, slave_devices]
     end
   end
 
-  def find_slave_device_id(devices_configuration, device_prefix)
+  def find_slave_device_id(slave_devices, device_prefix)
     if device_prefix
       # simplified algorithm
-      matching_devices = devices_configuration.select { |name, _| name.start_with?(device_prefix) }
+      matching_devices = slave_devices.select { |name, _| name.start_with?(device_prefix) }
 
       case matching_devices.size
       when 0
@@ -70,7 +87,7 @@ class ApplicationConfiguration
         raise "Multiple devices found: #{matching_devices.map(&:first)}"
       end
     else
-      devices_configuration.values.first
+      slave_devices.values.first
     end
   end
 end # ApplicationConfiguration
@@ -213,12 +230,12 @@ class BluetoothStateManager
 
   include BluetoothDevicesConnectionHelper
 
-  def with_bluetooth_enabled
-    device_start_statuses = find_device_statuses
+  def with_bluetooth_enabled(device: nil)
+    device_start_statuses = find_device_statuses(only: device)
 
-    check_device_statuses!(device_start_statuses)
+    check_device_statuses!(device_start_statuses) unless device
 
-    enable_all_devices if devices_blocked?(device_start_statuses)
+    enable_devices(device_start_statuses) if devices_blocked?(device_start_statuses)
 
     slave_device_id = yield
 
@@ -227,51 +244,69 @@ class BluetoothStateManager
 
       disconnect_slave_device(slave_device_id)
 
-      disable_all_devices
+      disable_devices(device_start_statuses)
     end
   end
 
   private
 
-  # Returns:
+  # Returns an array of Struct(id, device, blocked).
   #
-  #   { "device_id" => ("blocked"|"unblocked")}
+  #   [id, "device", status (boolean)]
   #
-  def find_device_statuses
-    statuses = `rfkill`.scan(/^ *\d+ bluetooth (\w+) +(\w+)/)
+  def find_device_statuses(only: device)
+    devices_data = `rfkill`.scan(/^ *(\d+) bluetooth (\w+) +(\w+)/)
 
-    if statuses.empty?
-      raise "No master devices found!"
+    devices_data = devices_data.select { |_, device, _| device == only } if only
+
+    if devices_data.empty?
+      if only
+        raise "Device #{only.inspect} not found!"
+      else
+        raise "No master devices found!"
+      end
     else
-      statuses.to_h
+      devices_data.map do |raw_id, device, raw_status|
+        Struct.new(:id, :device, :blocked).new(
+          raw_id.to_i,
+          device,
+          raw_status == DEVICE_BLOCKED,
+        )
+      end
     end
   end
 
   # Allow only all blocked or all unblocked.
   #
-  def check_device_statuses!(statuses)
-    raise "Mixed statuses found: #{statuses}" if statuses.values.uniq.size != 1
+  def check_device_statuses!(device_statuses)
+    if device_statuses.map(&:blocked).uniq.size != 1
+      raise "Mixed statuses found: " + device_statuses.map { |device_status| [device_status.device, device_status.blocked] }.to_h.to_s
+    end
   end
 
-  def devices_blocked?(statuses)
-    statuses.values.uniq == [DEVICE_BLOCKED]
+  def devices_blocked?(device_statuses)
+    device_statuses.map(&:blocked).uniq == [true]
   end
 
-  def enable_all_devices
-    puts "Enabling BT...", ""
+  def enable_devices(device_statuses)
+    puts "Enabling #{device_statuses.map(&:device).join(', ')}...", ""
 
-    `rfkill unblock bluetooth`
+    device_statuses.each do |device|
+      `rfkill unblock #{device.id}`
+    end
   end
 
   def pause
-    print 'Press Enter to disable BT and exit...'
+    print 'Press Enter to disable the master devices and exit...'
     gets
   end
 
-  def disable_all_devices
-    puts "Disabling BT...", ""
+  def disable_devices(device_statuses)
+    puts "Disabling #{device_statuses.map(&:device).join(', ')}...", ""
 
-    `rfkill block bluetooth`
+    device_statuses.each do |device|
+      `rfkill block #{device.id}`
+    end
   end
 end # BluetoothStateManager
 
@@ -302,9 +337,9 @@ class BluetoothDevicesConnectionManager
 end
 
 if __FILE__ == $PROGRAM_NAME
-  slave_device_id, reset_a2dp_profile = ApplicationConfiguration.new.load_arguments_and_configuration
+  master_device, slave_device_id, reset_a2dp_profile = ApplicationConfiguration.new.load_arguments_and_configuration
 
-  BluetoothStateManager.new.with_bluetooth_enabled do
+  BluetoothStateManager.new.with_bluetooth_enabled(device: master_device) do
     BluetoothDevicesConnectionManager.new.connect(slave_device_id, reset_a2dp_profile: reset_a2dp_profile)
   end
 end
