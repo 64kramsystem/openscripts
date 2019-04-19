@@ -196,8 +196,8 @@ module BluetoothDevicesConnectionHelper
         when /Successful disconnected/
           puts
           return
-        when /Device [0-9A-F:] not available/
-          raise "Dafuq!!"
+        when /(Device [0-9A-F:] not available)/
+          raise $1
         else
           sleep 0.5
         end
@@ -250,7 +250,7 @@ class BluetoothStateManager
   # Allow only all blocked or all unblocked.
   #
   def check_device_statuses!(statuses)
-    raise "Mixed statuses found!" if statuses.values.uniq.size != 1
+    raise "Mixed statuses found: #{statuses}" if statuses.values.uniq.size != 1
   end
 
   def devices_blocked?(statuses)
@@ -258,7 +258,7 @@ class BluetoothStateManager
   end
 
   def enable_all_devices
-    puts "Enabling BT..."
+    puts "Enabling BT...", ""
 
     `rfkill unblock bluetooth`
   end
@@ -269,6 +269,8 @@ class BluetoothStateManager
   end
 
   def disable_all_devices
+    puts "Disabling BT...", ""
+
     `rfkill block bluetooth`
   end
 end # BluetoothStateManager
@@ -291,6 +293,8 @@ class BluetoothDevicesConnectionManager
   # Example:
   #
   #   00:1B:66:7F:E6:F3 -> bluez_card.00_1B_66_7F_E6_F3
+  #
+  # Names can be manually found via `pactl list cards`.
   #
   def generate_bluez_pa_card_name(slave_device_id)
     "bluez_card." + slave_device_id.gsub(':', '_')
