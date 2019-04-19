@@ -12,20 +12,20 @@ class ApplicationConfiguration
     devices_configuration = load_devices_configuration
 
     long_help = <<~HELP
-      Connect an audio BT device to the system.
+      Connect an audio BT device (referred as "slave") to the system (referred as "master").
 
       Besides providing a mean to perform the operation, the script helps the user working around the extremely annoying issues with the steaming pile of trash that are Bluetooth, Bluez, and the Ubuntu BT support.
 
-      The combination of the above is very unreliable, and repeated attempts are often necessary to connect a device.
+      The combination of the above is very unreliable, and repeated attempts are often necessary to connect devices.
       In addition, Ubuntu has shipped a broken stack in any version, including any LTS. A specific workaround is provided for working around a bug in Ubuntu 16.04.
 
-      The script will preserve the Bluetooth server devices status, so if BT is disabled, the script will enable it, and disable it on exit.
+      The script will preserve the Bluetooth master devices status, so if BT is disabled, the script will enable it, and disable it on exit.
 
       Switches:
 
-      <device>: Prefix of the device name to connect to.
+      <device>: Prefix of the slave device name to connect.
 
-      Configured devices: #{devices_configuration.keys.map { |name| name + (name == devices_configuration.keys.first ? " (default)" : "") }.join(', ')}
+      Configured slave devices: #{devices_configuration.keys.map { |name| name + (name == devices_configuration.keys.first ? " (default)" : "") }.join(', ')}
 
       Configuration:
 
@@ -39,9 +39,9 @@ class ApplicationConfiguration
       long_help: long_help
     ) || exit
 
-    device_id = find_device_id(devices_configuration, options[:device])
+    slave_device_id = find_slave_device_id(devices_configuration, options[:device])
 
-    [device_id, !!options[:reset_a2dp_profile]]
+    [slave_device_id, !!options[:reset_a2dp_profile]]
   end
 
   private
@@ -56,7 +56,7 @@ class ApplicationConfiguration
     end
   end
 
-  def find_device_id(devices_configuration, device_prefix)
+  def find_slave_device_id(devices_configuration, device_prefix)
     if device_prefix
       # simplified algorithm
       matching_devices = devices_configuration.select { |name, _| name.start_with?(device_prefix) }
@@ -76,24 +76,24 @@ class ApplicationConfiguration
 end # ApplicationConfiguration
 
 module BluetoothDevicesConnectionHelper
-  def connect_audio_device(bt_device_id, pa_card_name, reset_a2dp_profile: false)
+  def connect_audio_slave_device(slave_device_id, pa_card_name, reset_a2dp_profile: false)
     with_bluetooth_ctl do |stdin, stdout|
-      connect_bt_device_loop(bt_device_id, stdin, stdout)
+      connect_slave_device_loop(slave_device_id, stdin, stdout)
 
       if reset_a2dp_profile
         set_pa_card_profile(pa_card_name, 'off')
 
-        disconnect_bt_device_loop(bt_device_id, stdin, stdout)
-        connect_bt_device_loop(bt_device_id, stdin, stdout)
+        disconnect_slave_device_loop(slave_device_id, stdin, stdout)
+        connect_slave_device_loop(slave_device_id, stdin, stdout)
 
         set_pa_card_profile(pa_card_name, 'a2dp_sink')
       end
     end
   end
 
-  def disconnect_device(bt_device_id)
+  def disconnect_slave_device(slave_device_id)
     with_bluetooth_ctl do |stdin, stdout|
-      disconnect_bt_device_loop(bt_device_id, stdin, stdout) if bt_device_connected?(bt_device_id, stdin, stdout)
+      disconnect_slave_device_loop(slave_device_id, stdin, stdout) if slave_device_connected?(slave_device_id, stdin, stdout)
     end
   end
 
@@ -138,9 +138,9 @@ module BluetoothDevicesConnectionHelper
     end
   end
 
-  def connect_bt_device_loop(bt_device_id, bt_ctl_in, bt_ctl_out)
+  def connect_slave_device_loop(slave_device_id, bt_ctl_in, bt_ctl_out)
     loop do
-      bt_ctl_in.puts("connect #{bt_device_id}")
+      bt_ctl_in.puts("connect #{slave_device_id}")
 
       while true
         output = read_available_io(bt_ctl_out)
@@ -158,7 +158,7 @@ module BluetoothDevicesConnectionHelper
         end
       end
     end
-  end # connect_bt_device_loop
+  end # connect_slave_device_loop
 
   def set_pa_card_profile(card, profile)
     puts "Setting PA card profile: #{profile}"
@@ -173,17 +173,17 @@ module BluetoothDevicesConnectionHelper
     puts
   end
 
-  def bt_device_connected?(bt_device_id, bt_ctl_in, bt_ctl_out)
-    bt_ctl_in.puts("info #{bt_device_id}")
+  def slave_device_connected?(slave_device_id, bt_ctl_in, bt_ctl_out)
+    bt_ctl_in.puts("info #{slave_device_id}")
 
     device_information = read_available_io(bt_ctl_out, wait_pattern: /^\s+Connected: \w+$/)
 
     device_information =~ /^\s+Connected: yes$/
   end
 
-  def disconnect_bt_device_loop(bt_device_id, bt_ctl_in, bt_ctl_out)
+  def disconnect_slave_device_loop(slave_device_id, bt_ctl_in, bt_ctl_out)
     loop do
-      bt_ctl_in.puts("disconnect #{bt_device_id}")
+      bt_ctl_in.puts("disconnect #{slave_device_id}")
 
       while true
         output = read_available_io(bt_ctl_out)
@@ -203,29 +203,31 @@ module BluetoothDevicesConnectionHelper
         end
       end
     end
-  end # :disconnect_bt_device_loop
+  end # :disconnect_slave_device_loop
 end # BluetoothDevicesConnectionHelper
 
+# In this context, `device` refers to the master device(s).
+#
 class BluetoothStateManager
-  WIRELESS_DEVICE_BLOCKED = 'blocked'
+  DEVICE_BLOCKED = 'blocked'
 
   include BluetoothDevicesConnectionHelper
 
   def with_bluetooth_enabled
-    wireless_device_start_statuses = find_wireless_device_statuses
+    device_start_statuses = find_device_statuses
 
-    check_device_statuses!(wireless_device_start_statuses)
+    check_device_statuses!(device_start_statuses)
 
-    enable_bluetooth if bt_blocked?(wireless_device_start_statuses)
+    enable_all_devices if devices_blocked?(device_start_statuses)
 
-    bt_device_id = yield
+    slave_device_id = yield
 
-    if bt_blocked?(wireless_device_start_statuses)
+    if devices_blocked?(device_start_statuses)
       pause
 
-      disconnect_device(bt_device_id)
+      disconnect_slave_device(slave_device_id)
 
-      disable_bluetooth
+      disable_all_devices
     end
   end
 
@@ -235,11 +237,11 @@ class BluetoothStateManager
   #
   #   { "device_id" => ("blocked"|"unblocked")}
   #
-  def find_wireless_device_statuses
+  def find_device_statuses
     statuses = `rfkill`.scan(/^ *\d+ bluetooth (\w+) +(\w+)/)
 
     if statuses.empty?
-      raise "No BT wireless devices found!"
+      raise "No master devices found!"
     else
       statuses.to_h
     end
@@ -251,11 +253,11 @@ class BluetoothStateManager
     raise "Mixed statuses found!" if statuses.values.uniq.size != 1
   end
 
-  def bt_blocked?(statuses)
-    statuses.values.uniq == [WIRELESS_DEVICE_BLOCKED]
+  def devices_blocked?(statuses)
+    statuses.values.uniq == [DEVICE_BLOCKED]
   end
 
-  def enable_bluetooth
+  def enable_all_devices
     puts "Enabling BT..."
 
     `rfkill unblock bluetooth`
@@ -266,7 +268,7 @@ class BluetoothStateManager
     gets
   end
 
-  def disable_bluetooth
+  def disable_all_devices
     `rfkill block bluetooth`
   end
 end # BluetoothStateManager
@@ -276,12 +278,12 @@ class BluetoothDevicesConnectionManager
 
   # Returns the device id (mostly, for convenience).
   #
-  def connect(bt_device_id, reset_a2dp_profile: false)
-    bluez_pa_card_name = generate_bluez_pa_card_name(bt_device_id)
+  def connect(slave_device_id, reset_a2dp_profile: false)
+    bluez_pa_card_name = generate_bluez_pa_card_name(slave_device_id)
 
-    connect_audio_device(bt_device_id, bluez_pa_card_name, reset_a2dp_profile: reset_a2dp_profile)
+    connect_audio_slave_device(slave_device_id, bluez_pa_card_name, reset_a2dp_profile: reset_a2dp_profile)
 
-    bt_device_id
+    slave_device_id
   end
 
   private
@@ -290,15 +292,15 @@ class BluetoothDevicesConnectionManager
   #
   #   00:1B:66:7F:E6:F3 -> bluez_card.00_1B_66_7F_E6_F3
   #
-  def generate_bluez_pa_card_name(bt_device_id)
-    "bluez_card." + bt_device_id.gsub(':', '_')
+  def generate_bluez_pa_card_name(slave_device_id)
+    "bluez_card." + slave_device_id.gsub(':', '_')
   end
 end
 
 if __FILE__ == $PROGRAM_NAME
-  device_id, reset_a2dp_profile = ApplicationConfiguration.new.load_arguments_and_configuration
+  slave_device_id, reset_a2dp_profile = ApplicationConfiguration.new.load_arguments_and_configuration
 
   BluetoothStateManager.new.with_bluetooth_enabled do
-    BluetoothDevicesConnectionManager.new.connect(device_id, reset_a2dp_profile: reset_a2dp_profile)
+    BluetoothDevicesConnectionManager.new.connect(slave_device_id, reset_a2dp_profile: reset_a2dp_profile)
   end
 end
