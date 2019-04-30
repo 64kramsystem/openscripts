@@ -1,0 +1,131 @@
+#!/usr/bin/env ruby
+
+require 'simple_scripting/argv'
+require 'simple_scripting/configuration'
+
+class Speller
+
+  INTERNATIONAL_ALPHABET = {
+    'A' => 'Alfa',
+    'B' => 'Bravo',
+    'C' => 'Charlie',
+    'D' => 'Delta',
+    'E' => 'Echo',
+    'F' => 'Foxtrot',
+    'G' => 'Golf',
+    'H' => 'Hotel',
+    'I' => 'India',
+    'J' => 'Juliett',
+    'K' => 'Kilo',
+    'L' => 'Lima',
+    'M' => 'Mike',
+    'N' => 'November',
+    'O' => 'Oscar',
+    'P' => 'Papa',
+    'Q' => 'Quebec',
+    'R' => 'Romeo',
+    'S' => 'Sierra',
+    'T' => 'Tango',
+    'U' => 'Uniform',
+    'V' => 'Victor',
+    'W' => 'Whiskey',
+    'X' => 'X-ray',
+    'Y' => 'Yankee',
+    'Z' => 'Zulu',
+  }
+
+  def spell(phrase, alphabet: nil)
+    alphabet ||= INTERNATIONAL_ALPHABET
+
+    puts phrase.each_char.map { |char| alphabet[char.upcase] || char.inspect }.join(', ')
+  end
+
+end
+
+class SpellerCommandLineManager
+
+  # Returns the alphabet, if a language is specified, otherwise, nil.
+  #
+  def load_alphabet
+    raw_definitions = load_raw_definitions
+
+    definitions = process_raw_definitions(raw_definitions)
+    long_help = build_long_help(definitions.keys)
+    argv_definitions_table = build_argv_languages_table(definitions.keys)
+
+    options = SimpleScripting::Argv.decode(*argv_definitions_table, 'phrase', long_help: long_help) || exit
+
+    phrase = options.delete(:phrase)
+
+    definition = decode_and_choose_definition(options, definitions)
+
+    [phrase, definition]
+  end
+
+  private
+
+  def load_raw_definitions
+    SimpleScripting::Configuration.load
+  end
+
+  def process_raw_definitions(raw_definitions)
+    raw_definitions.to_h.each_with_object({}) do |(language, raw_chars), processed_definitions|
+      raise "Language names must be at least two letters long!" if language.size < 2
+
+      # "Not bullet-proof" matching, for simplicity.
+      chars = raw_chars.scan(/(\w):(\w+)/).map { |char, word| [char.upcase, word] }.to_h
+
+      processed_definitions[language.to_s.downcase] = chars
+    end
+  end
+
+  def build_long_help(extra_languages)
+    long_help = ""
+
+    if extra_languages.size > 0
+      long_help += "Available extra languages: #{extra_languages.join(', ')}.\n\n"
+    end
+
+    long_help + <<~HELP
+      When specifying multiple languages, the resulting one is unspecified.
+
+      Languages can be specified in the configuration file (~/.osspellrc), in the format:
+
+          <language>=<char>:<word>,...
+    HELP
+  end
+
+  def build_argv_languages_table(languages)
+    base_argv_table = [['-l', '--language LANGUAGE', 'Specify the (extra) language']]
+
+    languages.each_with_object(base_argv_table) do |language, argv_table|
+      language = language.to_s
+
+      if !argv_table.map(&:first).include?("-#{language[0]}")
+        argv_table << ["-#{language[0]}", "--#{language}", "Specify the `#{language}` language"]
+      elsif !argv_table.map(&:first).include?("-#{language[0].upcase}")
+        argv_table << ["-#{language[0].upcase}", "--#{language}", "Specify the `#{language}` language"]
+      end
+    end
+  end
+
+  def decode_and_choose_definition(options, definitions)
+    # Choose arbitrarily in case of multiple selections.
+    language = options[:language] || options.keys.first
+
+    if language && !definitions.key?(language.to_s)
+      raise "Language #{language} not found in the provided definitions!"
+    else
+      definitions[language.to_s]
+    end
+  end
+
+end
+
+if __FILE__ == $PROGRAM_NAME
+
+  phrase, alphabet = SpellerCommandLineManager.new.load_alphabet
+
+  Speller.new.spell(phrase, alphabet: alphabet)
+
+end
