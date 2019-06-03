@@ -2,24 +2,31 @@
 
 set -o errexit
 
-c_help="Usage: $(basename "$0") [<block_device>]
+c_help="Usage: $(basename "$0") [-n|--no-poweroff] [<block_device>]
 
 Unmounts and powers off a disk, like the typical desktop environment functionality.
 The prefix \`/dev/\` is automatically added, if not present.
 
-If no arguments are passed, all the usb storage devices are ejected."
+If no arguments are passed, all the usb storage devices are ejected.
+
+If the \`no-poweroff\` option is passed, the partitions are unmounted, but the disk is not powered off."
 v_option_device=
+v_option_no_poweroff=
 
 declare -a v_devices
 
 function decode_commandline_arguments {
-  eval set -- "$(getopt --options h --long help -- "$@")"
+  eval set -- "$(getopt --options hn --long help,no-poweroff -- "$@")"
 
   while true; do
     case $1 in
       -h|--help)
         echo "$c_help"
         exit 0
+        ;;
+      -n|--no-poweroff)
+        v_option_no_poweroff=1
+        shift
         ;;
       --)
         shift
@@ -90,6 +97,8 @@ for device in "${v_devices[@]}"; do
   unmount_device_partitions
 done
 
-for device in "${v_devices[@]}"; do
-  power_off_device
-done
+if [[ "$v_option_no_poweroff" != "1" ]]; then
+  for device in "${v_devices[@]}"; do
+    power_off_device
+  done
+fi
