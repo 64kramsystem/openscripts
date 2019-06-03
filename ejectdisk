@@ -34,7 +34,7 @@ function power_off_device() {
 }
 
 if [[ $# > 1 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
-  echo "Usage: ejectdisk [<block_device>]"
+  echo "Usage: $(basename "$0") [<block_device>]"
   echo
   echo "Unmounts and powers off a disk, like the typical desktop environment functionality."
   echo $'The prefix `/dev/` is automatically added, if not present.'
