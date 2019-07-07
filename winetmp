@@ -1,0 +1,50 @@
+#!/bin/bash
+
+set -o errexit
+
+# A convenient improvement to this script is to go through each argument (including the executable),
+# and if the file exist in the FS, automatically convert it to a Z: location.
+#
+if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]] || [[ $# -lt 1 ]] || [[ $# -gt 2 ]]; then
+  echo "Usage: $(basename "$0") <executable> [<executable_argument>]"
+  echo
+  echo "Runs the <executable> in a sandboxed environment. Note that the sandbox is for convenience, not safety."
+  echo
+  echo "If <executable_argument> is passed, it's passed as argument to the executable."
+  echo
+  echo "The sandbox is created in a temporary directory (/run/...), and reused, but (automatically) deleted on shutdown."
+else
+  USER_ID="$(id -u)"
+  export WINEPREFIX="/tmp/winetmp$USER_ID"
+  export WINEARCH=win32 # Not specifying this will default to 64 bits, which causes several problems
+  export WINEDLLOVERRIDES="mscoree,mshtml=" # Disable annoying popups
+
+  if [[ ! -d "$WINEPREFIX" ]]; then
+    mkdir -p "$WINEPREFIX"
+
+    # Will implicitly perform the wine initialization (`wineboot -i`).
+    winetricks sandbox
+
+    # Sandboxing removes the Z: drive, which in turns makes also Linux locations (/...)
+    # inaccessible, so we restore it.
+    #
+    ln -s / "$WINEPREFIX/dosdevices/z:"
+  fi
+
+  # Simple double check; unintendedly working on an unsandboxed event is really annoying, as it can
+  # little the host with unexpected files.
+  #
+  if [[ -L "$WINEPREFIX/drive_c/users/$(whoami)/Desktop" ]]; then
+    echo "Error! The Desktop directory is a symlink; the sandboxing is not (fully) in effect."
+    exit 1
+  fi
+
+  EXECUTABLE_CANONICAL_PATH="$(readlink -f "$1")"
+
+  if [[ "$2" == "" ]]; then
+    wine "$EXECUTABLE_CANONICAL_PATH"
+  else
+    EXECUTABLE_ARGUMENT_CANONICAL_PATH="$(readlink -f "$2")"
+    wine "$EXECUTABLE_CANONICAL_PATH" "$EXECUTABLE_ARGUMENT_CANONICAL_PATH"
+  fi
+fi
