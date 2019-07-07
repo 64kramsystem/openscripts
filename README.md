@@ -27,5 +27,6 @@
   - `install_btrfs_checker`: monthly scrubs the BTRFS partitions and notifies the user on logon
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
+  - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
 
 I will slowly add remaining or new ones.
