@@ -32,7 +32,7 @@ else
   fi
 
   # Simple double check; unintendedly working on an unsandboxed event is really annoying, as it can
-  # little the host with unexpected files.
+  # litter the host with unexpected files.
   #
   if [[ -L "$WINEPREFIX/drive_c/users/$(whoami)/Desktop" ]]; then
     echo "Error! The Desktop directory is a symlink; the sandboxing is not (fully) in effect."
@@ -45,6 +45,7 @@ else
     wine "$EXECUTABLE_CANONICAL_PATH"
   else
     EXECUTABLE_ARGUMENT_CANONICAL_PATH="$(readlink -f "$2")"
-    wine "$EXECUTABLE_CANONICAL_PATH" "$EXECUTABLE_ARGUMENT_CANONICAL_PATH"
+    EXECUTABLE_ARGUMENT_Z_PATH="Z:${EXECUTABLE_ARGUMENT_CANONICAL_PATH//\//\\}"
+    wine "$EXECUTABLE_CANONICAL_PATH" "$EXECUTABLE_ARGUMENT_Z_PATH"
   fi
 fi
