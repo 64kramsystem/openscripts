@@ -42,15 +42,15 @@ class Plot2yDiagram
   Y_PADDING_FRACTION = 0.04 # fraction of range
 
   # options:
-  #  :csv
-  #  :smooth
-  #  :title1
-  #  :title2
+  #   :csv
+  #   :smooth
+  #   :title1
+  #   :title2
+  #   :verbose
   #
   def plot(data_file, options={})
     gnuplot_commands = prepare_gnuplot_commands(data_file, options)
-    execute_commands(gnuplot_commands, options.slice(:verbose))
-    nil
+    execute_gnuplot_commands(gnuplot_commands, options)
   rescue => error
     puts error
     exit 1
@@ -80,22 +80,27 @@ class Plot2yDiagram
     end
   end
 
-  def prepare_gnuplot_commands(data_file, csv: false, smooth: false, verbose: false, title1: DEFAULT_Y1_TITLE, title2: DEFAULT_Y2_TITLE)
-    gnuplot_commands = <<~PLOT
+  def prepare_gnuplot_commands(data_file, csv: false, smooth: false, title1: DEFAULT_Y1_TITLE, title2: DEFAULT_Y2_TITLE, **)
+    commands = <<~PLOT
       set terminal wxt size 1280,720
     PLOT
 
     if csv
-      gnuplot_commands += "set datafile separator ','\n"
+      commands += <<~PLOT
+        set datafile separator ','
+      PLOT
     end
 
+    # `set offset graph` doesn't have any effect (on the y axis) when there are 2 y scales.
+    #
     # Must run before setting the time format, since stats doesn't support timedata mode.
+    #
     # We need to run two stats; otherwise, if the single version `using 2:3` ignores records
     # with only one data point.
     # Also note that on the second run, we need to ignore the ranges (which are set by the
     # first `stats`).
     #
-    gnuplot_commands += <<~PLOT
+    commands += <<~PLOT
       stats '#{data_file}' using 2 nooutput
       y_padding = (STATS_max - STATS_min) * #{Y_PADDING_FRACTION}
       set yrange [STATS_min - y_padding:STATS_max + y_padding]
@@ -107,7 +112,7 @@ class Plot2yDiagram
     x_time_format = find_x_time_format(data_file, csv: csv)
 
     if x_time_format
-      gnuplot_commands += <<~PLOT
+      commands += <<~PLOT
         set xdata time
         set timefmt '#{x_time_format}'
       PLOT
@@ -115,7 +120,7 @@ class Plot2yDiagram
 
     smooth_option = "smooth sbezier" if smooth
 
-    gnuplot_commands += <<~PLOT
+    commands + <<~PLOT
       set y2tics
       set ytics nomirror
       plot '#{data_file}' using 1:2 #{smooth_option} with linespoints title '#{title1}',\\
@@ -123,10 +128,10 @@ class Plot2yDiagram
     PLOT
   end
 
-  def execute_commands(gnuplot_commands, verbose: false)
-    puts "# Running command:", "", gnuplot_commands, "" if verbose
+  def execute_gnuplot_commands(commands, verbose: false, **)
+    puts "# Running command:", "", commands, "" if verbose
 
-    plot_file = Tempfile.open('plot_2y') { |file| file << gnuplot_commands }
+    plot_file = Tempfile.open('plot_2y_diagram') { |file| file << commands }
 
     `gnuplot --persist #{plot_file.path}`
   ensure
