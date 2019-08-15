@@ -1,0 +1,156 @@
+#!/usr/bin/env ruby
+
+require 'simple_scripting/argv'
+require 'tempfile'
+
+class PlotDiagramCommandLineDecoder
+  def decode_cmline_args
+    long_help = <<~HELP
+      Plots a file with one line. The data file can have the x data or not; the following data files are both valid:
+
+          # no x
+          4
+          7
+          6
+
+          # both x and y
+          1 4
+          2 7
+          3 6
+
+      The input file uses spaces as separator; in order to use comma separated fields (CSV-alike), set the `--csv` option.
+
+      If `--output` is specified, the format is automatically gathered from the extension (currently, #{PlotDiagram::IMAGE_FORMATS_MAPPING.keys.join('/')} are supported.)
+
+      Common date (not time) formats are automatically recognized for the x column, eg.:
+
+          2015-May-08 1 3
+          2015-May-09 1 4
+
+    HELP
+
+    SimpleScripting::Argv.decode(
+      ['-c', '--csv',             'Sets the input format as CSV'],
+      ['-s', '--smooth',          'Smooth line'],
+      ['-t', '--title TITLE',     'Set the title'],
+      ['-o', '--output FILENAME', 'Outputs to the specified file, instead of printing to screen'],
+      ['-v', '--verbose',         'Verbose mode (prints gnuplot commands)'],
+      'data_file',
+    ) || exit
+  end
+end
+
+class PlotDiagram
+  DEFAULT_Y_TITLE = 'y'
+  DIAGRAM_SIZE = [1600, 900]
+  IMAGE_FORMATS_MAPPING = {
+    'png' => 'pngcairo',
+    'svg' => "svg enhanced background rgb 'white'", # transparent is ugly on some platoforms
+  }
+  MONTHS = %w[jan feb mar apr may jun jul aug sep oct nov dec]
+  Y_PADDING_FRACTION = 0.04 # fraction of range
+
+  # options:
+  #   :csv
+  #   :smooth
+  #   :title
+  #   :output
+  #   :verbose
+  #
+  def plot(data_file, options={})
+    gnuplot_commands = prepare_gnuplot_commands(data_file, options)
+    execute_gnuplot_commands(gnuplot_commands, options)
+  rescue => error
+    puts error
+    exit 1
+  end
+
+  private
+
+  def find_x_time_format(data_file, csv:)
+    data_file_content = IO.read(data_file)
+    first_potential_timestamp = data_file_content[/^[\w-]+/]
+
+    case first_potential_timestamp
+    when /^\d{,2}-\d{,2}$/
+      "%m-%d"
+    when /^(#{MONTHS.join'|'})-\d{,2}$/i
+      "%b-%d"
+    when /^\d{4}-\d{,2}-\d{,2}$/
+      "%Y-%m-%d"
+    when /^\d{2}-\d{,2}-\d{,2}$/
+      "%y-%m-%d"
+    when /^\d{4}-(#{MONTHS.join'|'})-\d{,2}$/i
+      "%Y-%b-%d"
+    when /^\d{2}-\d{,2}-\d{,2}$/
+      "%y-%b-%d"
+    else
+      nil
+    end
+  end
+
+  def prepare_gnuplot_commands(data_file, csv: false, smooth: false, title: DEFAULT_Y_TITLE, output: nil, **)
+    if output
+      output_extension = output[/\w+$/]
+      terminal_format = IMAGE_FORMATS_MAPPING[output_extension] || raise("File extension not supported: #{output_extension.inspect}")
+
+      commands = <<~PLOT
+        set terminal #{terminal_format} size #{DIAGRAM_SIZE.join(',')}
+        set output '#{output}'
+      PLOT
+    else
+      commands = <<~PLOT
+        set terminal wxt size #{DIAGRAM_SIZE.join(',')}
+      PLOT
+    end
+
+    commands += <<~PLOT
+      set offset graph 0, 0, #{Y_PADDING_FRACTION}, #{Y_PADDING_FRACTION}
+    PLOT
+
+    if csv
+      commands += <<~PLOT
+        set datafile separator ','
+      PLOT
+    end
+
+    x_time_format = find_x_time_format(data_file, csv: csv)
+
+    if x_time_format
+      commands += <<~PLOT
+        set xdata time
+        set timefmt '#{x_time_format}'
+      PLOT
+
+      # Required when specifying time data.
+      using_option = "using 1:2"
+    end
+
+    smooth_option = "smooth sbezier" if smooth
+
+    commands + <<~PLOT
+      plot '#{data_file}' #{using_option} with linespoints #{smooth_option} title '#{title}'
+    PLOT
+  end
+
+  def execute_gnuplot_commands(commands, verbose: false, **)
+    puts "# Running command:", "", commands, "" if verbose
+
+    plot_file = Tempfile.open('plot_diagram') { |file| file << commands }
+
+    `gnuplot --persist #{plot_file.path}`
+  ensure
+    if plot_file
+      plot_file.close
+      File.unlink(plot_file)
+    end
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  options = PlotDiagramCommandLineDecoder.new.decode_cmline_args
+
+  data_file = options.delete(:data_file)
+
+  PlotDiagram.new.plot(data_file, options)
+end
