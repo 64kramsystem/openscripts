@@ -59,8 +59,10 @@ class Plot2Y
   private
 
   def find_x_time_format(data_file, csv:)
-    data = parse_data_file(data_file, csv: csv)
-    case data[0][0]
+    data_file_content = IO.read(data_file)
+    first_potential_timestamp = data_file_content[/^[\w-]+/]
+
+    case first_potential_timestamp
     when /^\d{,2}-\d{,2}$/
       "%m-%d"
     when /^(#{MONTHS.join'|'})-\d{,2}$/i
@@ -76,18 +78,6 @@ class Plot2Y
     else
       nil
     end
-  end
-
-  def parse_data_file(data_file, csv:)
-    raw_lines = IO.readlines(data_file)
-
-    raw_lines = raw_lines.map { |line| line.sub(/#.*/, '') }
-
-    separator = csv ? /,/ : /\s+/
-
-    # Trimming is not a requirement, but it's better for human inspection.
-    #
-    raw_lines.map { |line| line.split(separator).map(&:strip) }.delete_if { |line| line.empty? }
   end
 
   def prepare_gnuplot_commands(data_file, csv: false, smooth: false, verbose: false, title1: DEFAULT_Y1_TITLE, title2: DEFAULT_Y2_TITLE)
