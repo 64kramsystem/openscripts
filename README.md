@@ -15,6 +15,7 @@
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
 - "real-world"
   - `mk_invoice`: prepares a generic (software engineering) invoice in Office Open XML format, using a template, and the data provided in the configuration file
+  - `plot_diagram`: plots a diagram from a text file, via GNU Plot (and Ruby),  with better support for batch processing than `plot_2y_diagram`
   - `plot_2y_diagram`: plots a diagram with two y scales from a text file, via GNU Plot (and Ruby)
   - `spell`: spell a phrase, with customizable alphabets
 - system (user facing)
