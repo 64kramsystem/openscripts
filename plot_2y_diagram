@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'simple_scripting/argv'
-require 'tempfile'
+require 'tmpdir'
 
 class Plot2yDiagramCommandLineDecoder
   def decode_cmline_args
@@ -132,14 +132,12 @@ class Plot2yDiagram
   def execute_gnuplot_commands(commands, verbose: false, **)
     puts "# Running command:", "", commands, "" if verbose
 
-    plot_file = Tempfile.open('plot_2y_diagram') { |file| file << commands }
+    plot_filename = Dir::Tmpname.create(['plot_2y_diagram', '.gp']) { }
+    IO.write(plot_filename, commands)
 
-    `gnuplot --persist #{plot_file.path}`
+    `gnuplot --persist #{plot_filename}`
   ensure
-    if plot_file
-      plot_file.close
-      File.unlink(plot_file)
-    end
+    File.unlink(plot_filename) if File.exists?(plot_filename)
   end
 end
 
