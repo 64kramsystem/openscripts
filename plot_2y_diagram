@@ -3,7 +3,7 @@
 require 'simple_scripting/argv'
 require 'tempfile'
 
-class Plot2yCommandLineDecoder
+class Plot2yDiagramCommandLineDecoder
   def decode_cmline_args
     long_help = <<~HELP
       Plots a file with 1 or 2 lines, using two separate scales. Sample:
@@ -35,7 +35,7 @@ class Plot2yCommandLineDecoder
   end
 end
 
-class Plot2Y
+class Plot2yDiagram
   DEFAULT_Y1_TITLE = 'y1'
   DEFAULT_Y2_TITLE = 'y2'
   MONTHS = %w[jan feb mar apr may jun jul aug sep oct nov dec]
@@ -138,9 +138,9 @@ class Plot2Y
 end
 
 if __FILE__ == $PROGRAM_NAME
-  options = Plot2yCommandLineDecoder.new.decode_cmline_args
+  options = Plot2yDiagramCommandLineDecoder.new.decode_cmline_args
 
   data_file = options.delete(:data_file)
 
-  Plot2Y.new.plot(data_file, options)
+  Plot2yDiagram.new.plot(data_file, options)
 end
