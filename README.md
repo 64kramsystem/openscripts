@@ -32,3 +32,15 @@
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
 
 I will slowly add remaining or new ones.
+
+## Latest additions
+
+Latest additions (not including updates):
+
+- 2019/Aug/15: `plot_diagram` and `plot_2y_diagram`
+- 2019/Jul/07: `winetmp`
+- 2019/Apr/30: `spell`
+- 2019/Mar/31: `mk_invoice`
+- 2019/Mar/26: `connect_bt_device`
+- 2019/Mar/18: `generate_wiki_home_toc`
+- 2018/Dec/20: `downer`
