@@ -6,10 +6,11 @@ require 'fileutils'
 
 require 'json'
 require 'rexml/document'
+require 'nokogiri'
 
 class Processor
 
-  SUPPORTED_FORMATS = %w(json xml)
+  SUPPORTED_FORMATS = %w(json xml html)
 
   def initialize(backup: false)
     @backup = backup
@@ -63,6 +64,14 @@ class XmlPrettifier
     xml_formatter.write(root, prettified_content)
 
     prettified_content
+  end
+
+end
+
+class HtmlPrettifier
+
+  def prettify(content)
+    Nokogiri::XML(content,&:noblanks).to_s
   end
 
 end
