@@ -1,0 +1,62 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+
+help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-a|--album] <file1> {<fileN>, ...}
+
+Encodes to m4a and applies gain.
+
+\`--album\` applies album gain (otherwise, track gain is applied).
+
+The codec used is libfdk_aac, in VBR, with a default quality of 3 (~110 kbps).
+
+Requires aacgain and a recompiled FFmpeg.
+
+Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
+"
+
+eval set -- "$(getopt --options hd:q:a --long help,destination:,quality:,album -- "$@")"
+
+destination="."
+quality="3"
+gain_option="-r"
+
+while true ; do
+  case "$1" in
+    -h|--help)
+      echo "$help"
+      exit 0 ;;
+    -d|--destination)
+      destination="$2"
+      shift 2 ;;
+    -q|--quality)
+      quality="$2"
+      shift 2 ;;
+    -a|--album)
+      gain_option="-a"
+      shift ;;
+    --)
+      shift
+      break ;;
+  esac
+done
+
+if [[ $# -eq 0 ]]; then
+  echo "$help"
+  exit 1
+fi
+
+destination_filenames=()
+
+for source_filename in "$@"; do
+  destination_filename="$destination/${source_filename%.*}.m4a"
+
+  ffmpeg -y -i "$source_filename" -vn -c:a libfdk_aac -vbr "$quality" "$destination_filename"
+
+  destination_filenames+=("$destination_filename")
+done
+
+# `-s -r`: ignore ffmpeg written tags, which set the album gain for each track separately.
+#
+aacgain -k "$gain_option" -s r "${destination_filenames[@]}"
