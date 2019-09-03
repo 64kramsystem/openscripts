@@ -14,6 +14,7 @@
   - `prettify`: prettifies files; supports XML and JSON
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
 - "real-world"
+  - `encode_to_m4a`: encodes and normalizes input files to m4a, using ffmpeg/libsdk_aac
   - `mk_invoice`: prepares a generic (software engineering) invoice in Office Open XML format, using a template, and the data provided in the configuration file
   - `plot_diagram`: plots a diagram from a text file, via GNU Plot (and Ruby),  with better support for batch processing than `plot_2y_diagram`
   - `plot_2y_diagram`: plots a diagram with two y scales from a text file, via GNU Plot (and Ruby)
@@ -37,6 +38,7 @@ I will slowly add remaining or new ones.
 
 Latest additions (not including updates):
 
+- 2019/Sep/03: `encode_to_m4a`
 - 2019/Aug/15: `plot_diagram` and `plot_2y_diagram`
 - 2019/Jul/07: `winetmp`
 - 2019/Apr/30: `spell`
