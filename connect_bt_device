@@ -235,7 +235,17 @@ class BluetoothStateManager
 
     check_device_statuses!(device_start_statuses) unless device
 
-    enable_devices(device_start_statuses) if devices_blocked?(device_start_statuses)
+    slave_device_id = nil
+
+    if devices_blocked?(device_start_statuses)
+      enable_devices(device_start_statuses)
+
+      trap("INT") do
+        disconnect_slave_device(slave_device_id) if slave_device_id
+
+        disable_devices(device_start_statuses)
+      end
+    end
 
     slave_device_id = yield
 
