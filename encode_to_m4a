@@ -3,7 +3,7 @@
 set -o errexit
 set -o nounset
 
-help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-a|--album] <file1> {<fileN>, ...}
+help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-a|--album] [-r|--remove] <file1> {<fileN>, ...}
 
 Encodes to m4a and applies gain.
 
@@ -16,11 +16,12 @@ Requires aacgain and a recompiled FFmpeg.
 Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
 "
 
-eval set -- "$(getopt --options hd:q:a --long help,destination:,quality:,album -- "$@")"
+eval set -- "$(getopt --options hd:q:ar --long help,destination:,quality:,album,remove -- "$@")"
 
 destination="."
 quality="3"
 gain_option="-r"
+remove_file=
 
 while true ; do
   case "$1" in
@@ -35,6 +36,9 @@ while true ; do
       shift 2 ;;
     -a|--album)
       gain_option="-a"
+      shift ;;
+    -r|--remove)
+      remove_file=1
       shift ;;
     --)
       shift
@@ -55,6 +59,8 @@ for source_filename in "$@"; do
   ffmpeg -y -i "$source_filename" -vn -c:a libfdk_aac -vbr "$quality" "$destination_filename"
 
   destination_filenames+=("$destination_filename")
+
+  [[ $remove_file == 1 ]] && rm "$source_filename" || true
 done
 
 # `-s -r`: ignore ffmpeg written tags, which set the album gain for each track separately.
