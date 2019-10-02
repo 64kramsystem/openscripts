@@ -177,7 +177,7 @@ if __FILE__ == $PROGRAM_NAME
 
   options = SimpleScripting::Argv.decode(
       [ '-e', '--expenses EXPENSES_EXPRESSION', 'Include expenses; allows a simple expression (additions/subtractions)' ],
-      [ '-p', '--previous-month', 'Bill the previous month' ],
+      [ '-p', '--previous-month',               'Bill the previous month'                                               ],
       'service_days',
       '[output_file]',
       long_help: long_help
