@@ -130,13 +130,7 @@ class InvoiceGenerator
   end
 
   def compute_service_month(for_previous_month)
-    if for_previous_month
-      service_month = Date.today - Date.today.day
-    else
-      service_month = Date.today
-    end
-
-    service_month
+    for_previous_month ? Date.today.prev_month : Date.today
   end
 
   # Accepts an expression (a number is considered so).
