@@ -129,7 +129,13 @@ class InvoiceGenerator
   end
 
   def compute_service_month(options)
-    options[:previous_month] ? Date.today.prev_month : Date.today
+    if options[:before_previous_month]
+      Date.today.prev_month.prev_month
+    elsif options[:previous_month]
+      Date.today.prev_month
+    else
+      Date.today
+    end
   end
 
   # Accepts an expression (a number is considered so).
@@ -177,6 +183,7 @@ if __FILE__ == $PROGRAM_NAME
   options = SimpleScripting::Argv.decode(
       [ '-e', '--expenses EXPENSES_EXPRESSION', 'Include expenses; allows a simple expression (additions/subtractions)' ],
       [ '-p', '--previous-month',               'Bill the previous month'                                               ],
+      [ '-b', '--before-previous-month',        'Bill the before-previous month (overrides -p)'                         ],
       'service_days',
       '[output_file]',
       long_help: long_help
