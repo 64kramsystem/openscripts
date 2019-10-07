@@ -232,21 +232,33 @@ class BluetoothStateManager
 
   include BluetoothDevicesConnectionHelper
 
+  def initialize
+    @initiated_interrupt_exit = false
+  end
+
   def with_bluetooth_enabled(device: nil)
     device_start_statuses = find_device_statuses(only: device)
 
     check_device_statuses!(device_start_statuses) unless device
 
+    enable_devices(device_start_statuses) if devices_blocked?(device_start_statuses)
+
     slave_device_id = nil
 
-    if devices_blocked?(device_start_statuses)
-      enable_devices(device_start_statuses)
+    trap("INT") do
+      puts "Interrupt captured; initiating manual exit..."
 
-      trap("INT") do
-        disconnect_slave_device(slave_device_id) if slave_device_id
+      if !@initiated_interrupt_exit
+        @initiated_interrupt_exit = true
 
-        disable_devices(device_start_statuses)
+        if devices_blocked?(device_start_statuses)
+          disconnect_slave_device(slave_device_id) if slave_device_id
+
+          disable_devices(device_start_statuses)
+        end
       end
+
+      raise Interrupt
     end
 
     slave_device_id = yield
