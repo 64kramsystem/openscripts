@@ -199,6 +199,8 @@ module BluetoothDevicesConnectionHelper
   end
 
   def disconnect_slave_device_loop(slave_device_id, bt_ctl_in, bt_ctl_out)
+    puts "Starting disconnect slave loop..."
+
     loop do
       bt_ctl_in.puts("disconnect #{slave_device_id}")
 
