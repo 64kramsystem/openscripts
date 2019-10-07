@@ -28,10 +28,12 @@ class InvoiceGenerator
   end
 
   def generate(service_days, options = {})
-    outfile = options[:output_file] || generate_output_file(options[:previous_month]) || raise("Missing :output_directory configuration (and no :output_file provided)")
+    service_month = compute_service_month(options)
+
+    outfile = options[:output_file] || generate_output_file(service_month) || raise("Missing :output_directory configuration (and no :output_file provided)")
     source_template = IO.read(TEMPLATE_FILE)
 
-    template_values = add_computed_fields_to_data(service_days, options[:previous_month], options[:expenses])
+    template_values = add_computed_fields_to_data(service_days, service_month, options[:expenses])
 
     compiled_template = compile_template(source_template, template_values)
 
@@ -52,25 +54,22 @@ class InvoiceGenerator
 
   # Generates in the format "%y%m%d_invoice_%B.docx"
   #
-  def generate_output_file(for_previous_month)
+  def generate_output_file(service_month)
      return if @configuration.output_directory.nil?
-
-     service_month, = date_references(for_previous_month)
 
      base_filename = Date.today.strftime("%y%m%d_invoice_") + service_month.strftime("%B.docx").downcase
 
      File.join(@configuration[:output_directory], base_filename)
   end
 
-  def add_computed_fields_to_data(service_days, for_previous_month, expenses_expression)
-    service_month, invoice_date = date_references(for_previous_month)
+  def add_computed_fields_to_data(service_days, service_month, expenses_expression)
     development_cost = service_days * @price
     expenses = compute_expenses(expenses_expression)
     total = development_cost + expenses
 
     @configuration.to_h.merge(
       invoice_number: service_month.strftime('%Y/%m'),
-      invoice_date:   invoice_date.strftime('%d/%b/%Y'),
+      invoice_date:   Date.today.strftime('%d/%b/%Y'),
       service_period: service_month.strftime('%B %Y'),
       service_days:   humanize_float(service_days),
       price:          @price,
@@ -129,22 +128,14 @@ class InvoiceGenerator
     Dir.glob(File.join(directory, '**/*'), File::FNM_DOTMATCH).select { |file| File.basename(file) != '.' }
   end
 
-  # previous_month: if false, the invoice_date is the last day of the current month.
-  #
-  # returns [service_month, invoice_date]
-  #
-  def date_references(for_previous_month)
-    if for_previous_month
-      service_month = Date.today - Date.today.day
-      invoice_date = Date.today
+  def compute_service_month(options)
+    if options[:before_previous_month]
+      Date.today.prev_month.prev_month
+    elsif options[:previous_month]
+      Date.today.prev_month
     else
-      service_month = Date.today
-
-      start_of_service_month = Date.new(service_month.year, service_month.month, 1)
-      invoice_date = start_of_service_month.next_month - 1
+      Date.today
     end
-
-    [service_month, invoice_date]
   end
 
   # Accepts an expression (a number is considered so).
@@ -191,7 +182,8 @@ if __FILE__ == $PROGRAM_NAME
 
   options = SimpleScripting::Argv.decode(
       [ '-e', '--expenses EXPENSES_EXPRESSION', 'Include expenses; allows a simple expression (additions/subtractions)' ],
-      [ '-p', '--previous-month', 'Bill the previous month' ],
+      [ '-p', '--previous-month',               'Bill the previous month'                                               ],
+      [ '-b', '--before-previous-month',        'Bill the before-previous month (overrides -p)'                         ],
       'service_days',
       '[output_file]',
       long_help: long_help
