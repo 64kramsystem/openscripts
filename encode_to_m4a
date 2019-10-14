@@ -3,11 +3,20 @@
 set -o errexit
 set -o nounset
 
-help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-a|--album] [-r|--remove] <file1> {<fileN>, ...}
+# shellcheck disable=SC2016
+help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
 
 Encodes to m4a and applies gain.
 
-\`--album\` applies album gain (otherwise, track gain is applied).
+The "'`input`'" values can be either files or directories:
+
+- if they're files: track gain is applied (individually)
+- if they're directories:
+  - album gain is applied, on a directory basis, to lossless files
+  - non-audio files are ignored
+  - subdirectories are not descended
+
+Compressed input audio files which are not flac are copied, without being reencoded.
 
 The codec used is libfdk_aac, in VBR, with a default quality of 3 (~110 kbps).
 
@@ -20,7 +29,6 @@ eval set -- "$(getopt --options hd:q:ar --long help,destination:,quality:,album,
 
 destination="."
 quality="3"
-gain_option="-r"
 remove_file=
 
 while true ; do
@@ -34,9 +42,6 @@ while true ; do
     -q|--quality)
       quality="$2"
       shift 2 ;;
-    -a|--album)
-      gain_option="-a"
-      shift ;;
     -r|--remove)
       remove_file=1
       shift ;;
@@ -51,18 +56,80 @@ if [[ $# -eq 0 ]]; then
   exit 1
 fi
 
-destination_filenames=()
+for source_file in "$@"; do
+  if [[ -f "$source_file" ]]; then
+    file_mime_type="$(file --mime-type "$source_file" | grep -oP '\S+/\S+$')"
 
-for source_filename in "$@"; do
-  destination_filename="$destination/${source_filename%.*}.m4a"
+    case "$file_mime_type" in
+    audio/x-flac | audio/x-wav )
+      echo "Encoding $source_file..."
+      destination_file="$destination/$(basename "${source_file%.*}.m4a")"
+      ffmpeg -y -hide_banner -loglevel panic -i "$source_file" -vn -c:a libfdk_aac -vbr "$quality" "$destination_file"
+      ;;
+    video/mp4 | audio/mpeg )
+      echo "Copying $source_file..."
+      destination_file="$destination/$(basename "$source_file")"
+      cp "$source_file" "$destination_file"
+      ;;
+    * )
+      echo "Unsupported file type for file source: $source_file"
+      exit 1
+      ;;
+    esac
 
-  ffmpeg -y -i "$source_filename" -vn -c:a libfdk_aac -vbr "$quality" "$destination_filename"
+    echo -n "Normalizing (track) "
 
-  destination_filenames+=("$destination_filename")
+    # `-s -r`: ignore ffmpeg written tags, which set the album gain for each track separately.
+    #
+    aacgain -q -k -r -s r "$destination_file"
 
-  [[ $remove_file == 1 ]] && rm "$source_filename" || true
+    [[ $remove_file == 1 ]] && rm -f "$source_file" || true
+  elif [[ -d "$source_file" ]]; then
+    destination_subdir="$destination/$(basename "$source_file")"
+
+    mkdir -p "$destination_subdir"
+
+    encoded_destination_subfiles=()
+
+    for source_subfile in "$source_file"/*; do
+      file_mime_type="$(file --mime-type "$source_subfile" | grep -oP '\S+/\S+$')"
+
+      case "$file_mime_type" in
+      audio/x-flac | audio/x-wav )
+        echo "Encoding $source_subfile..."
+        destination_subfile="$destination_subdir/$(basename "${source_subfile%.*}.m4a")"
+        ffmpeg -y -hide_banner -loglevel panic -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
+        encoded_destination_subfiles+=("$destination_subfile")
+        ;;
+      video/mp4 | audio/mpeg )
+        echo "Copying $source_subfile..."
+        destination_subfile="$destination_subdir/$(basename "$source_subfile")"
+        cp "$source_subfile" "$destination_subfile"
+        encoded_destination_subfiles+=("$destination_subfile")
+        ;;
+      * )
+        if [[ "$file_mime_type" == "audio/"* ]]; then
+          echo "Unsupported audio file!: $source_subfile"
+          exit 1
+        elif [[ "$file_mime_type" == "image/"* ]]; then
+          echo "Copying $source_subfile..."
+          destination_subfile="$destination_subdir/$(basename "$source_subfile")"
+          cp "$source_subfile" "$destination_subfile"
+        fi
+        # ignore other cases (eg. text files)
+        ;;
+      esac
+    done
+
+    echo "Normalizing (album) $destination_subdir..."
+
+    # See `-s -r` note in the previous invocation.
+    #
+    aacgain -q -k -a -s r "${encoded_destination_subfiles[@]}"
+
+    [[ $remove_file == 1 ]] && rm -r "$source_file" || true
+  else
+    echo "Source type not recognized: $source_file"
+    exit 1
+  fi
 done
-
-# `-s -r`: ignore ffmpeg written tags, which set the album gain for each track separately.
-#
-aacgain -k "$gain_option" -s r "${destination_filenames[@]}"
