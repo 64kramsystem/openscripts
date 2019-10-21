@@ -1,0 +1,47 @@
+#!/bin/bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+
+help="\
+Usage: $(basename "$0") [-h|--help] <url> [<custom_name>]
+
+Generates git.io url, optionally, with a custom name, and copies the resulting URL to the clipboard.
+
+Requires xsel.
+
+IMPORTANT: It seems that it's not possible to use custom names anymore (the parameter is ignored).
+"
+
+eval set -- "$(getopt --options h --long help -- "$@")"
+
+while true; do
+  case "$1" in
+    -h|--help)
+      echo "$help"
+      exit 0 ;;
+    --)
+      shift
+      break ;;
+  esac
+done
+
+if (($# < 1 || $# > 2)); then
+  echo "$help"
+  exit 1
+fi
+
+if [[ "${2:-}" != "" ]]; then
+  custom_name_option=("-F code=\"$2\"")
+fi
+
+echo "curl -si https://git.io -F "url=$1" "${custom_name_option[@]}""
+
+response="$(curl -si https://git.io -F "url=$1" "${custom_name_option[@]}")"
+
+if [[ $response =~ 422 ]]; then
+  echo "$response" | grep '^Status: '
+else
+  echo "$response" | perl -lane '/Location: (.*)/ && print $1' | tee >(xsel -ib)
+fi
