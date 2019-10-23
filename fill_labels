@@ -1,0 +1,195 @@
+#!/usr/bin/env ruby
+
+require 'cgi'
+require 'pathname'
+require 'shellwords'
+require 'tmpdir'
+require 'zip'
+require 'simple_scripting/argv'
+require 'simple_scripting/configuration'
+
+class ConfigurationPreparer
+  LONG_HELP = <<~HELP
+    Prepare an OpenDocument with addresses, to be printed on a standard A4 page with 96x50.8mm labels (see https://web.archive.org/web/20191023093929if_/https://www.labelwonderland.co.uk/images/P/diag-es0010e.jpg).
+
+    The <position> is 0-based, and supports several formats, for example: `1`, `1,3,5`, `3-7`.s
+
+    The <recepient> supports 1 to 4 lines.
+    If it's one line, it's used as search pattern; in this mode, the address book keys and first address lines are scanned for the pattern, case-insensitively, and the first match is returned; if no entries are found, an error is raised.
+
+    The address book is stored in the `$HOME/.fill_labels` file.
+    Each entry is in the format `key=sender_name:address_line_1:address_line_2,address_line_3` (only the <sender_name> is mandatory; up to 4 lines are supported).
+    The special entry `sender` is the address of the sender (up to 3 lines supported); if not set, a placeholder is printed.
+
+    Sample address book:
+
+      sender=Donald Duck:1313 Webfoot Walk:Duckburg
+      scrooge=Scrooge McDuck:McDuck Manor:Duckburg:Calisota
+      homer=Home Simpson:742 Evergreen Terrace:Springfield
+
+  HELP
+
+  PLACEHOLDER_SENDER_ADDRESS = %w(<sender_name> <sender_address_line_1> <sender_address_line_2>)
+
+  def execute
+    options = SimpleScripting::Argv.decode(
+      "label_position",
+      "recipient",
+      long_help: LONG_HELP
+    ) || exit
+
+    label_position, raw_recipient = options.values_at(:label_position, :recipient)
+
+    sender_address, address_book = load_address_book
+    recipient_address = find_recipient_address(raw_recipient, address_book)
+
+    [sender_address, recipient_address, label_position]
+  end
+
+  private
+
+  def load_address_book
+    raw_address_book = SimpleScripting::Configuration.load.to_h
+
+    sender_address = raw_address_book[:sender]&.split(':') || PLACEHOLDER_SENDER_ADDRESS
+    address_book = raw_address_book.each_with_object({}) { |(key, raw_address), address_book| address_book[key.to_s] = raw_address.split(':') }
+
+    [sender_address, address_book]
+  end
+
+  def find_recipient_address(raw_recipient, address_book)
+    recipient_address = raw_recipient.split("\n")
+
+    if recipient_address.size == 1
+      recipient_pattern = raw_recipient.downcase
+
+      address_book.each do |key, address_lines|
+        return address_lines if key.downcase.include?(recipient_pattern) || address_lines[0].downcase.include?(recipient_pattern)
+      end
+
+      raise "Recipient (pattern) not found"
+    else
+      recipient_address
+    end
+  end
+end # ConfigurationPreparer
+
+module SystemHelper
+  class << self
+    def open_file(filename)
+      `xdg-open #{filename.shellescape}`
+    end
+  end
+end # module SystemHelper
+
+class FillLabels
+  TEMPLATE_DIR  = File.join(__dir__, 'fill_labels_template')
+  TEMPLATE_FILE = File.join(TEMPLATE_DIR, 'content.xml')
+  TEMPLATE_BAK  = TEMPLATE_FILE + '.bak'
+
+  # Returns the generated file name.
+  #
+  def fill(sender_address, recipient_address, raw_label_positions, debug: false)
+    output_filename = Dir::Tmpname.create(['filled_labels', '.odt']) { }
+    source_template = IO.read(TEMPLATE_FILE)
+    recipient_address << "" if recipient_address.size == 3
+
+    check_addresses!(sender_address, recipient_address)
+
+    label_positions = decode_label_positions(raw_label_positions)
+
+    template_replacements = prepare_template_replacements(sender_address, recipient_address, label_positions)
+
+    compiled_template = compile_template(source_template, template_replacements)
+
+    IO.write(TEMPLATE_BAK, compiled_template)
+
+    compress_directory(TEMPLATE_DIR, output_filename, ignore: [TEMPLATE_FILE], rename: { TEMPLATE_BAK => TEMPLATE_FILE }, debug: debug)
+
+    output_filename
+  ensure
+    File.delete(TEMPLATE_BAK) if File.exist?(TEMPLATE_BAK)
+  end
+
+  private
+
+  def check_addresses!(sender_address, recipient_address)
+    raise "Invalid sender address (3 lines allowed)!" if sender_address.size > 3
+    raise "Invalid recipient address (4 lines allowed)!" if recipient_address.size > 4
+  end
+
+  def decode_label_positions(raw_label_positions)
+    case raw_label_positions
+    when /^\d(,\d)*$/
+      raw_label_positions.split(',')
+    when /^(\d)-(\d)$/
+      ($1.to_i)..($2.to_i)
+    else
+      raise "Unrecognized label position(s): #{raw_label_positions}"
+    end
+  end
+
+  def prepare_template_replacements(sender_address, recipient_address, label_positions)
+    replacements = {}
+
+    label_positions.each do |label_position|
+      sender_address.each_with_index do |line, i|
+        replacements["sender_line_#{ i }_#{ label_position }"] = line
+      end
+
+      recipient_address.each_with_index do |line, i|
+        replacements["recipient_line_#{ i }_#{ label_position }"] = line
+      end
+    end
+
+    replacements[/(sender|recipient)_line_\d_\d/] = ''
+
+    replacements
+  end
+
+  def compile_template(source_template, template_replacements)
+    template_replacements.inject(source_template) do |template, (key, value)|
+      template.gsub(/\{\{#{ key }\}\}/, CGI.escapeHTML(value.to_s))
+    end
+  end
+
+  def compress_directory(directory, zipfile_name, ignore: [], rename: {}, debug: false)
+    Zip::File.open(zipfile_name, Zip::File::CREATE) do |zipfile|
+      raw_input_filenames = find_all_directory_files(directory)
+
+      raw_input_filenames.each do |raw_filename|
+        print raw_filename if debug
+
+        if ignore.include?(raw_filename)
+          puts " -> SKIPPED" if debug
+
+          next
+        elsif rename.key?(raw_filename)
+          print " -> RENAMED" if debug
+
+          relative_filename = Pathname.new(rename[raw_filename]).relative_path_from(Pathname.new(directory)).to_s
+        else
+          relative_filename = Pathname.new(raw_filename).relative_path_from(Pathname.new(directory)).to_s
+        end
+
+        puts " -> #{ relative_filename }" if debug
+
+        zipfile.add(relative_filename, raw_filename)
+      end
+    end
+  end
+
+  def find_all_directory_files(directory)
+    # WATCH OUT! Without the flag, it doesn't find hidden files; with, it includes the '.' entries
+    #
+    Dir.glob(File.join(directory, '**/*'), File::FNM_DOTMATCH).select { |file| File.basename(file) != '.' }
+  end
+end # class FillLabels
+
+if __FILE__ == $PROGRAM_NAME
+  sender_address, recipient_address, label_position = ConfigurationPreparer.new.execute
+
+  output_filename = FillLabels.new.fill(sender_address, recipient_address, label_position)
+
+  SystemHelper.open_file(output_filename)
+end
