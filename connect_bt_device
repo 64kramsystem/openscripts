@@ -199,6 +199,8 @@ module BluetoothDevicesConnectionHelper
   end
 
   def disconnect_slave_device_loop(slave_device_id, bt_ctl_in, bt_ctl_out)
+    puts "Starting disconnect slave loop..."
+
     loop do
       bt_ctl_in.puts("disconnect #{slave_device_id}")
 
@@ -230,21 +232,34 @@ class BluetoothStateManager
 
   include BluetoothDevicesConnectionHelper
 
+  def initialize
+    @initiated_disconnect_slave = false
+    @initiated_disable_master = false
+  end
+
   def with_bluetooth_enabled(device: nil)
     device_start_statuses = find_device_statuses(only: device)
 
     check_device_statuses!(device_start_statuses) unless device
 
+    enable_devices(device_start_statuses) if devices_blocked?(device_start_statuses)
+
     slave_device_id = nil
 
-    if devices_blocked?(device_start_statuses)
-      enable_devices(device_start_statuses)
+    trap("INT") do
+      puts "Interrupt captured; initiating manual exit..."
 
-      trap("INT") do
+      if !@initiated_disconnect_slave
+        @initiated_disconnect_slave = true
         disconnect_slave_device(slave_device_id) if slave_device_id
+      end
 
+      if !@initiated_disable_master
+        @initiated_disable_master = true
         disable_devices(device_start_statuses)
       end
+
+      raise Interrupt
     end
 
     slave_device_id = yield
