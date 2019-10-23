@@ -14,7 +14,7 @@ class ConfigurationPreparer
 
     The <position> is 0-based, and supports several formats, for example: `1`, `1,3,5`, `3-7`.s
 
-    The <recepient> supports 1 to 4 lines.
+    The <recipient> supports 1 to 4 lines.
     If it's one line, it's used as search pattern; in this mode, the address book keys and first address lines are scanned for the pattern, case-insensitively, and the first match is returned; if no entries are found, an error is raised.
 
     The address book is stored in the `$HOME/.fill_labels` file.
