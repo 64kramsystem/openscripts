@@ -5,7 +5,7 @@ set -o errexit
 configuration_file="$HOME/.$(basename "$0")"
 
 if [[ "$#" != 0 ]]; then
-  echo 'Usage: git_purge_empty_branches'
+  echo "Usage: $(basename "$0")"
   echo
   echo "Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in master."
   echo "Can be run from any branch, but requires a clean tree."
@@ -30,6 +30,8 @@ if [[ $(git status | grep "nothing to commit, working tree clean") == "" ]]; the
   exit 1
 fi
 
+# LOAD PROTECTED BRANCHES ########################
+
 declare -A protected_branches
 
 # Make sure the file exists.
@@ -42,9 +44,7 @@ while IFS='= ' read -r key value || [ -n "$key" ]; do
   fi
 done < "$configuration_file"
 
-# Fetch all, so that this script can be generally used for syncing the repo.
-git fetch --all --tags --prune
-echo
+# CHECKOUT AND REBASE MASTER #####################
 
 saved_location=$(git rev-parse --abbrev-ref HEAD)
 
@@ -57,6 +57,13 @@ fi
 
 git rebase
 echo
+
+# SYNC REPOSITORY ################################
+
+git fetch --all --tags --prune
+echo
+
+# DELETE "EMPTY" BRANCHES ########################
 
 repo_dirname="$(basename "$(readlink -f .)")"
 protected_branches_pattern="${protected_branches["$repo_dirname"]}"
@@ -75,6 +82,8 @@ for branch in $(git branch | cut -c 3- | egrep -v '^master$' | egrep -v "$protec
     fi
   fi
 done
+
+# RETURN TO STARTING BRANCH ######################
 
 if [[ "$saved_location" != "master" && $(git cat-file -t "$saved_location" 2> /dev/null) ]]; then
   # The output is very noisy for non-named branches.
