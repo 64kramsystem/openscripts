@@ -2,6 +2,8 @@
 
 set -o errexit
 
+configuration_file="$HOME/.$(basename "$0")"
+
 if [[ "$#" != 0 ]]; then
   echo 'Usage: git_purge_empty_branches'
   echo
@@ -10,7 +12,15 @@ if [[ "$#" != 0 ]]; then
   echo
   echo "Before performing the purge, the repository is synced, and master is rebased."
   echo
-  echo $'It won\'t delete any branch named `master` or `deployment`'
+  echo "A branch is never deleted if it's called "'`master'" or if it's included in the configfile ($configuration_file)"
+  echo
+  echo "The configfile format is composed of multiple lines in the format "'`<repo_dirname>:<branches_regexp>`'"."
+  echo "Empty lines are ignored."
+  echo
+  echo "Example configfile:"
+  echo
+  echo "  qemu-pinning:^.*-pinning$"
+  echo "  myrepo:^(branch1|branch2)$"
 
   exit 0
 fi
@@ -20,9 +30,17 @@ if [[ $(git status | grep "nothing to commit, working tree clean") == "" ]]; the
   exit 1
 fi
 
-# Fetch all, so that this script can be generally used for syncing the repo.
-git fetch --all --tags --prune
-echo
+declare -A protected_branches
+
+# Make sure the file exists.
+#
+touch "$configuration_file"
+
+while IFS='= ' read -r key value || [ -n "$key" ]; do
+  if [[ "$key" != "" ]]; then
+    protected_branches["$key"]="$value"
+  fi
+done < "$configuration_file"
 
 saved_location=$(git rev-parse --abbrev-ref HEAD)
 
@@ -36,7 +54,13 @@ fi
 git rebase
 echo
 
-for branch in $(git branch | cut -c 3- | egrep -v '^(master|deployment)$'); do
+repo_dirname="$(basename "$(readlink -f .)")"
+protected_branches_pattern="${protected_branches["$repo_dirname"]}"
+
+# If no protected branches are specified, use a phony pattern (will match empty branch names, which are not possible).
+protected_branches_pattern="${protected_branches_pattern:-^$}"
+
+for branch in $(git branch | cut -c 3- | egrep -v '^master$' | egrep -v "$protected_branches_pattern" ); do
   if [[ ! $(git cherry master $branch | grep '^+') ]]; then
     git branch -D $branch
     echo
