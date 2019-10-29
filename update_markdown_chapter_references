@@ -81,7 +81,7 @@ class UpdateMarkdownChapterReferences
 
     # Directory is expanded - we don't need to perform any more expansion.
     #
-    chapter_files.sort
+    chapter_files.sort_by { |full_filename| File.basename(full_filename)[/^(\d+)/].to_i }
   end
 
   def has_number?(filename)
