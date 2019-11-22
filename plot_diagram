@@ -6,7 +6,9 @@ require 'tmpdir'
 class PlotDiagramCommandLineDecoder
   def decode_cmline_args
     long_help = <<~HELP
-      Plots a file with one line. The data file can have the x data or not; the following data files are both valid:
+      Plots a one-line diagram from a file.
+
+      The dataset can have the x values or not; the following datasets are both valid:
 
           # no x
           4
@@ -18,7 +20,7 @@ class PlotDiagramCommandLineDecoder
           2 7
           3 6
 
-      The input file uses spaces as separator; in order to use comma separated fields (CSV-alike), set the `--csv` option.
+      The default fields separator is space; in order to specify comma separated fields (CSV-alike), use the `--csv` option.
 
       If `--output` is specified, the format is automatically gathered from the extension (currently, #{PlotDiagram::IMAGE_FORMATS_MAPPING.keys.join('/')} are supported.)
 
