@@ -2,11 +2,12 @@
 
 require 'simple_scripting/argv'
 require 'tempfile'
+require 'tmpdir'
 
 class PlotDiagramCommandLineDecoder
   def decode_cmline_args
     long_help = <<~HELP
-      Plots a one-line diagram from a file.
+      Plots a one-line diagram from a file (or stdin, when the file is not specified).
 
       The dataset can have the x values or not; the following datasets are both valid:
 
@@ -37,7 +38,7 @@ class PlotDiagramCommandLineDecoder
       ['-t', '--title TITLE',     'Set the title'],
       ['-o', '--output FILENAME', 'Outputs to the specified file, instead of printing to screen'],
       ['-v', '--verbose',         'Verbose mode (prints gnuplot commands)'],
-      'data_file',
+      '[data_file]',
     ) || exit
   end
 end
@@ -60,14 +61,33 @@ class PlotDiagram
   #   :verbose
   #
   def plot(data_file, options={})
+    # When the data is passed from stdin, we need to store it, because the script reads the data
+    # twice.
+    #
+    data_file, data_file_is_temporary = prepare_data_file(data_file)
+
     gnuplot_commands = prepare_gnuplot_commands(data_file, options)
+
     execute_gnuplot_commands(gnuplot_commands, options)
   rescue => error
     puts error
     exit 1
+  ensure
+    File.unlink(data_file) if data_file_is_temporary && File.exists?(data_file)
   end
 
   private
+
+  def prepare_data_file(data_file)
+    if data_file.nil?
+      data_file = Dir::Tmpname.create(['plot_data', '.txt']) { }
+      IO.write(data_file, $stdin.read)
+
+      [data_file, true]
+    else
+      [data_file, false]
+    end
+  end
 
   def find_x_time_format(data_file, csv:)
     data_file_content = IO.read(data_file)
