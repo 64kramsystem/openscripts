@@ -1,12 +1,15 @@
 #!/usr/bin/env ruby
 
 require 'simple_scripting/argv'
+require 'tempfile'
 require 'tmpdir'
 
 class PlotDiagramCommandLineDecoder
   def decode_cmline_args
     long_help = <<~HELP
-      Plots a file with one line. The data file can have the x data or not; the following data files are both valid:
+      Plots a one-line diagram from a file (or stdin, when the file is not specified).
+
+      The dataset can have the x values or not; the following datasets are both valid:
 
           # no x
           4
@@ -18,7 +21,7 @@ class PlotDiagramCommandLineDecoder
           2 7
           3 6
 
-      The input file uses spaces as separator; in order to use comma separated fields (CSV-alike), set the `--csv` option.
+      The default fields separator is space; in order to specify comma separated fields (CSV-alike), use the `--csv` option.
 
       If `--output` is specified, the format is automatically gathered from the extension (currently, #{PlotDiagram::IMAGE_FORMATS_MAPPING.keys.join('/')} are supported.)
 
@@ -35,7 +38,7 @@ class PlotDiagramCommandLineDecoder
       ['-t', '--title TITLE',     'Set the title'],
       ['-o', '--output FILENAME', 'Outputs to the specified file, instead of printing to screen'],
       ['-v', '--verbose',         'Verbose mode (prints gnuplot commands)'],
-      'data_file',
+      '[data_file]',
     ) || exit
   end
 end
@@ -58,14 +61,33 @@ class PlotDiagram
   #   :verbose
   #
   def plot(data_file, options={})
+    # When the data is passed from stdin, we need to store it, because the script reads the data
+    # twice.
+    #
+    data_file, data_file_is_temporary = prepare_data_file(data_file)
+
     gnuplot_commands = prepare_gnuplot_commands(data_file, options)
+
     execute_gnuplot_commands(gnuplot_commands, options)
   rescue => error
     puts error
     exit 1
+  ensure
+    File.unlink(data_file) if data_file_is_temporary && File.exists?(data_file)
   end
 
   private
+
+  def prepare_data_file(data_file)
+    if data_file.nil?
+      data_file = Dir::Tmpname.create(['plot_data', '.txt']) { }
+      IO.write(data_file, $stdin.read)
+
+      [data_file, true]
+    else
+      [data_file, false]
+    end
+  end
 
   def find_x_time_format(data_file, csv:)
     data_file_content = IO.read(data_file)
@@ -136,12 +158,12 @@ class PlotDiagram
   def execute_gnuplot_commands(commands, verbose: false, **)
     puts "# Running command:", "", commands, "" if verbose
 
-    plot_filename = Dir::Tmpname.create(['plot_diagram', '.gp']) { }
-    IO.write(plot_filename, commands)
+    Tempfile.create(['plot_diagram', '.gp']) do |file|
+      file.puts(commands)
+      file.close
 
-    `gnuplot --persist #{plot_filename}`
-  ensure
-    File.unlink(plot_filename) if File.exists?(plot_filename)
+      `gnuplot --persist #{file.path}`
+    end
   end
 end
 
