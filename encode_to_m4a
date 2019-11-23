@@ -4,7 +4,7 @@ set -o errexit
 set -o nounset
 
 # shellcheck disable=SC2016
-help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
+help="Usage: $(basename "$0") [-d|--destination <dir>] [-t|--process-in-tmpdir] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
 
 Encodes to m4a and applies gain.
 
@@ -16,6 +16,8 @@ The "'`input`'" values can be either files or directories:
   - non-audio files are ignored
   - subdirectories are not descended
 
+If \`process-in-tmpdir\` is set, files are processed in a temporary directory, instead of in-place. This helps on destinations like (GVFS) mounts on mobile devices, where file operations other than basic copy/move may fail.
+
 Compressed input audio files which are not flac are copied, without being reencoded.
 
 The codec used is libfdk_aac, in VBR, with a default quality of 3 (~110 kbps).
@@ -25,11 +27,12 @@ Requires aacgain and a recompiled FFmpeg.
 Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
 "
 
-eval set -- "$(getopt --options hd:q:ar --long help,destination:,quality:,album,remove -- "$@")"
+eval set -- "$(getopt --options hd:tq:ar --long help,destination:,process-in-tmpdir,quality:,album,remove -- "$@")"
 
 destination="."
 quality="3"
 remove_file=
+process_in_tmpdir=
 
 while true ; do
   case "$1" in
@@ -39,6 +42,9 @@ while true ; do
     -d|--destination)
       destination="$2"
       shift 2 ;;
+    -t|--process-in-tmpdir)
+      process_in_tmpdir=1
+      shift ;;
     -q|--quality)
       quality="$2"
       shift 2 ;;
@@ -56,6 +62,17 @@ if [[ $# -eq 0 ]]; then
   exit 1
 fi
 
+# If `process_in_tmpdir` is set, then the name of a temporary file with the same extension as `$1`
+# is printed; otherwise, `$1` is printed.
+#
+function create_intermediate_file_name {
+  if [[ $process_in_tmpdir == 1 ]]; then
+    echo "$(mktemp --suffix=".${1##*.}")"
+  else
+    echo "$1"
+  fi
+}
+
 for source_file in "$@"; do
   if [[ -f "$source_file" ]]; then
     file_mime_type="$(file --mime-type "$source_file" | grep -oP '\S+/\S+$')"
@@ -63,13 +80,19 @@ for source_file in "$@"; do
     case "$file_mime_type" in
     audio/x-flac | audio/x-wav )
       echo "Encoding $source_file..."
+
       destination_file="$destination/$(basename "${source_file%.*}.m4a")"
-      ffmpeg -y -hide_banner -loglevel panic -i "$source_file" -vn -c:a libfdk_aac -vbr "$quality" "$destination_file"
+      intermediate_file="$(create_intermediate_file_name "$destination_file")"
+
+      ffmpeg -y -hide_banner -loglevel panic -i "$source_file" -vn -c:a libfdk_aac -vbr "$quality" "$intermediate_file"
       ;;
     video/mp4 | audio/mpeg )
       echo "Copying $source_file..."
+
       destination_file="$destination/$(basename "$source_file")"
-      cp "$source_file" "$destination_file"
+      intermediate_file="$(create_intermediate_file_name "$destination_file")"
+
+      cp "$source_file" "$intermediate_file"
       ;;
     * )
       echo "Unsupported file type for file source: $source_file"
@@ -81,13 +104,20 @@ for source_file in "$@"; do
 
     # `-s -r`: ignore ffmpeg written tags, which set the album gain for each track separately.
     #
-    aacgain -q -k -r -s r "$destination_file"
+    aacgain -q -k -r -s r "$intermediate_file"
+
+    [[ $process_in_tmpdir == 1 ]] && mv "$intermediate_file" "$destination_file" || true
 
     [[ $remove_file == 1 ]] && rm -f "$source_file" || true
   elif [[ -d "$source_file" ]]; then
     destination_subdir="$destination/$(basename "$source_file")"
 
-    mkdir -p "$destination_subdir"
+    if [[ $process_in_tmpdir == 1 ]]; then
+      intermediate_subdir="$(mktemp -d)"
+    else
+      intermediate_subdir="$destination_subdir"
+      mkdir -p "$intermediate_subdir"
+    fi
 
     for source_subfile in "$source_file"/*; do
       file_mime_type="$(file --mime-type "$source_subfile" | grep -oP '\S+/\S+$')"
@@ -95,12 +125,16 @@ for source_file in "$@"; do
       case "$file_mime_type" in
       audio/x-flac | audio/x-wav )
         echo "Encoding $source_subfile..."
-        destination_subfile="$destination_subdir/$(basename "${source_subfile%.*}.m4a")"
+
+        destination_subfile="$intermediate_subdir/$(basename "${source_subfile%.*}.m4a")"
+
         ffmpeg -y -hide_banner -loglevel panic -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
         ;;
       video/mp4 | audio/mpeg )
         echo "Copying $source_subfile..."
-        destination_subfile="$destination_subdir/$(basename "$source_subfile")"
+
+        destination_subfile="$intermediate_subdir/$(basename "$source_subfile")"
+
         cp "$source_subfile" "$destination_subfile"
         ;;
       audio/* )
@@ -109,21 +143,24 @@ for source_file in "$@"; do
         ;;
       image/* )
         echo "Copying $source_subfile..."
-        cp "$source_subfile" "$destination_subdir/"
+
+        cp "$source_subfile" "$intermediate_subdir/"
         ;;
       * )
         ;; # ignore other cases (eg. text files)
       esac
     done
 
-    echo "Normalizing (album) $destination_subdir..."
+    echo "Normalizing (album) $destination_subdir (tmp dir: $intermediate_subdir)..."
 
     # See `-s -r` note in the previous invocation.
     #
     # We can use the wildcard because aacgain ignores non-audio files (prints the names while
     # scanning, but doesn't process them).
     #
-    aacgain -q -k -a -s r "$destination_subdir"/*
+    aacgain -q -k -a -s r "$intermediate_subdir"/*
+
+    [[ $process_in_tmpdir == 1 ]] && mv "$intermediate_subdir" "$destination_subdir" || true
 
     [[ $remove_file == 1 ]] && rm -r "$source_file" || true
   else
