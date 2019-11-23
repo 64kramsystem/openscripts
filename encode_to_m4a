@@ -86,7 +86,7 @@ for source_file in "$@"; do
 
       ffmpeg -y -hide_banner -loglevel panic -i "$source_file" -vn -c:a libfdk_aac -vbr "$quality" "$intermediate_file"
       ;;
-    video/mp4 | audio/mpeg )
+    audio/x-m4a | video/mp4 | audio/mpeg )
       echo "Copying $source_file..."
 
       destination_file="$destination/$(basename "$source_file")"
@@ -130,7 +130,7 @@ for source_file in "$@"; do
 
         ffmpeg -y -hide_banner -loglevel panic -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
         ;;
-      video/mp4 | audio/mpeg )
+      audio/x-m4a | video/mp4 | audio/mpeg )
         echo "Copying $source_subfile..."
 
         destination_subfile="$intermediate_subdir/$(basename "$source_subfile")"
