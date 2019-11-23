@@ -95,7 +95,7 @@ for source_file in "$@"; do
       cp "$source_file" "$intermediate_file"
       ;;
     * )
-      echo "Unsupported file type for file source: $source_file"
+      echo "Unsupported file type for file source \"$source_file\": $file_mime_type"
       exit 1
       ;;
     esac
@@ -138,7 +138,7 @@ for source_file in "$@"; do
         cp "$source_subfile" "$destination_subfile"
         ;;
       audio/* )
-        echo "Unsupported audio file!: $source_subfile"
+        echo "Unsupported file type for file source \"$source_subfile\": $file_mime_type"
         exit 1
         ;;
       image/* )
