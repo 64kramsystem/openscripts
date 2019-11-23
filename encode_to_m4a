@@ -89,8 +89,6 @@ for source_file in "$@"; do
 
     mkdir -p "$destination_subdir"
 
-    encoded_destination_subfiles=()
-
     for source_subfile in "$source_file"/*; do
       file_mime_type="$(file --mime-type "$source_subfile" | grep -oP '\S+/\S+$')"
 
@@ -99,13 +97,11 @@ for source_file in "$@"; do
         echo "Encoding $source_subfile..."
         destination_subfile="$destination_subdir/$(basename "${source_subfile%.*}.m4a")"
         ffmpeg -y -hide_banner -loglevel panic -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
-        encoded_destination_subfiles+=("$destination_subfile")
         ;;
       video/mp4 | audio/mpeg )
         echo "Copying $source_subfile..."
         destination_subfile="$destination_subdir/$(basename "$source_subfile")"
         cp "$source_subfile" "$destination_subfile"
-        encoded_destination_subfiles+=("$destination_subfile")
         ;;
       * )
         if [[ "$file_mime_type" == "audio/"* ]]; then
@@ -125,7 +121,10 @@ for source_file in "$@"; do
 
     # See `-s -r` note in the previous invocation.
     #
-    aacgain -q -k -a -s r "${encoded_destination_subfiles[@]}"
+    # We can use the wildcard because aacgain ignores non-audio files (prints the names while
+    # scanning, but doesn't process them).
+    #
+    aacgain -q -k -a -s r "$destination_subdir"/*
 
     [[ $remove_file == 1 ]] && rm -r "$source_file" || true
   else
