@@ -103,17 +103,17 @@ for source_file in "$@"; do
         destination_subfile="$destination_subdir/$(basename "$source_subfile")"
         cp "$source_subfile" "$destination_subfile"
         ;;
-      * )
-        if [[ "$file_mime_type" == "audio/"* ]]; then
-          echo "Unsupported audio file!: $source_subfile"
-          exit 1
-        elif [[ "$file_mime_type" == "image/"* ]]; then
-          echo "Copying $source_subfile..."
-          destination_subfile="$destination_subdir/$(basename "$source_subfile")"
-          cp "$source_subfile" "$destination_subfile"
-        fi
-        # ignore other cases (eg. text files)
+      audio/* )
+        echo "Unsupported audio file!: $source_subfile"
+        exit 1
         ;;
+      image/* )
+        echo "Copying $source_subfile..."
+        destination_subfile="$destination_subdir/$(basename "$source_subfile")"
+        cp "$source_subfile" "$destination_subfile"
+        ;;
+      * )
+        ;; # ignore other cases (eg. text files)
       esac
     done
 
