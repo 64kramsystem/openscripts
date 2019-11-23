@@ -109,8 +109,7 @@ for source_file in "$@"; do
         ;;
       image/* )
         echo "Copying $source_subfile..."
-        destination_subfile="$destination_subdir/$(basename "$source_subfile")"
-        cp "$source_subfile" "$destination_subfile"
+        cp "$source_subfile" "$destination_subdir/"
         ;;
       * )
         ;; # ignore other cases (eg. text files)
