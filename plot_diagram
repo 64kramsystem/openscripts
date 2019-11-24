@@ -150,8 +150,10 @@ class PlotDiagram
 
     smooth_option = "smooth sbezier" if smooth
 
+    # See comment in execute_gnuplot_commands.
     commands + <<~PLOT
       plot '#{data_file}' #{using_option} with linespoints #{smooth_option} title '#{title}'
+      pause mouse close
     PLOT
   end
 
@@ -162,7 +164,13 @@ class PlotDiagram
       file.puts(commands)
       file.close
 
-      `gnuplot --persist #{file.path}`
+      # Madness. There is no clean way of waiting for the diagram window to be close before exiting
+      # gnuplot (--persist leaves the diagram window open, but gnuplots exits).
+      # `pause mouse close` does achieve this effect, but requires return to be tapped, after the
+      # window is closed.
+      # Therefore, we use `pause mouse close`, but we send a newline to stdin (!!!).
+      #
+      `echo | gnuplot --persist #{file.path}`
     end
   end
 end
