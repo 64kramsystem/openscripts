@@ -121,11 +121,14 @@ class Plot2yDiagram
 
     smooth_option = "smooth sbezier" if smooth
 
+    escaped_title1 = title1.gsub('_', '\_')
+    escaped_title2 = title2.gsub('_', '\_')
+
     commands + <<~PLOT
       set y2tics
       set ytics nomirror
-      plot '#{data_file}' using 1:2 #{smooth_option} with linespoints title '#{title1}',\\
-           '#{data_file}' using 1:3 #{smooth_option} with linespoints title '#{title2}' axes x1y2
+      plot '#{data_file}' using 1:2 #{smooth_option} with linespoints title '#{escaped_title1}',\\
+           '#{data_file}' using 1:3 #{smooth_option} with linespoints title '#{escaped_title2}' axes x1y2
       pause mouse close
     PLOT
   end
