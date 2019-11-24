@@ -151,8 +151,10 @@ class PlotDiagram
     smooth_option = "smooth sbezier" if smooth
 
     # See comment in execute_gnuplot_commands.
+    escaped_title = title.gsub('_', '\_')
+
     commands + <<~PLOT
-      plot '#{data_file}' #{using_option} with linespoints #{smooth_option} title '#{title}'
+      plot '#{data_file}' #{using_option} with linespoints #{smooth_option} title '#{escaped_title}'
       pause mouse close
     PLOT
   end
