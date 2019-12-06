@@ -1,5 +1,9 @@
 #!/bin/bash
 
+set -o nounset
+set -o errexit
+set -o pipefail
+
 c_diagram_file_prefix="var_"
 c_diagram_file_extension="png"
 c_help="Usage: $(basename "$0") [(-s|--start <base_0_index>)] [(-o|--only) var_name{,var_name...}] [(-v|--verbose)] <stat_file1> <stat_file2> <...>
