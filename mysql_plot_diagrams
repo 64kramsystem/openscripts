@@ -15,56 +15,71 @@ Any diagram file found in the directory is deleted.
 Variables with non-numeric values are ignored.
 "
 
-eval set -- "$(getopt --options h --long help -- "$@")"
+function decode_cmdline_parameters {
+  eval set -- "$(getopt --options h --long help -- "$@")"
 
-while true; do
-  case "$1" in
-    -h|--help)
-      echo "$c_help"
-      exit 0 ;;
-    --)
-      shift
-      break ;;
-  esac
-done
+  while true; do
+    case "$1" in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
 
-if [[ $# -lt 1 ]]; then
-  echo "$c_help"
+  if [[ $# -lt 1 ]]; then
+    echo "$c_help"
 
-  exit 1
-fi
-
-first_stats_file="$1"
-files_directory=$(dirname "$first_stats_file")
-
-rm -f "$files_directory/$c_diagram_file_prefix"*."$c_diagram_file_extension"
-
-var_names="$(awk '{print $1}' "$first_stats_file")"
-
-# Assume that the variable names and values are one token each, and that each file contains the same
-# status variables as the first file.
-#
-# Minimal gnuplot command to avoid using `plot_diagram` (variables need to be substituted):
-#
-#     set terminal pngcairo size 1600,900
-#     set output '/tmp/mysql_status_diagrams/${var_name}.${c_diagram_file_extension}'
-#     plot '/dev/stdin' with linespoints title '$var_name'
-#
-for var_name in $var_names; do
-  echo -n "$var_name: "
-
-  # Skip the variable (prints nothing) if the value is not a number.
-  #
-  values=$(perl -lne "/^${var_name}\s+(\d+(\.\d+)?)\$/ && print \$1" "$@")
-
-  if [[ "$values" != "" ]]; then
-    echo $values
-    echo "$values" | plot_diagram -t "$var_name" -o "$files_directory/${c_diagram_file_prefix}${var_name}.${c_diagram_file_extension}" 2> /dev/null
-  else
-    echo "skipping..."
+    exit 1
   fi
-done
 
-# Open the first diagram.
-#
-find "$files_directory" -type f -name "${c_diagram_file_prefix}*.${c_diagram_file_extension}" -exec xdg-open {} \; -quit
+  v_all_files=("$@")
+}
+
+function prepare_variables {
+  v_first_stats_file="${v_all_files[0]}"
+  v_files_directory=$(dirname "$v_first_stats_file")
+  v_var_names="$(awk '{print $1}' "$v_first_stats_file")"
+}
+
+function purge_existing_diagram_files {
+  rm -f "$v_files_directory/$c_diagram_file_prefix"*."$c_diagram_file_extension"
+}
+
+function create_diagrams {
+  # Assume that the variable names and values are one token each, and that each file contains the same
+  # status variables as the first file.
+  #
+  # Minimal gnuplot command to avoid using `plot_diagram` (variables need to be substituted):
+  #
+  #     set terminal pngcairo size 1600,900
+  #     set output '/tmp/mysql_status_diagrams/${var_name}.${c_diagram_file_extension}'
+  #     plot '/dev/stdin' with linespoints title '$var_name'
+  #
+  for var_name in $v_var_names; do
+    echo -n "$var_name: "
+
+    # Skip the variable (prints nothing) if the value is not a number.
+    #
+    values=$(perl -lne "/^${var_name}\s+(\d+(\.\d+)?)\$/ && print \$1" "${v_all_files[@]}")
+
+    if [[ "$values" != "" ]]; then
+      echo $values
+      echo "$values" | plot_diagram -t "$var_name" -o "$v_files_directory/${c_diagram_file_prefix}${var_name}.${c_diagram_file_extension}" 2> /dev/null
+    else
+      echo "skipping..."
+    fi
+  done
+}
+
+function open_first_diagram {
+  find "$v_files_directory" -type f -name "${c_diagram_file_prefix}*.${c_diagram_file_extension}" -exec xdg-open {} \; -quit
+}
+
+decode_cmdline_parameters "${@}"
+prepare_variables
+purge_existing_diagram_files
+create_diagrams
+open_first_diagram
