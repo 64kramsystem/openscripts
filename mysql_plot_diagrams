@@ -2,7 +2,7 @@
 
 c_diagram_file_prefix="var_"
 c_diagram_file_extension="png"
-c_help="Usage: $(basename "$0") [(-s|--start <base_0_index>)] [(-o|--only) var_name{,var_name...}] <stat_file1> <stat_file2> <...>
+c_help="Usage: $(basename "$0") [(-s|--start <base_0_index>)] [(-o|--only) var_name{,var_name...}] [(-v|--verbose)] <stat_file1> <stat_file2> <...>
 
 For each variable (found in the first examined file), it collects the correponding values found in all the stats files, and generates a diagram file (named \`${c_diagram_file_prefix}*.${c_diagram_file_extension}\`)
 
@@ -22,8 +22,9 @@ Variables with non-numeric values are ignored.
 function decode_cmdline_parameters {
   v_start_index=0
   v_var_names_filter=
+  v_verbose=
 
-  eval set -- "$(getopt --options hs:o: --long help,start:,only: -- "$@")"
+  eval set -- "$(getopt --options hs:o:v --long help,start:,only:,verbose -- "$@")"
 
   while true; do
     case "$1" in
@@ -36,6 +37,9 @@ function decode_cmdline_parameters {
       -o|--only)
         v_var_names_filter=$2
         shift 2 ;;
+      -v|--verbose)
+        v_verbose=1
+        shift ;;
       --)
         shift
         break ;;
@@ -79,17 +83,17 @@ function create_diagrams {
   #     plot '/dev/stdin' with linespoints title '$var_name'
   #
   for var_name in $v_var_names; do
-    echo -n "$var_name: "
+    [[ "$v_verbose" == "1" ]] && echo -n "$var_name: " || true
 
     # Skip the variable (prints nothing) if the value is not a number.
     #
     values=$(perl -lne "/^${var_name}\s+(\d+(\.\d+)?)\$/ && print \$1" "${v_all_files[@]}" | tail -n +"$((v_start_index + 1))")
 
     if [[ "$values" != "" ]]; then
-      echo $values
+      [[ "$v_verbose" == "1" ]] && echo $values || true
       echo "$values" | plot_diagram -t "$var_name" -o "$v_files_directory/${c_diagram_file_prefix}${var_name}.${c_diagram_file_extension}" 2> /dev/null
     else
-      echo "skipping..."
+      [[ "$v_verbose" == "1" ]] && echo "skipping..." || true
     fi
   done
 }
