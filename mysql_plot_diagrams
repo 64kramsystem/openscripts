@@ -120,7 +120,7 @@ function prepare_variables {
     v_var_names_filter=${v_var_names_filter//,/|}
   fi
 
-  v_var_names="$(awk '{print $1}' "$v_first_stats_file" | grep -P "^${v_var_names_filter}\$")"
+  v_var_names=$(grep -oP "^${v_var_names_filter}\b" "$v_first_stats_file")
 }
 
 function purge_existing_diagram_files {
