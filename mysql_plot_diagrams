@@ -4,6 +4,7 @@ set -o nounset
 set -o errexit
 set -o pipefail
 
+c_log_files_glob="*.log"
 c_diagram_file_prefix="var_"
 c_diagram_file_extension="png"
 
@@ -14,9 +15,9 @@ declare -A c_aggregates=(
   [total]='$total += $F[0]; END { print $total }'
 )
 
-c_help="Usage: $(basename "$0") [(-s|--start <base_0_index>)] [(-o|--only) var_name{,var_name...}] [(-v|--verbose)] [(-a|--aggregate) <function>] <stat_file1> <stat_file2> <...>
+c_help="Usage: $(basename "$0") [(-s|--start <base_0_index>)] [(-o|--only) var_name{,var_name...}] [(-v|--verbose)] [(-a|--aggregate) <function>] <stats_dir>
 
-For each variable (found in the first examined file), it collects the correponding values found in all the stats files, and generates a diagram file (named \`${c_diagram_file_prefix}*.${c_diagram_file_extension}\`)
+For each variable (found in the lexicographically first examined file), it collects the correponding values found in all the stat files ($c_log_files_glob) in <stats_dir>, and generates a diagram file (named \`${c_diagram_file_prefix}*.${c_diagram_file_extension}\`)
 
 After processing, the first diagram is opened (via \`xdg-open\`).
 
@@ -68,24 +69,32 @@ function decode_cmdline_parameters {
     esac
   done
 
-  if [[ $# -lt 1 ]]; then
+  if [[ $# -ne 1 ]]; then
     echo "$c_help"
 
     exit 1
   fi
 
-  v_all_files=("$@")
+  v_stats_directory=$1
 }
 
 function check_requirements {
   if [[ ! -x $(command -v plot_diagram) ]]; then
     echo 'The program `plot_diagram` (from openscripts) needs to be in $PATH'.
     exit 1
+  elif [[ ! -d "$v_stats_directory" ]]; then
+    echo "The parameter passed is not a directory, or it doesn't exist."
+    exit 1
+  elif [[ $(find "$v_stats_directory" -maxdepth 1 -type f | wc -l) -eq 0 ]]; then
+    echo "No files found in the specified directory."
+    exit 1
   fi
 }
 
 function prepare_variables {
-  v_first_stats_file="${v_all_files[0]}"
+  mapfile -d '' v_stat_files < <(find "$v_stats_directory" -maxdepth 1 -type f -print0 | sort -z)
+
+  v_first_stats_file="${v_stat_files[0]}"
   v_files_directory=$(dirname "$v_first_stats_file")
 
   if [[ "$v_aggregate_name" != "" ]]; then
@@ -127,7 +136,7 @@ function create_diagrams {
 
     # Skip the variable (prints nothing) if the value is not a number.
     #
-    values=$(perl -lne "/^${var_name}\s+(\d+(\.\d+)?)\$/ && print \$1" "${v_all_files[@]}" | tail -n +"$((v_start_index + 1))")
+    values=$(perl -lne "/^${var_name}\s+(\d+(\.\d+)?)\$/ && print \$1" "${v_stat_files[@]}" | tail -n +"$((v_start_index + 1))")
 
     if [[ "$values" != "" ]]; then
       # shellcheck disable=SC2086
