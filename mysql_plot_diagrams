@@ -78,7 +78,7 @@ function decode_cmdline_parameters {
 }
 
 function check_requirements {
-  if ! command -v plot_diagram; then
+  if [[ ! -x $(command -v plot_diagram) ]]; then
     echo 'The program `plot_diagram` (from openscripts) needs to be in $PATH'.
     exit 1
   fi
