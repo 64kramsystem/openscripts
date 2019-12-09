@@ -129,7 +129,7 @@ function check_requirements {
   elif [[ $(find "$v_stats_directory" -maxdepth 1 -name "$v_log_files_glob" -type f | wc -l) -eq 0 ]]; then
     echo "No files found in the specified directory."
     exit 1
-  elif [[ "$v_aggregate_name" != "" ]] && [[ ! -v c_aggregates["$v_aggregate_name"] ]]; then
+  elif [[ -n "$v_aggregate_name" ]] && [[ ! -v c_aggregates["$v_aggregate_name"] ]]; then
     echo "Aggregate $v_aggregate_name not supported!"
     exit 1
   fi
@@ -141,7 +141,7 @@ function prepare_variables {
   local first_stats_file="${v_stat_files[0]}"
   v_files_directory=$(dirname "$first_stats_file")
 
-  if [[ "$v_aggregate_name" != "" ]]; then
+  if [[ -n "$v_aggregate_name" ]]; then
     v_aggregate_code=${c_aggregates["$v_aggregate_name"]}
   fi
 
@@ -169,7 +169,7 @@ function create_diagrams {
     #
     values=$(perl -lne "/^${var_name}\s+(\d+(\.\d+)?)\$/ && print \$1" "${v_stat_files[@]}" | tail -n +"$((v_start_index + 1))")
 
-    if [[ "$values" != "" ]]; then
+    if [[ -n "$values" ]]; then
       # shellcheck disable=SC2086
       [[ "$v_verbose" == "1" ]] && echo $values || true
       echo "$values" | plot_diagram -t "$var_name" -o "$v_files_directory/${c_diagram_file_prefix}${var_name}.${c_diagram_file_extension}" 2> /dev/null
@@ -177,7 +177,7 @@ function create_diagrams {
       [[ "$v_verbose" == "1" ]] && echo "skipping..." || true
     fi
 
-    if [[ "$v_aggregate_code" != "" ]]; then
+    if [[ -n "$v_aggregate_code" ]]; then
       local aggregate_result
       aggregate_result=$(echo "$values" | perl -lane "$v_aggregate_code")
       echo "$var_name $v_aggregate_name: $aggregate_result"
