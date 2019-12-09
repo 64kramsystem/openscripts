@@ -40,13 +40,14 @@ Variables with non-numeric values are ignored.
 The program \`plot_diagram\` (from openscripts) needs to be in \$PATH.
 "
 
-function decode_cmdline_parameters {
-  v_start_index=0
-  v_var_names_filter=
-  v_verbose=
-  v_aggregate_name=
-  v_log_files_glob=$c_default_log_files_glob
+v_start_index=0
+v_var_names_filter=.*
+v_verbose=
+v_aggregate_name=
+v_aggregate_code=
+v_log_files_glob=$c_default_log_files_glob
 
+function decode_cmdline_parameters {
   eval set -- "$(getopt --options hg:a:s:o:v --long help,log-files-glob:,aggregate:,start:,only:,verbose -- "$@")"
 
   while true; do
@@ -110,13 +111,9 @@ function prepare_variables {
       echo "Aggregate $v_aggregate_name not supported!"
       exit 1
     fi
-  else
-    v_aggregate_code=
   fi
 
-  if [[ "$v_var_names_filter" == "" ]]; then
-    v_var_names_filter='.*'
-  else
+  if [[ "$v_var_names_filter" != "" ]]; then
     v_var_names_filter=${v_var_names_filter//,/|}
   fi
 
