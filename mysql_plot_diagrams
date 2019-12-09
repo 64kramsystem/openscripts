@@ -161,7 +161,15 @@ function create_diagrams {
 }
 
 function open_first_diagram {
-  find "$v_files_directory" -type f -name "${c_diagram_file_prefix}*.${c_diagram_file_extension}" -exec xdg-open {} \; -quit
+  local first_diagram_file_found
+  first_diagram_file_found=$(find "$v_files_directory" -maxdepth 1 -type f -name "${c_diagram_file_prefix}*.${c_diagram_file_extension}" -print0 | sort -z | head -n 1 -z | tr -d '\0')
+
+  if [[ -z "$first_diagram_file_found" ]]; then
+    echo "No diagram files found"
+    exit 1
+  else
+    xdg-open "$first_diagram_file_found"
+  fi
 }
 
 decode_cmdline_parameters "${@}"
