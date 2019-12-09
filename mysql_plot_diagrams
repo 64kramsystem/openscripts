@@ -4,6 +4,10 @@ set -o nounset
 set -o errexit
 set -o pipefail
 
+################################################################################
+# VARIABLES/CONSTANTS
+################################################################################
+
 c_default_log_files_glob="*.log"
 c_diagram_file_prefix="var_"
 c_diagram_file_extension="png"
@@ -41,11 +45,41 @@ The program \`plot_diagram\` (from openscripts) needs to be in \$PATH.
 "
 
 v_start_index=0
-v_var_names_filter=.*
+v_var_names_filter=
 v_verbose=
 v_aggregate_name=
 v_aggregate_code=
 v_log_files_glob=$c_default_log_files_glob
+
+################################################################################
+# HELPERS
+################################################################################
+
+# Input:    "<directory>"
+# Output:   stdout=files (full path), NULL-separated
+# Requires: $v_log_files_glob
+#
+function find_log_files {
+  find "$1" -maxdepth 1 -name "$v_log_files_glob" -type f -print0 | sort -z
+}
+
+# Input:    "<file>"
+# Output:   stdout=files, NULL-separated
+# Requires: $v_var_names_filter
+#
+function find_var_names {
+  if [[ -z "$v_var_names_filter" ]]; then
+    local var_names_filter_regex='.*'
+  else
+    local var_names_filter_regex=${v_var_names_filter//,/|}
+  fi
+
+  grep -oP "^${var_names_filter_regex}\b" "$1" | tr "\n" "\0"
+}
+
+################################################################################
+# MAIN STAGES
+################################################################################
 
 function decode_cmdline_parameters {
   eval set -- "$(getopt --options hg:a:s:o:v --long help,log-files-glob:,aggregate:,start:,only:,verbose -- "$@")"
@@ -102,7 +136,7 @@ function check_requirements {
 }
 
 function prepare_variables {
-  mapfile -d '' v_stat_files < <(find "$v_stats_directory" -maxdepth 1 -name "$v_log_files_glob" -type f -print0 | sort -z)
+  mapfile -d '' v_stat_files < <(find_log_files "$v_stats_directory")
 
   v_first_stats_file="${v_stat_files[0]}"
   v_files_directory=$(dirname "$v_first_stats_file")
@@ -111,11 +145,7 @@ function prepare_variables {
     v_aggregate_code=${c_aggregates["$v_aggregate_name"]}
   fi
 
-  if [[ "$v_var_names_filter" != "" ]]; then
-    v_var_names_filter=${v_var_names_filter//,/|}
-  fi
-
-  v_var_names=$(grep -oP "^${v_var_names_filter}\b" "$v_first_stats_file")
+  mapfile -d '' v_var_names < <(find_var_names "$v_first_stats_file")
 }
 
 function purge_existing_diagram_files {
@@ -166,6 +196,10 @@ function open_first_diagram {
     xdg-open "$first_diagram_file_found"
   fi
 }
+
+################################################################################
+# ENTRY POINT
+################################################################################
 
 decode_cmdline_parameters "${@}"
 check_requirements
