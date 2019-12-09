@@ -138,14 +138,14 @@ function check_requirements {
 function prepare_variables {
   mapfile -d '' v_stat_files < <(find_log_files "$v_stats_directory")
 
-  v_first_stats_file="${v_stat_files[0]}"
-  v_files_directory=$(dirname "$v_first_stats_file")
+  local first_stats_file="${v_stat_files[0]}"
+  v_files_directory=$(dirname "$first_stats_file")
 
   if [[ "$v_aggregate_name" != "" ]]; then
     v_aggregate_code=${c_aggregates["$v_aggregate_name"]}
   fi
 
-  mapfile -d '' v_var_names < <(find_var_names "$v_first_stats_file")
+  mapfile -d '' v_var_names < <(find_var_names "$first_stats_file")
 }
 
 function purge_existing_diagram_files {
