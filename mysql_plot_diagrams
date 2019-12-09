@@ -95,6 +95,9 @@ function check_requirements {
   elif [[ $(find "$v_stats_directory" -maxdepth 1 -name "$v_log_files_glob" -type f | wc -l) -eq 0 ]]; then
     echo "No files found in the specified directory."
     exit 1
+  elif [[ "$v_aggregate_name" != "" ]] && [[ ! -v c_aggregates["$v_aggregate_name"] ]]; then
+    echo "Aggregate $v_aggregate_name not supported!"
+    exit 1
   fi
 }
 
@@ -105,12 +108,7 @@ function prepare_variables {
   v_files_directory=$(dirname "$v_first_stats_file")
 
   if [[ "$v_aggregate_name" != "" ]]; then
-    if [[ -v c_aggregates["$v_aggregate_name"] ]]; then
-      v_aggregate_code=${c_aggregates["$v_aggregate_name"]}
-    else
-      echo "Aggregate $v_aggregate_name not supported!"
-      exit 1
-    fi
+    v_aggregate_code=${c_aggregates["$v_aggregate_name"]}
   fi
 
   if [[ "$v_var_names_filter" != "" ]]; then
