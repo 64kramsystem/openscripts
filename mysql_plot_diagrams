@@ -190,6 +190,8 @@ function enable_debug {
 }
 
 function check_requirements {
+  [[ "$v_debug" == "1" ]] && echo "Checking data ..." || true
+
   if [[ ! -x $(command -v plot_diagram) ]]; then
     echo 'The program `plot_diagram` (from openscripts) needs to be in $PATH'.
     exit 1
@@ -200,6 +202,8 @@ function check_requirements {
     echo "No variables found in the reference file!"
     exit 1
   fi
+
+  [[ "$v_debug" == "1" ]] && echo "- directories consistency ..." || true
 
   for stats_directory in "${v_stat_directories[@]}"; do
     if [[ ! -d "$stats_directory" ]]; then
@@ -262,6 +266,8 @@ function check_requirements {
 #       val_dir1_statN ... vak_dirN_statN
 #
 function prepare_merged_datafiles {
+  [[ "$v_debug" == "1" ]] && echo -n "Preparing merged datafiles: " || true
+
   mkdir -p "$c_temporary_merge_directory"
 
   for var_name in "${v_reference_var_names[@]}"; do
@@ -276,7 +282,11 @@ function prepare_merged_datafiles {
       unset var_values_across_instances
       unset stat_file_instances
     done
+
+    [[ "$v_debug" == "1" ]] && echo -n "." || true
   done
+
+  echo
 }
 
 function create_diagrams {
