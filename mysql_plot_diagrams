@@ -68,7 +68,9 @@ v_test_data=
 # Requires: $v_log_files_glob
 #
 function find_log_files {
-  find "$1" -maxdepth 1 -name "$v_log_files_glob" -type f -print0 | sort -z
+  if [[ -d "$1" ]]; then
+    find "$1" -maxdepth 1 -name "$v_log_files_glob" -type f -print0 | sort -z
+  fi
 }
 
 # Input:    "<pattern> <file1>{ <fileN>}"
@@ -76,7 +78,9 @@ function find_log_files {
 # Requires: $v_var_names_filter
 #
 function find_var_names {
-  grep -oP "^$1\b" "${@:2}" | tr "\n" "\0"
+  if [[ $# -ge 2 ]]; then
+    grep -oP "^$1\b" "${@:2}" | tr "\n" "\0"
+  fi
 }
 
 # Input:    "<pattern> <file1>{ <fileN>}"
@@ -143,6 +147,8 @@ function decode_cmdline_parameters {
 # after.
 #
 function prepare_variables {
+  set +o nounset
+
   mapfile -d '' v_reference_stat_files < <(find_log_files "$v_reference_stats_directory")
 
   if [[ -v c_aggregates["$v_aggregate_name"] ]]; then
@@ -155,7 +161,9 @@ function prepare_variables {
     v_var_names_filter=${v_var_names_filter//,/|}
   fi
 
-  mapfile -d '' v_reference_var_names < <(find_var_names "$v_var_names_filter" "${v_reference_stat_files[0]}" 2> /dev/null) || true
+  mapfile -d '' v_reference_var_names < <(find_var_names "$v_var_names_filter" "${v_reference_stat_files[0]}")
+
+  set -o nounset
 }
 
 function create_test_data {
