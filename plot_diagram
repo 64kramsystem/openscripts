@@ -45,6 +45,7 @@ class PlotDiagramCommandLineDecoder
       ['-c', '--csv',                     'Sets the input format as CSV'],
       ['-s', '--smooth',                  'Smooth line'],
       ['-x', '--no-x',                    'With multiple columns, build a diagram without X values'],
+      ['-a', '--auto-y-scale',            'With multiple columns, autoscale all the lines to fit the diagram'],
       ['-t', '--titles TITLE_1,TITLE_N',  'Set the titles'],
       ['-o', '--output FILENAME',         'Outputs to the specified file, instead of printing to screen'],
       ['-v', '--verbose',                 'Verbose mode (prints gnuplot commands)'],
@@ -67,6 +68,7 @@ class PlotDiagram
   #   :csv
   #   :smooth
   #   :no_x
+  #   :auto_y_scale
   #   :titles
   #   :output
   #   :verbose
@@ -100,10 +102,10 @@ class PlotDiagram
     end
   end
 
-  def prepare_gnuplot_commands(data_file, csv: false, no_x: false, smooth: false, titles: nil, output: nil, **)
+  def prepare_gnuplot_commands(data_file, csv: false, no_x: false, auto_y_scale: false, smooth: false, titles: nil, output: nil, **)
     data = parse_data_file(data_file, csv)
     x_time_format = find_x_time_format(data)
-    using_prefix, start_index = compute_using_settings(x_time_format, no_x)
+    using_prefix, start_index, column_transformation = compute_using_settings(data, x_time_format, no_x, auto_y_scale)
     data_column_numbers = find_data_columns_number(data)
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
 
@@ -112,7 +114,7 @@ class PlotDiagram
     commands += prepare_command_csv_setting if csv
     commands += prepare_command_date_settings(no_x, x_time_format) if x_time_format
     commands += prepare_command_plot_keyword
-    commands += prepare_command_plot_lines(smooth, data_column_numbers, data_file, using_prefix, titles, start_index)
+    commands += prepare_command_plot_lines(smooth, data_column_numbers, data_file, using_prefix, titles, start_index, column_transformation)
     commands + prepare_commands_pause
   end
 
@@ -172,11 +174,14 @@ class PlotDiagram
     "plot \\\n"
   end
 
-  def prepare_command_plot_lines(smooth, data_column_numbers, data_file, using_prefix, titles, start_index)
+  def prepare_command_plot_lines(smooth, data_column_numbers, data_file, using_prefix, titles, start_index, column_transformation)
     smooth_option = "smooth sbezier" if smooth
 
     start_index.upto(data_column_numbers).inject("") do |commands, i|
-      commands += " '#{data_file}' using #{using_prefix}#{i} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
+      column_reference = column_transformation ? column_transformation[i] : i
+
+      commands += " '#{data_file}' using #{using_prefix}#{column_reference} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
+
       commands += ', \\' if i < data_column_numbers
       commands + "\n"
     end
@@ -227,14 +232,36 @@ class PlotDiagram
     end
   end
 
-  # Returns [using_prefix, start_index]
-  def compute_using_settings(x_time_format, no_x)
+  # Returns [using_prefix, start_index, column_transformation]
+  #
+  def compute_using_settings(data, x_time_format, no_x, auto_y_scale)
     if x_time_format || !no_x
       # Required when specifying time data.
-      ["1:", 2]
+      using_prefix = "1:"
+      start_index = 2
     else
-      [nil, 1]
+      start_index = 1
     end
+
+    if auto_y_scale
+      transposed_data = data.transpose[(start_index - 1) .. -1].map { |y_values| y_values.map(&:to_f) }
+
+      shifts = transposed_data.map { |line_values| 0 - line_values.min }
+
+      ranges = transposed_data.zip(shifts).map { |line_values, shift| line_values.max + shift }
+
+      scaling_factors = ranges.map do |range|
+        if range == 0
+          1
+        else
+          ranges.max / range
+        end
+      end
+
+      column_transformation = ->(i) { "(#{scaling_factors[i - 1]} * ($#{i} + #{shifts[i - 1]}))" }
+    end
+
+    [using_prefix, start_index, column_transformation]
   end
 
   def find_data_columns_number(data)
