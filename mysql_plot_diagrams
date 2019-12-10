@@ -69,7 +69,7 @@ function find_log_files {
 #
 function find_var_names {
   if [[ -z "$v_var_names_filter" ]]; then
-    local var_names_filter_regex='.*'
+    local var_names_filter_regex='\w+'
   else
     local var_names_filter_regex=${v_var_names_filter//,/|}
   fi
