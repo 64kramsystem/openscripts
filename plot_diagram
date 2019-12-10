@@ -45,6 +45,7 @@ class PlotDiagramCommandLineDecoder
       ['-c', '--csv',                     'Sets the input format as CSV'],
       ['-s', '--smooth',                  'Smooth line'],
       ['-x', '--no-x',                    'With multiple columns, build a diagram without X values'],
+      ['-a', '--auto-y-scale',            'With multiple columns, autoscale all the lines to fit the diagram'],
       ['-t', '--titles TITLE_1,TITLE_N',  'Set the titles'],
       ['-o', '--output FILENAME',         'Outputs to the specified file, instead of printing to screen'],
       ['-v', '--verbose',                 'Verbose mode (prints gnuplot commands)'],
@@ -58,7 +59,7 @@ class PlotDiagram
   DIAGRAM_SIZE = [1600, 900]
   IMAGE_FORMATS_MAPPING = {
     'png' => 'pngcairo',
-    'svg' => "svg enhanced background rgb 'white'", # transparent is ugly on some platoforms
+    'svg' => "svg enhanced background rgb 'white'", # transparent is ugly on some platforms
   }
   MONTHS = %w[jan feb mar apr may jun jul aug sep oct nov dec]
   Y_PADDING_FRACTION = 0.04 # fraction of range
@@ -67,6 +68,7 @@ class PlotDiagram
   #   :csv
   #   :smooth
   #   :no_x
+  #   :auto_y_scale
   #   :titles
   #   :output
   #   :verbose
@@ -100,69 +102,20 @@ class PlotDiagram
     end
   end
 
-  def prepare_gnuplot_commands(data_file, csv: false, no_x: false, smooth: false, titles: nil, output: nil, **)
-    if output
-      output_extension = output[/\w+$/]
-      terminal_format = IMAGE_FORMATS_MAPPING[output_extension] || raise("File extension not supported: #{output_extension.inspect}")
-
-      commands = <<~PLOT
-        set terminal #{terminal_format} size #{DIAGRAM_SIZE.join(',')}
-        set output '#{output}'
-      PLOT
-    else
-      commands = <<~PLOT
-        set terminal wxt size #{DIAGRAM_SIZE.join(',')}
-      PLOT
-    end
-
-    commands += <<~PLOT
-      set offset graph 0, 0, #{Y_PADDING_FRACTION}, #{Y_PADDING_FRACTION}
-    PLOT
-
-    if csv
-      commands += <<~PLOT
-        set datafile separator ','
-      PLOT
-    end
-
-    x_time_format = find_x_time_format(data_file)
-
-    if x_time_format
-      raise "Date format detected on the first column, but `--no-x` has been specified!" if no_x
-
-      commands += <<~PLOT
-        set xdata time
-        set timefmt '#{x_time_format}'
-      PLOT
-    end
-
-    if x_time_format || !no_x
-      # Required when specifying time data.
-      using_prefix = "1:"
-      start_index = 2
-    else
-      start_index = 1
-    end
-
-    data_column_numbers = find_data_columns_number(data_file, csv: csv)
-
-    commands += "plot\\\n"
-
+  def prepare_gnuplot_commands(data_file, csv: false, no_x: false, auto_y_scale: false, smooth: false, titles: nil, output: nil, **)
+    data = parse_data_file(data_file, csv)
+    x_time_format = find_x_time_format(data)
+    using_prefix, start_index, column_transformation = compute_using_settings(data, x_time_format, no_x, auto_y_scale)
+    data_column_numbers = find_data_columns_number(data)
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
-    smooth_option = "smooth sbezier" if smooth
 
-    start_index.upto(data_column_numbers) do |i|
-      commands += " '#{data_file}' using #{using_prefix}#{i} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
-
-      if i < data_column_numbers
-        commands += ','
-      else
-        commands += "\n"
-      end
-    end
-
-    # See comment in execute_gnuplot_commands.
-    commands + "pause mouse close"
+    commands = prepare_command_output_settings(output)
+    commands += prepare_command_graph_offset
+    commands += prepare_command_csv_setting if csv
+    commands += prepare_command_date_settings(no_x, x_time_format) if x_time_format
+    commands += prepare_command_plot_keyword
+    commands += prepare_command_plot_lines(smooth, data_column_numbers, data_file, using_prefix, titles, start_index, column_transformation)
+    commands + prepare_commands_pause
   end
 
   def execute_gnuplot_commands(commands, verbose: false, **)
@@ -183,12 +136,83 @@ class PlotDiagram
   end
 
   ######################################################################################
+  # COMMANDS CREATION
+  ######################################################################################
+
+  def prepare_command_output_settings(output)
+    if output
+      output_extension = output[/\w+$/]
+      terminal_format = IMAGE_FORMATS_MAPPING[output_extension] || raise("File extension not supported: #{output_extension.inspect}")
+
+      <<~PLOT
+        set terminal #{terminal_format} size #{DIAGRAM_SIZE.join(',')}
+        set output '#{output}'
+      PLOT
+    else
+      "set terminal wxt size #{DIAGRAM_SIZE.join(',')}\n"
+    end
+  end
+
+  def prepare_command_graph_offset
+    "set offset graph 0, 0, #{Y_PADDING_FRACTION}, #{Y_PADDING_FRACTION}\n"
+  end
+
+  def prepare_command_csv_setting
+    "set datafile separator ','\n"
+  end
+
+  def prepare_command_date_settings(no_x, x_time_format)
+    raise "Date format detected on the first column, but `--no-x` has been specified!" if no_x
+
+    commands += <<~PLOT
+      set xdata time
+      set timefmt '#{x_time_format}'
+    PLOT
+  end
+
+  def prepare_command_plot_keyword
+    "plot \\\n"
+  end
+
+  def prepare_command_plot_lines(smooth, data_column_numbers, data_file, using_prefix, titles, start_index, column_transformation)
+    smooth_option = "smooth sbezier" if smooth
+
+    start_index.upto(data_column_numbers).inject("") do |commands, i|
+      column_reference = column_transformation ? column_transformation[i] : i
+
+      commands += " '#{data_file}' using #{using_prefix}#{column_reference} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
+
+      commands += ', \\' if i < data_column_numbers
+      commands + "\n"
+    end
+  end
+
+  # See comment in execute_gnuplot_commands.
+  #
+  def prepare_commands_pause
+    "pause mouse close\n"
+  end
+
+  ######################################################################################
   # HELPERS
   ######################################################################################
 
-  def find_x_time_format(data_file)
-    data_file_content = IO.read(data_file)
-    first_potential_timestamp = data_file_content[/^[\w-]+/]
+  def parse_data_file(data_file, csv)
+    if csv
+      data = CSV.read(data_file)
+    else
+      data = IO.readlines(data_file).map { |line| line.strip.split(/\s+/) }
+    end
+
+    if data.empty?
+      raise "No data found in the file!"
+    end
+
+    data
+  end
+
+  def find_x_time_format(data)
+    first_potential_timestamp = data[0][0][/^[\w-]+/]
 
     case first_potential_timestamp
     when /^\d{,2}-\d{,2}$/
@@ -208,18 +232,40 @@ class PlotDiagram
     end
   end
 
-  def find_data_columns_number(data_file, csv:)
-    if csv
-      first_row = CSV.read(data_file).first
+  # Returns [using_prefix, start_index, column_transformation]
+  #
+  def compute_using_settings(data, x_time_format, no_x, auto_y_scale)
+    if x_time_format || !no_x
+      # Required when specifying time data.
+      using_prefix = "1:"
+      start_index = 2
     else
-      first_row = IO.readlines(data_file).first.to_s.split(/\s/)
+      start_index = 1
     end
 
-    if first_row.empty?
-      raise "No data found in the file!"
-    else
-      first_row.size
+    if auto_y_scale
+      transposed_data = data.transpose[(start_index - 1) .. -1].map { |y_values| y_values.map(&:to_f) }
+
+      shifts = transposed_data.map { |line_values| 0 - line_values.min }
+
+      ranges = transposed_data.zip(shifts).map { |line_values, shift| line_values.max + shift }
+
+      scaling_factors = ranges.map do |range|
+        if range == 0
+          1
+        else
+          ranges.max / range
+        end
+      end
+
+      column_transformation = ->(i) { "(#{scaling_factors[i - 1]} * ($#{i} + #{shifts[i - 1]}))" }
     end
+
+    [using_prefix, start_index, column_transformation]
+  end
+
+  def find_data_columns_number(data)
+    data.first.size
   end
 
   def check_and_prepare_titles(titles, data_column_numbers, start_index)
