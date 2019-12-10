@@ -89,7 +89,7 @@ class PlotDiagram
     end
   end
 
-  def find_x_time_format(data_file, csv:)
+  def find_x_time_format(data_file)
     data_file_content = IO.read(data_file)
     first_potential_timestamp = data_file_content[/^[\w-]+/]
 
@@ -136,7 +136,7 @@ class PlotDiagram
       PLOT
     end
 
-    x_time_format = find_x_time_format(data_file, csv: csv)
+    x_time_format = find_x_time_format(data_file csv)
 
     if x_time_format
       commands += <<~PLOT
