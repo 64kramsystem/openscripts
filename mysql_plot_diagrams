@@ -73,13 +73,17 @@ function find_log_files {
   fi
 }
 
+# IMPORTANT: This filters out variables that don't follow the format:
+#
+#     <start_of_line><variable_name><whitespaces><numeric_value><end_of_line>
+#
 # Input:    "<pattern> <file1>{ <fileN>}"
 # Output:   stdout=files, NULL-separated
 # Requires: $v_var_names_filter
 #
 function find_var_names {
   if [[ $# -ge 2 ]]; then
-    grep -oP "^$1\b" "${@:2}" | tr "\n" "\0"
+    grep -oP "^$1(?=\s+\d+(\.\d+)?$)" "${@:2}" | tr "\n" "\0"
   fi
 }
 
