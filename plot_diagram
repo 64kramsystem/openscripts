@@ -89,28 +89,6 @@ class PlotDiagram
     end
   end
 
-  def find_x_time_format(data_file)
-    data_file_content = IO.read(data_file)
-    first_potential_timestamp = data_file_content[/^[\w-]+/]
-
-    case first_potential_timestamp
-    when /^\d{,2}-\d{,2}$/
-      "%m-%d"
-    when /^(#{MONTHS.join'|'})-\d{,2}$/i
-      "%b-%d"
-    when /^\d{4}-\d{,2}-\d{,2}$/
-      "%Y-%m-%d"
-    when /^\d{2}-\d{,2}-\d{,2}$/
-      "%y-%m-%d"
-    when /^\d{4}-(#{MONTHS.join'|'})-\d{,2}$/i
-      "%Y-%b-%d"
-    when /^\d{2}-\d{,2}-\d{,2}$/
-      "%y-%b-%d"
-    else
-      nil
-    end
-  end
-
   def prepare_gnuplot_commands(data_file, csv: false, smooth: false, title: DEFAULT_Y_TITLE, output: nil, **)
     if output
       output_extension = output[/\w+$/]
@@ -173,6 +151,32 @@ class PlotDiagram
       # Therefore, we use `pause mouse close`, but we send a newline to stdin (!!!).
       #
       `echo | gnuplot --persist #{file.path}`
+    end
+  end
+
+  ######################################################################################
+  # HELPERS
+  ######################################################################################
+
+  def find_x_time_format(data_file)
+    data_file_content = IO.read(data_file)
+    first_potential_timestamp = data_file_content[/^[\w-]+/]
+
+    case first_potential_timestamp
+    when /^\d{,2}-\d{,2}$/
+      "%m-%d"
+    when /^(#{MONTHS.join'|'})-\d{,2}$/i
+      "%b-%d"
+    when /^\d{4}-\d{,2}-\d{,2}$/
+      "%Y-%m-%d"
+    when /^\d{2}-\d{,2}-\d{,2}$/
+      "%y-%m-%d"
+    when /^\d{4}-(#{MONTHS.join'|'})-\d{,2}$/i
+      "%Y-%b-%d"
+    when /^\d{2}-\d{,2}-\d{,2}$/
+      "%y-%b-%d"
+    else
+      nil
     end
   end
 end
