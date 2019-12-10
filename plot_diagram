@@ -101,9 +101,10 @@ class PlotDiagram
   end
 
   def prepare_gnuplot_commands(data_file, csv: false, no_x: false, smooth: false, titles: nil, output: nil, **)
-    x_time_format = find_x_time_format(data_file)
+    data = parse_data_file(data_file, csv)
+    x_time_format = find_x_time_format(data)
     using_prefix, start_index = compute_using_settings(x_time_format, no_x)
-    data_column_numbers = find_data_columns_number(data_file, csv: csv)
+    data_column_numbers = find_data_columns_number(data)
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
 
     commands = prepare_command_output_settings(output)
@@ -195,9 +196,22 @@ class PlotDiagram
   # HELPERS
   ######################################################################################
 
-  def find_x_time_format(data_file)
-    data_file_content = IO.read(data_file)
-    first_potential_timestamp = data_file_content[/^[\w-]+/]
+  def parse_data_file(data_file, csv)
+    if csv
+      data = CSV.read(data_file)
+    else
+      data = IO.readlines(data_file).map { |line| line.strip.split(/\s+/) }
+    end
+
+    if data.empty?
+      raise "No data found in the file!"
+    end
+
+    data
+  end
+
+  def find_x_time_format(data)
+    first_potential_timestamp = data[0][0][/^[\w-]+/]
 
     case first_potential_timestamp
     when /^\d{,2}-\d{,2}$/
@@ -227,18 +241,8 @@ class PlotDiagram
     end
   end
 
-  def find_data_columns_number(data_file, csv:)
-    if csv
-      first_row = CSV.read(data_file).first
-    else
-      first_row = IO.readlines(data_file).first.to_s.split(/\s/)
-    end
-
-    if first_row.empty?
-      raise "No data found in the file!"
-    else
-      first_row.size
-    end
+  def find_data_columns_number(data)
+    data.first.size
   end
 
   def check_and_prepare_titles(titles, data_column_numbers, start_index)
