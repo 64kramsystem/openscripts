@@ -58,7 +58,7 @@ class PlotDiagram
   DIAGRAM_SIZE = [1600, 900]
   IMAGE_FORMATS_MAPPING = {
     'png' => 'pngcairo',
-    'svg' => "svg enhanced background rgb 'white'", # transparent is ugly on some platoforms
+    'svg' => "svg enhanced background rgb 'white'", # transparent is ugly on some platforms
   }
   MONTHS = %w[jan feb mar apr may jun jul aug sep oct nov dec]
   Y_PADDING_FRACTION = 0.04 # fraction of range
@@ -146,7 +146,7 @@ class PlotDiagram
 
     data_column_numbers = find_data_columns_number(data_file, csv: csv)
 
-    commands += "plot\\\n"
+    commands += "plot \\\n"
 
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
     smooth_option = "smooth sbezier" if smooth
