@@ -1,25 +1,34 @@
 #!/usr/bin/env ruby
 
 require 'simple_scripting/argv'
+require 'csv'
 require 'tempfile'
 require 'tmpdir'
 
 class PlotDiagramCommandLineDecoder
   def decode_cmline_args
     long_help = <<~HELP
-      Plots a one-line diagram from a file (or stdin, when the file is not specified).
+      Plots a diagram (with a single Y scale) from a file (or stdin, when the file is not specified).
 
-      The dataset can have the x values or not; the following datasets are both valid:
+      Multiple formats are accepted.
 
-          # no x
+      - the data can have a single column; in this case, it won't have X values:
+
           4
           7
           6
 
-          # both x and y
-          1 4
-          2 7
-          3 6
+      - when there are two or more columns, the first column represents the X values:
+
+          1 4 2
+          2 7 3
+          3 6 2
+
+      - if one wants multiple lines without X values, specify `--no-x`:
+
+          4 2
+          7 3
+          6 2
 
       The default fields separator is space; in order to specify comma separated fields (CSV-alike), use the `--csv` option.
 
@@ -35,7 +44,8 @@ class PlotDiagramCommandLineDecoder
     SimpleScripting::Argv.decode(
       ['-c', '--csv',                     'Sets the input format as CSV'],
       ['-s', '--smooth',                  'Smooth line'],
-      ['-t', '--title TITLE',             'Set the title'],
+      ['-x', '--no-x',                    'With multiple columns, build a diagram without X values'],
+      ['-t', '--titles TITLE_1,TITLE_N',  'Set the titles'],
       ['-o', '--output FILENAME',         'Outputs to the specified file, instead of printing to screen'],
       ['-v', '--verbose',                 'Verbose mode (prints gnuplot commands)'],
       '[data_file]',
@@ -44,7 +54,7 @@ class PlotDiagramCommandLineDecoder
 end
 
 class PlotDiagram
-  DEFAULT_Y_TITLE = 'y'
+  DEFAULT_Y_TITLE_PREFIX = 'y'
   DIAGRAM_SIZE = [1600, 900]
   IMAGE_FORMATS_MAPPING = {
     'png' => 'pngcairo',
@@ -56,7 +66,8 @@ class PlotDiagram
   # options:
   #   :csv
   #   :smooth
-  #   :title
+  #   :no_x
+  #   :titles
   #   :output
   #   :verbose
   #
@@ -89,7 +100,7 @@ class PlotDiagram
     end
   end
 
-  def prepare_gnuplot_commands(data_file, csv: false, smooth: false, title: DEFAULT_Y_TITLE, output: nil, **)
+  def prepare_gnuplot_commands(data_file, csv: false, no_x: false, smooth: false, titles: nil, output: nil, **)
     if output
       output_extension = output[/\w+$/]
       terminal_format = IMAGE_FORMATS_MAPPING[output_extension] || raise("File extension not supported: #{output_extension.inspect}")
@@ -114,27 +125,44 @@ class PlotDiagram
       PLOT
     end
 
-    x_time_format = find_x_time_format(data_file csv)
+    x_time_format = find_x_time_format(data_file)
 
     if x_time_format
+      raise "Date format detected on the first column, but `--no-x` has been specified!" if no_x
+
       commands += <<~PLOT
         set xdata time
         set timefmt '#{x_time_format}'
       PLOT
-
-      # Required when specifying time data.
-      using_option = "using 1:2"
     end
 
+    if x_time_format || !no_x
+      # Required when specifying time data.
+      using_prefix = "1:"
+      start_index = 2
+    else
+      start_index = 1
+    end
+
+    data_column_numbers = find_data_columns_number(data_file, csv: csv)
+
+    commands += "plot\\\n"
+
+    titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
     smooth_option = "smooth sbezier" if smooth
 
-    # See comment in execute_gnuplot_commands.
-    escaped_title = title.gsub('_', '\_')
+    start_index.upto(data_column_numbers) do |i|
+      commands += " '#{data_file}' using #{using_prefix}#{i} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
 
-    commands + <<~PLOT
-      plot '#{data_file}' #{using_option} with linespoints #{smooth_option} title '#{escaped_title}'
-      pause mouse close
-    PLOT
+      if i < data_column_numbers
+        commands += ','
+      else
+        commands += "\n"
+      end
+    end
+
+    # See comment in execute_gnuplot_commands.
+    commands + "pause mouse close"
   end
 
   def execute_gnuplot_commands(commands, verbose: false, **)
@@ -178,6 +206,34 @@ class PlotDiagram
     else
       nil
     end
+  end
+
+  def find_data_columns_number(data_file, csv:)
+    if csv
+      first_row = CSV.read(data_file).first
+    else
+      first_row = IO.readlines(data_file).first.to_s.split(/\s/)
+    end
+
+    if first_row.empty?
+      raise "No data found in the file!"
+    else
+      first_row.size
+    end
+  end
+
+  def check_and_prepare_titles(titles, data_column_numbers, start_index)
+    if titles
+      y_columns_number = data_column_numbers + 1 - start_index
+
+      if titles.size != y_columns_number
+        raise "Mismatching number of titles/Y columns: #{titles.size}/#{y_columns_number}"
+      end
+    else
+      titles = start_index.upto(data_column_numbers).map { |i| "#{DEFAULT_Y_TITLE_PREFIX}#{i}" }
+    end
+
+    titles.map { |title| title.gsub('_', '\_') }
   end
 end
 
