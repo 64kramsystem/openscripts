@@ -57,6 +57,7 @@ v_reference_var_names=
 v_stat_directories=
 
 v_debug=
+v_test_data=
 
 ################################################################################
 # HELPERS
@@ -92,10 +93,10 @@ function find_var_values {
 # MAIN STAGES
 ################################################################################
 
-# The option `--debug` is not in the official help.
+# The options `--debug` and `--test-data` are not in the official help.
 #
 function decode_cmdline_parameters {
-  eval set -- "$(getopt --options hg:a:s:o: --long help,log-files-glob:,aggregate:,start:,only:,debug -- "$@")"
+  eval set -- "$(getopt --options hg:a:s:o: --long help,log-files-glob:,aggregate:,start:,only:,debug,test-data -- "$@")"
 
   while true; do
     case "$1" in
@@ -116,6 +117,9 @@ function decode_cmdline_parameters {
         shift 2 ;;
       --debug)
         v_debug=1
+        shift ;;
+      --test-data)
+        v_test_data=1
         shift ;;
       --)
         shift
@@ -152,6 +156,19 @@ function prepare_variables {
   fi
 
   mapfile -d '' v_reference_var_names < <(find_var_names "$v_var_names_filter" "${v_reference_stat_files[0]}" 2> /dev/null) || true
+}
+
+function create_test_data {
+  rm -rf /tmp/stats{,2}
+  mkdir -p /tmp/stats{,2}
+
+  printf "aaa 1\nbbb 2\nccc 3" > "/tmp/stats/stats_z 0.log"
+  printf "aaa 2\nbbb 2\nccc 5" > "/tmp/stats/stats_z 1.log"
+  printf "aaa 5\nbbb 6\nccc 1" > "/tmp/stats/stats_z 2.log"
+
+  printf "aaa 2\nbbb 4\nccc 6" > "/tmp/stats2/stats_z 0.log"
+  printf "aaa 4\nbbb 4\nccc 9" > "/tmp/stats2/stats_z 1.log"
+  printf "aaa 8\nbbb 9\nccc 2" > "/tmp/stats2/stats_z 2.log"
 }
 
 function enable_debug {
@@ -323,6 +340,7 @@ function open_first_diagram {
 ################################################################################
 
 decode_cmdline_parameters "${@}"
+if [[ "$v_test_data" == "1" ]]; then create_test_data; fi
 if [[ "$v_debug" == "1" ]]; then enable_debug; fi
 prepare_variables
 check_requirements
