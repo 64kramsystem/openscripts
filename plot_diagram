@@ -101,68 +101,18 @@ class PlotDiagram
   end
 
   def prepare_gnuplot_commands(data_file, csv: false, no_x: false, smooth: false, titles: nil, output: nil, **)
-    if output
-      output_extension = output[/\w+$/]
-      terminal_format = IMAGE_FORMATS_MAPPING[output_extension] || raise("File extension not supported: #{output_extension.inspect}")
-
-      commands = <<~PLOT
-        set terminal #{terminal_format} size #{DIAGRAM_SIZE.join(',')}
-        set output '#{output}'
-      PLOT
-    else
-      commands = <<~PLOT
-        set terminal wxt size #{DIAGRAM_SIZE.join(',')}
-      PLOT
-    end
-
-    commands += <<~PLOT
-      set offset graph 0, 0, #{Y_PADDING_FRACTION}, #{Y_PADDING_FRACTION}
-    PLOT
-
-    if csv
-      commands += <<~PLOT
-        set datafile separator ','
-      PLOT
-    end
-
     x_time_format = find_x_time_format(data_file)
-
-    if x_time_format
-      raise "Date format detected on the first column, but `--no-x` has been specified!" if no_x
-
-      commands += <<~PLOT
-        set xdata time
-        set timefmt '#{x_time_format}'
-      PLOT
-    end
-
-    if x_time_format || !no_x
-      # Required when specifying time data.
-      using_prefix = "1:"
-      start_index = 2
-    else
-      start_index = 1
-    end
-
+    using_prefix, start_index = compute_using_settings(x_time_format, no_x)
     data_column_numbers = find_data_columns_number(data_file, csv: csv)
-
-    commands += "plot \\\n"
-
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
-    smooth_option = "smooth sbezier" if smooth
 
-    start_index.upto(data_column_numbers) do |i|
-      commands += " '#{data_file}' using #{using_prefix}#{i} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
-
-      if i < data_column_numbers
-        commands += ','
-      else
-        commands += "\n"
-      end
-    end
-
-    # See comment in execute_gnuplot_commands.
-    commands + "pause mouse close"
+    commands = prepare_command_output_settings(output)
+    commands += prepare_command_graph_offset
+    commands += prepare_command_csv_setting if csv
+    commands += prepare_command_date_settings(no_x, x_time_format) if x_time_format
+    commands += prepare_command_plot_keyword
+    commands += prepare_command_plot_lines(smooth, data_column_numbers, data_file, using_prefix, titles, start_index)
+    commands + prepare_commands_pause
   end
 
   def execute_gnuplot_commands(commands, verbose: false, **)
@@ -180,6 +130,65 @@ class PlotDiagram
       #
       `echo | gnuplot --persist #{file.path}`
     end
+  end
+
+  ######################################################################################
+  # COMMANDS CREATION
+  ######################################################################################
+
+  def prepare_command_output_settings(output)
+    if output
+      output_extension = output[/\w+$/]
+      terminal_format = IMAGE_FORMATS_MAPPING[output_extension] || raise("File extension not supported: #{output_extension.inspect}")
+
+      <<~PLOT
+        set terminal #{terminal_format} size #{DIAGRAM_SIZE.join(',')}
+        set output '#{output}'
+      PLOT
+    else
+      "set terminal wxt size #{DIAGRAM_SIZE.join(',')}\n"
+    end
+  end
+
+  def prepare_command_graph_offset
+    "set offset graph 0, 0, #{Y_PADDING_FRACTION}, #{Y_PADDING_FRACTION}\n"
+  end
+
+  def prepare_command_csv_setting
+    "set datafile separator ','\n"
+  end
+
+  def prepare_command_date_settings(no_x, x_time_format)
+    raise "Date format detected on the first column, but `--no-x` has been specified!" if no_x
+
+    commands += <<~PLOT
+      set xdata time
+      set timefmt '#{x_time_format}'
+    PLOT
+  end
+
+  def prepare_command_plot_keyword
+    "plot \\\n"
+  end
+
+  def prepare_command_plot_lines(smooth, data_column_numbers, data_file, using_prefix, titles, start_index)
+    smooth_option = "smooth sbezier" if smooth
+
+    start_index.upto(data_column_numbers).inject("") do |commands, i|
+      commands += " '#{data_file}' using #{using_prefix}#{i} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
+
+      if i < data_column_numbers
+        commands + ','
+      else
+        commands + "\n"
+      end
+    end
+  end
+
+  # See comment in execute_gnuplot_commands.
+  #
+  def prepare_commands_pause
+    "pause mouse close\n"
   end
 
   ######################################################################################
@@ -205,6 +214,16 @@ class PlotDiagram
       "%y-%b-%d"
     else
       nil
+    end
+  end
+
+  # Returns [using_prefix, start_index]
+  def compute_using_settings(x_time_format, no_x)
+    if x_time_format || !no_x
+      # Required when specifying time data.
+      ["1:", 2]
+    else
+      [nil, 1]
     end
   end
 
