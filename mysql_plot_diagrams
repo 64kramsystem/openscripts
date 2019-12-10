@@ -57,7 +57,6 @@ v_reference_var_names=
 v_stat_directories=
 
 v_debug=
-v_test_data=
 
 ################################################################################
 # HELPERS
@@ -68,23 +67,15 @@ v_test_data=
 # Requires: $v_log_files_glob
 #
 function find_log_files {
-  if [[ -d "$1" ]]; then
-    find "$1" -maxdepth 1 -name "$v_log_files_glob" -type f -print0 | sort -z
-  fi
+  find "$1" -maxdepth 1 -name "$v_log_files_glob" -type f -print0 | sort -z
 }
 
-# IMPORTANT: This filters out variables that don't follow the format:
-#
-#     <start_of_line><variable_name><whitespaces><numeric_value><end_of_line>
-#
 # Input:    "<pattern> <file1>{ <fileN>}"
 # Output:   stdout=files, NULL-separated
 # Requires: $v_var_names_filter
 #
 function find_var_names {
-  if [[ $# -ge 2 ]]; then
-    grep -oP "^$1(?=\s+\d+(\.\d+)?$)" "${@:2}" | tr "\n" "\0"
-  fi
+  grep -oP "^$1\b" "${@:2}" | tr "\n" "\0"
 }
 
 # Input:    "<pattern> <file1>{ <fileN>}"
@@ -101,10 +92,10 @@ function find_var_values {
 # MAIN STAGES
 ################################################################################
 
-# The options `--debug` and `--test-data` are not in the official help.
+# The option `--debug` is not in the official help.
 #
 function decode_cmdline_parameters {
-  eval set -- "$(getopt --options hg:a:s:o: --long help,log-files-glob:,aggregate:,start:,only:,debug,test-data -- "$@")"
+  eval set -- "$(getopt --options hg:a:s:o: --long help,log-files-glob:,aggregate:,start:,only:,debug -- "$@")"
 
   while true; do
     case "$1" in
@@ -125,9 +116,6 @@ function decode_cmdline_parameters {
         shift 2 ;;
       --debug)
         v_debug=1
-        shift ;;
-      --test-data)
-        v_test_data=1
         shift ;;
       --)
         shift
@@ -151,8 +139,6 @@ function decode_cmdline_parameters {
 # after.
 #
 function prepare_variables {
-  set +o nounset
-
   mapfile -d '' v_reference_stat_files < <(find_log_files "$v_reference_stats_directory")
 
   if [[ -v c_aggregates["$v_aggregate_name"] ]]; then
@@ -165,22 +151,7 @@ function prepare_variables {
     v_var_names_filter=${v_var_names_filter//,/|}
   fi
 
-  mapfile -d '' v_reference_var_names < <(find_var_names "$v_var_names_filter" "${v_reference_stat_files[0]}")
-
-  set -o nounset
-}
-
-function create_test_data {
-  rm -rf /tmp/stats{,2}
-  mkdir -p /tmp/stats{,2}
-
-  printf "aaa 1\nbbb 2\nccc 3" > "/tmp/stats/stats_z 0.log"
-  printf "aaa 2\nbbb 2\nccc 5" > "/tmp/stats/stats_z 1.log"
-  printf "aaa 5\nbbb 6\nccc 1" > "/tmp/stats/stats_z 2.log"
-
-  printf "aaa 2\nbbb 4\nccc 6" > "/tmp/stats2/stats_z 0.log"
-  printf "aaa 4\nbbb 4\nccc 9" > "/tmp/stats2/stats_z 1.log"
-  printf "aaa 8\nbbb 9\nccc 2" > "/tmp/stats2/stats_z 2.log"
+  mapfile -d '' v_reference_var_names < <(find_var_names "$v_var_names_filter" "${v_reference_stat_files[0]}" 2> /dev/null) || true
 }
 
 function enable_debug {
@@ -190,8 +161,6 @@ function enable_debug {
 }
 
 function check_requirements {
-  [[ "$v_debug" == "1" ]] && echo "Checking data ..." || true
-
   if [[ ! -x $(command -v plot_diagram) ]]; then
     echo 'The program `plot_diagram` (from openscripts) needs to be in $PATH'.
     exit 1
@@ -202,8 +171,6 @@ function check_requirements {
     echo "No variables found in the reference file!"
     exit 1
   fi
-
-  [[ "$v_debug" == "1" ]] && echo "- directories consistency ..." || true
 
   for stats_directory in "${v_stat_directories[@]}"; do
     if [[ ! -d "$stats_directory" ]]; then
@@ -266,51 +233,21 @@ function check_requirements {
 #       val_dir1_statN ... vak_dirN_statN
 #
 function prepare_merged_datafiles {
-  [[ "$v_debug" == "1" ]] && echo "Preparing merged datafiles ..." || true
-
   mkdir -p "$c_temporary_merge_directory"
 
-  # Format: [var_name]="single line of stats"
-  #
-  declare -A var_stat_lines
-
   for var_name in "${v_reference_var_names[@]}"; do
-    var_stat_lines["$var_name"]=""
-  done
+    local var_data_file="$c_temporary_merge_directory/${var_name}.${c_diagram_file_data_extension}"
 
-  [[ "$v_debug" == "1" ]] && echo -n '- processing files: ' || true
+    for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
+      mapfile -d '' stat_file_instances < <(find "${v_stat_directories[@]}" -name "$(basename "$reference_stat_file")" -print0)
+      mapfile -d '' var_values_across_instances < <(find_var_values "$var_name" "${stat_file_instances[@]}")
 
-  for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
-    [[ "$v_debug" == "1" ]] && echo -n "." || true
+      echo "${var_values_across_instances[*]}" >> "$var_data_file"
 
-    mapfile -d '' stat_file_instances < <(find "${v_stat_directories[@]}" -name "$(basename "$reference_stat_file")" -print0)
-
-    for stat_file_instance in "${stat_file_instances[@]}"; do
-      while IFS= read -r line; do
-        local var_name=${line% *}
-        local var_value=${line#* }
-
-        if [[ -v var_stat_lines["$var_name"] ]]; then
-          [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
-          var_stat_lines["$var_name"]+=$var_value
-        fi
-
-        unset var_data
-      done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$stat_file_instance")"
+      unset var_values_across_instances
+      unset stat_file_instances
     done
-
-    for var_name in "${v_reference_var_names[@]}"; do
-      local var_data_file="$c_temporary_merge_directory/${var_name}.${c_diagram_file_data_extension}"
-
-      echo "${var_stat_lines["$var_name"]}" >> "$var_data_file"
-
-      var_stat_lines["$var_name"]=""
-    done
-
-    unset stat_file_instances
   done
-
-  [[ "$v_debug" == "1" ]] && echo || true
 }
 
 function create_diagrams {
@@ -386,7 +323,6 @@ function open_first_diagram {
 ################################################################################
 
 decode_cmdline_parameters "${@}"
-if [[ "$v_test_data" == "1" ]]; then create_test_data; fi
 if [[ "$v_debug" == "1" ]]; then enable_debug; fi
 prepare_variables
 check_requirements
