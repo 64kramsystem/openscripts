@@ -33,11 +33,11 @@ class PlotDiagramCommandLineDecoder
     HELP
 
     SimpleScripting::Argv.decode(
-      ['-c', '--csv',             'Sets the input format as CSV'],
-      ['-s', '--smooth',          'Smooth line'],
-      ['-t', '--title TITLE',     'Set the title'],
-      ['-o', '--output FILENAME', 'Outputs to the specified file, instead of printing to screen'],
-      ['-v', '--verbose',         'Verbose mode (prints gnuplot commands)'],
+      ['-c', '--csv',                     'Sets the input format as CSV'],
+      ['-s', '--smooth',                  'Smooth line'],
+      ['-t', '--title TITLE',             'Set the title'],
+      ['-o', '--output FILENAME',         'Outputs to the specified file, instead of printing to screen'],
+      ['-v', '--verbose',                 'Verbose mode (prints gnuplot commands)'],
       '[data_file]',
     ) || exit
   end
