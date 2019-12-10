@@ -265,23 +265,51 @@ function check_requirements {
 #       val_dir1_stat1 ... val_dirN_stat1
 #       val_dir1_statN ... vak_dirN_statN
 #
+# This version is optimized; instead of adding an extra loop with the variables, each file is read
+# fully, and the variable names and values are stored in a hash, then appended to the files
+# corresponding to each variable.
+#
 function prepare_merged_datafiles {
   [[ "$v_debug" == "1" ]] && echo -n "Preparing merged datafiles: " || true
 
   mkdir -p "$c_temporary_merge_directory"
 
+  # Format: [var_name]="single line of stats"
+  #
+  declare -A var_stat_lines
+
   for var_name in "${v_reference_var_names[@]}"; do
-    local var_data_file="$c_temporary_merge_directory/${var_name}.${c_diagram_file_data_extension}"
+    var_stat_lines["$var_name"]=""
+  done
 
-    for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
-      mapfile -d '' stat_file_instances < <(find "${v_stat_directories[@]}" -name "$(basename "$reference_stat_file")" -print0)
-      mapfile -d '' var_values_across_instances < <(find_var_values "$var_name" "${stat_file_instances[@]}")
+  for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
+    [[ "$v_debug" == "1" ]] && echo -n "." || true
 
-      echo "${var_values_across_instances[*]}" >> "$var_data_file"
+    mapfile -d '' stat_file_instances < <(find "${v_stat_directories[@]}" -name "$(basename "$reference_stat_file")" -print0)
 
-      unset var_values_across_instances
-      unset stat_file_instances
+    for stat_file_instance in "${stat_file_instances[@]}"; do
+      while IFS= read -r line; do
+        local var_name=${line% *}
+        local var_value=${line#* }
+
+        if [[ -v var_stat_lines["$var_name"] ]]; then
+          [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
+          var_stat_lines["$var_name"]+=$var_value
+        fi
+
+        unset var_data
+      done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$stat_file_instance")"
     done
+
+    for var_name in "${v_reference_var_names[@]}"; do
+      local var_data_file="$c_temporary_merge_directory/${var_name}.${c_diagram_file_data_extension}"
+
+      echo "${var_stat_lines["$var_name"]}" >> "$var_data_file"
+
+      var_stat_lines["$var_name"]=""
+    done
+
+    unset stat_file_instances
 
     [[ "$v_debug" == "1" ]] && echo -n "." || true
   done
