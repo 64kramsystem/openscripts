@@ -285,7 +285,12 @@ function prepare_merged_datafiles {
   for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
     [[ "$v_debug" == "1" ]] && echo -n "." || true
 
-    mapfile -d '' stat_file_instances < <(find "${v_stat_directories[@]}" -name "$(basename "$reference_stat_file")" -print0)
+    # Computing the instances rather than `find`ing them, gives a non-negligible boost.
+    local stat_file_instances=()
+
+    for stat_directory in "${v_stat_directories[@]}"; do
+      stat_file_instances+=("$stat_directory/$(basename "$reference_stat_file")")
+    done
 
     for stat_file_instance in "${stat_file_instances[@]}"; do
       while IFS= read -r line; do
@@ -309,12 +314,10 @@ function prepare_merged_datafiles {
       var_stat_lines["$var_name"]=""
     done
 
-    unset stat_file_instances
-
     [[ "$v_debug" == "1" ]] && echo -n "." || true
   done
 
-  echo
+  [[ "$v_debug" == "1" ]] && echo || true
 }
 
 function create_diagrams {
