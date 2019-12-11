@@ -11,6 +11,8 @@ set -o pipefail
 c_default_log_files_glob="*.log"
 c_diagram_file_data_extension=txt
 c_diagram_file_extension=png
+c_aggregates_file_prefix=aggregates_
+c_aggregates_file_extension=.txt
 
 # Executed as `perl -lane` code, with the values sent to stdin; the operations must print the result.
 #
@@ -34,7 +36,7 @@ The default stat files glob pattern is \`$c_default_log_files_glob\`.
 
 If the \`--only\` option is passed, only the variables specified are selected.
 
-The \`--aggregate\` functionality applies the given function to the values of each variable, and prints them before displaying the diagrams.
+The \`--aggregate\` functionality applies the given function to the values of each variable, and stores them as \`$c_aggregates_file_prefix<aggregate_name>$c_aggregates_file_extension\` in the destination directory.
 
 The currently supported fucntions are: $(IFS=,; echo "${!c_aggregates[*]}").
 
@@ -356,22 +358,22 @@ function create_diagrams {
   echo
 }
 
-function compute_and_print_aggregates {
-  echo '# Aggregates'
-
+function compute_aggregates {
   for var_name in "${v_reference_var_names[@]}"; do
     for stats_directory in "${v_stat_directories[@]}"; do
       mapfile -d '' stat_files < <(find_log_files "$stats_directory")
       mapfile -d '' var_values < <(find_var_values "$var_name" "${stat_files[@]}")
 
-      local aggregate_result
-      aggregate_result=$(IFS=$'\n'; echo "${var_values[*]}" | perl -lane "$v_aggregate_code")
+      local aggregate_result=
 
       if [[ ${#v_stat_directories[@]} -gt 1 ]]; then
-        echo -n "$(basename "$stats_directory")."
+        aggregate_result="$(basename "$stats_directory")."
       fi
 
-      echo "$var_name $v_aggregate_name: $aggregate_result"
+      aggregate_result+="$var_name $v_aggregate_name: $(IFS=$'\n'; echo "${var_values[*]}" | perl -lane "$v_aggregate_code")"
+
+      echo "$aggregate_result" >> "$v_destination_dir/${c_aggregates_file_prefix}${v_aggregate_name}${c_aggregates_file_extension}"
+      [[ "$v_debug" == "1" ]] && echo "$aggregate_result" || true
 
       unset var_values
       unset stat_files
@@ -402,5 +404,5 @@ prepare_variables
 check_requirements
 prepare_merged_datafiles
 create_diagrams
-if [[ "$v_aggregate_code" != "" ]]; then compute_and_print_aggregates; fi
+if [[ "$v_aggregate_code" != "" ]]; then compute_aggregates; fi
 open_first_diagram
