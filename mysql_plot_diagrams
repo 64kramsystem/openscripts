@@ -297,17 +297,15 @@ function prepare_merged_datafiles {
       stat_file_instances+=("$stat_directory/$(basename "$reference_stat_file")")
     done
 
-    for stat_file_instance in "${stat_file_instances[@]}"; do
-      while read -r line || [[ -n "$line" ]]; do
-        local var_name=${line% *}
-        local var_value=${line#* }
+    while read -r line || [[ -n "$line" ]]; do
+      local var_name=${line% *}
+      local var_value=${line#* }
 
-        if [[ -v var_stat_lines["$var_name"] ]]; then
-          [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
-          var_stat_lines["$var_name"]+=$var_value
-        fi
-      done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$stat_file_instance")"
-    done
+      if [[ -v var_stat_lines["$var_name"] ]]; then
+        [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
+        var_stat_lines["$var_name"]+=$var_value
+      fi
+    done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "${stat_file_instances[@]}")"
 
     for var_name in "${v_reference_var_names[@]}"; do
       local var_data_file="$v_destination_dir/${var_name}.${c_diagram_file_data_extension}"
