@@ -297,6 +297,9 @@ function prepare_merged_datafiles {
       stat_file_instances+=("$stat_directory/$(basename "$reference_stat_file")")
     done
 
+    # Collect all the values of the variables across the instances of the stat file reference
+    # (that is, across directories).
+
     while read -r line || [[ -n "$line" ]]; do
       local var_name=${line% *}
       local var_value=${line#* }
@@ -306,6 +309,8 @@ function prepare_merged_datafiles {
         var_stat_lines["$var_name"]+=$var_value
       fi
     done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "${stat_file_instances[@]}")"
+
+    # Output the lines of each variable in the variable (merged) output file.
 
     for var_name in "${v_reference_var_names[@]}"; do
       echo "${var_stat_lines["$var_name"]}" >> "$v_destination_dir/${var_name}.${c_diagram_file_data_extension}"
