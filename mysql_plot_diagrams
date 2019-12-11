@@ -306,8 +306,6 @@ function prepare_merged_datafiles {
           [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
           var_stat_lines["$var_name"]+=$var_value
         fi
-
-        unset var_data
       done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$stat_file_instance")"
     done
 
