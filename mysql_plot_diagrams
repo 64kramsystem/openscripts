@@ -298,7 +298,7 @@ function prepare_merged_datafiles {
     done
 
     for stat_file_instance in "${stat_file_instances[@]}"; do
-      while IFS= read -r line; do
+      while read -r line || [[ -n "$line" ]]; do
         local var_name=${line% *}
         local var_value=${line#* }
 
