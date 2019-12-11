@@ -354,25 +354,50 @@ function create_diagrams {
   echo
 }
 
+# Optimized similarly to prepare_merged_datafiles().
+#
 function compute_aggregates {
-  for var_name in "${v_reference_var_names[@]}"; do
-    for stats_directory in "${v_stat_directories[@]}"; do
-      mapfile -d '' stat_files < <(find_log_files "$stats_directory")
-      mapfile -d '' var_values < <(find_var_values "$var_name" "${stat_files[@]}")
+  for stats_directory in "${v_stat_directories[@]}"; do
+    # Format: [var_name]="<val1>\n<valN>..."
+    #
+    declare -A var_stat_values
 
-      local aggregate_result=
+    for var_name in "${v_reference_var_names[@]}"; do
+      var_stat_values["$var_name"]=""
+    done
+
+    for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
+      # Computing the instances rather than `find`ing them, gives a non-negligible boost.
+      local stat_file_instances=()
+
+      for stat_directory in "${v_stat_directories[@]}"; do
+        stat_file_instances+=("$stat_directory/$(basename "$reference_stat_file")")
+      done
+
+      while read -r line || [[ -n "$line" ]]; do
+        local var_name=${line% *}
+        local var_value=${line#* }
+
+        if [[ -v var_stat_values["$var_name"] ]]; then
+          [[ -n "${var_stat_values["$var_name"]}" ]] && var_stat_values["$var_name"]+=' ' || true
+          var_stat_values["$var_name"]+=${var_value}$'\n'
+        fi
+      done < "${stat_file_instances[@]}"
+    done
+
+    for var_name in "${v_reference_var_names[@]}"; do
+      local var_stat_aggregate_output=
 
       if [[ ${#v_stat_directories[@]} -gt 1 ]]; then
-        aggregate_result="$(basename "$stats_directory")."
+        var_stat_aggregate_output="$(basename "$stats_directory")."
       fi
 
-      aggregate_result+="$var_name $v_aggregate_name: $(IFS=$'\n'; echo "${var_values[*]}" | perl -lane "$v_aggregate_code")"
+      var_stat_aggregate_output+="$var_name $v_aggregate_name: $(echo -n "${var_stat_values["$var_name"]}" | perl -ane "$v_aggregate_code")"
 
-      echo "$aggregate_result" >> "$v_destination_dir/${c_aggregates_file_prefix}${v_aggregate_name}${c_aggregates_file_extension}"
-      [[ "$v_debug" == "1" ]] && echo "$aggregate_result" || true
+      echo "$var_stat_aggregate_output" >> "$v_destination_dir/${c_aggregates_file_prefix}${v_aggregate_name}${c_aggregates_file_extension}"
+      [[ "$v_debug" == "1" ]] && echo "$var_stat_aggregate_output" || true
 
-      unset var_values
-      unset stat_files
+      var_stat_values["$var_name"]=""
     done
   done
 }
