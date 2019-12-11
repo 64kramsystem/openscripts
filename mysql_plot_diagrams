@@ -54,7 +54,6 @@ v_aggregate_code=
 v_log_files_glob=$c_default_log_files_glob
 v_reference_stat_files=
 v_reference_var_names=
-# v_merged_stat_files=()
 v_stat_directories=
 v_destination_dir=$(mktemp -d -t 'mysql_diagrams.XXXXXXXX')
 
