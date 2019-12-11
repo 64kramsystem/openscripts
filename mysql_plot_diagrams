@@ -11,7 +11,7 @@ set -o pipefail
 c_default_log_files_glob="*.log"
 c_diagram_file_data_extension=txt
 c_diagram_file_extension=png
-c_temporary_merge_directory=$(mktemp -d)
+c_temporary_merge_directory=$(mktemp -d -t 'mysql_diagrams.XXXXXXXX')
 
 # Executed as `perl -lane` code, with the values sent to stdin; the operations must print the result.
 #
