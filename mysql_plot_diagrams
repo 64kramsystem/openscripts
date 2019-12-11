@@ -12,7 +12,7 @@ c_default_log_files_glob="*.log"
 c_diagram_file_data_extension=txt
 c_diagram_file_extension=png
 c_aggregates_file_prefix=aggregates_
-c_aggregates_file_extension=.txt
+c_aggregates_file_extension=txt
 
 # Executed as `perl -lane` code, with the values sent to stdin; the operations must print the result.
 #
@@ -36,7 +36,7 @@ The default stat files glob pattern is \`$c_default_log_files_glob\`.
 
 If the \`--only\` option is passed, only the variables specified are selected.
 
-The \`--aggregate\` functionality applies the given function to the values of each variable, and stores them as \`$c_aggregates_file_prefix<aggregate_name>$c_aggregates_file_extension\` in the destination directory.
+The \`--aggregate\` functionality applies the given function to the values of each variable, and stores them as \`$c_aggregates_file_prefix<aggregate_name>.$c_aggregates_file_extension\` in the destination directory.
 
 The currently supported fucntions are: $(IFS=,; echo "${!c_aggregates[*]}").
 
@@ -283,13 +283,14 @@ function prepare_merged_datafiles {
   declare -A var_stat_lines
 
   for var_name in "${v_reference_var_names[@]}"; do
-    var_stat_lines["$var_name"]=""
+    var_stat_lines["$var_name"]=
   done
 
   for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
     [[ "$v_debug" == "1" ]] && echo -n "." || true
 
-    # Computing the instances rather than `find`ing them, gives a non-negligible boost.
+    # Computing the instances, rather than `find`ing them, gives a non-negligible boost.
+    #
     local stat_file_instances=()
 
     for stat_directory in "${v_stat_directories[@]}"; do
@@ -307,11 +308,9 @@ function prepare_merged_datafiles {
     done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "${stat_file_instances[@]}")"
 
     for var_name in "${v_reference_var_names[@]}"; do
-      local var_data_file="$v_destination_dir/${var_name}.${c_diagram_file_data_extension}"
+      echo "${var_stat_lines["$var_name"]}" >> "$v_destination_dir/${var_name}.${c_diagram_file_data_extension}"
 
-      echo "${var_stat_lines["$var_name"]}" >> "$var_data_file"
-
-      var_stat_lines["$var_name"]=""
+      var_stat_lines["$var_name"]=
     done
 
     [[ "$v_debug" == "1" ]] && echo -n "." || true
@@ -332,8 +331,7 @@ function create_diagrams {
   # However, that works for the very basic case of one line.
   #
   for var_name in "${v_reference_var_names[@]}"; do
-    local var_data_file
-    var_data_file="$v_destination_dir/${var_name}.${c_diagram_file_data_extension}"
+    local var_data_file=$v_destination_dir/${var_name}.${c_diagram_file_data_extension}
 
     local titles=()
 
@@ -362,7 +360,7 @@ function compute_aggregates {
     declare -A var_stat_values
 
     for var_name in "${v_reference_var_names[@]}"; do
-      var_stat_values["$var_name"]=""
+      var_stat_values["$var_name"]=
     done
 
     for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
@@ -393,10 +391,10 @@ function compute_aggregates {
 
       var_stat_aggregate_output+="$var_name $v_aggregate_name: $(echo -n "${var_stat_values["$var_name"]}" | perl -ane "$v_aggregate_code")"
 
-      echo "$var_stat_aggregate_output" >> "$v_destination_dir/${c_aggregates_file_prefix}${v_aggregate_name}${c_aggregates_file_extension}"
+      echo "$var_stat_aggregate_output" >> "$v_destination_dir/${c_aggregates_file_prefix}${v_aggregate_name}.${c_aggregates_file_extension}"
       [[ "$v_debug" == "1" ]] && echo "$var_stat_aggregate_output" || true
 
-      var_stat_values["$var_name"]=""
+      var_stat_values["$var_name"]=
     done
   done
 }
