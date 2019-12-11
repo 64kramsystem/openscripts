@@ -189,13 +189,13 @@ function create_test_data {
   rm -rf /tmp/stats{,2}
   mkdir -p /tmp/stats{,2}
 
-  printf "aaa 1\nbbb 2\nccc 3" > "/tmp/stats/stats_z 0.log"
-  printf "aaa 2\nbbb 2\nccc 5" > "/tmp/stats/stats_z 1.log"
-  printf "aaa 5\nbbb 6\nccc 1" > "/tmp/stats/stats_z 2.log"
+  printf "aaa 1\nbbb 2\nccc 30" > "/tmp/stats/stats_z 0.log"
+  printf "aaa 2\nbbb 2\nccc 50" > "/tmp/stats/stats_z 1.log"
+  printf "aaa 5\nbbb 6\nccc 10" > "/tmp/stats/stats_z 2.log"
 
-  printf "aaa 2\nbbb 4\nccc 6" > "/tmp/stats2/stats_z 0.log"
-  printf "aaa 4\nbbb 4\nccc 9" > "/tmp/stats2/stats_z 1.log"
-  printf "aaa 8\nbbb 9\nccc 2" > "/tmp/stats2/stats_z 2.log"
+  printf "aaa 2\nbbb 4\nccc 60" > "/tmp/stats2/stats_z 0.log"
+  printf "aaa 4\nbbb 4\nccc 90" > "/tmp/stats2/stats_z 1.log"
+  printf "aaa 8\nbbb 9\nccc 20" > "/tmp/stats2/stats_z 2.log"
 }
 
 function enable_debug {
