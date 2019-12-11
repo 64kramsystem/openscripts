@@ -273,7 +273,7 @@ function check_requirements {
 # fully, and the variable names and values are stored in a hash, then appended to the files
 # corresponding to each variable.
 #
-function prepare_merged_datafiles {
+function prepare_multi_dir_datafiles {
   [[ "$v_debug" == "1" ]] && echo -n "Preparing merged datafiles: " || true
 
   mkdir -p "$v_destination_dir"
@@ -356,7 +356,7 @@ function create_diagrams {
   echo
 }
 
-# Optimized similarly to prepare_merged_datafiles().
+# Optimized similarly to prepare_multi_dir_datafiles().
 #
 function compute_aggregates {
   for stats_directory in "${v_stat_directories[@]}"; do
@@ -425,7 +425,7 @@ if [[ "$v_test_data" == "1" ]]; then create_test_data; fi
 if [[ "$v_debug" == "1" ]]; then enable_debug; fi
 prepare_variables
 check_requirements
-prepare_merged_datafiles
+prepare_multi_dir_datafiles
 create_diagrams
 if [[ "$v_aggregate_code" != "" ]]; then compute_aggregates; fi
 open_first_diagram
