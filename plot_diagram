@@ -108,10 +108,10 @@ class PlotDiagram
     data, x_time_format = parse_data_file(data_file, csv)
     data_column_numbers = find_data_columns_number(data)
 
-    check_data_and_parameters_consistency!(x_time_format, data_column_numbers, fit, auto_y_scale)
+    check_data_and_parameters_consistency!(x_time_format, data_column_numbers)
 
     using_prefix, start_index = compute_using_settings(x_time_format, no_x, data_column_numbers)
-    column_transformation = compute_column_transformation(data, start_index) if auto_y_scale
+    column_transformation = compute_column_transformation(data, start_index, fit) if auto_y_scale
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
 
     commands = prepare_command_output_settings(output)
@@ -260,9 +260,8 @@ class PlotDiagram
     end
   end
 
-  def check_data_and_parameters_consistency!(x_time_format, data_column_numbers, fit, auto_y_scale)
+  def check_data_and_parameters_consistency!(x_time_format, data_column_numbers)
     raise "Data is composed of only one date column!" if x_time_format && data_column_numbers == 1
-    raise "Fit mode is currently required when using auto Y scale!" if auto_y_scale && !fit
   end
 
   # Returns [using_prefix, start_index]
@@ -279,12 +278,16 @@ class PlotDiagram
     [using_prefix, start_index]
   end
 
-  def compute_column_transformation(data, start_index)
+  def compute_column_transformation(data, start_index, fit)
     transposed_data = data.transpose[(start_index - 1) .. -1]
 
-    shifts = transposed_data.map { |line_values| 0 - line_values.min }
-
-    ranges = transposed_data.zip(shifts).map { |line_values, shift| line_values.max + shift }
+    if fit
+      shifts = transposed_data.map { |line_values| 0 - line_values.min }
+      ranges = transposed_data.zip(shifts).map { |line_values, shift| line_values.max + shift }
+    else
+      shifts = transposed_data.map { 0 }
+      ranges = transposed_data.map { |line_values| line_values.map(&:abs).max }
+    end
 
     scaling_factors = ranges.map do |range|
       if range == 0
