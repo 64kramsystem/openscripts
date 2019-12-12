@@ -10,12 +10,15 @@ c_configuration_dump_filename=configuration.txt
 
 v_input_regex=
 v_input_var_name="Input value"
+v_limit=
 
-c_help="Usage: $(basename "$0") [(-r|--input-regex)=<regex>] [(-v|--input-var-name)=<var_name>] <stats_dir>
+c_help="Usage: $(basename "$0") [(-r|--input-regex)=<regex>] [(-v|--input-var-name)=<var_name>] [(-l|--limit)=<number>] <stats_dir>
 
 Collects the MySQL status values and dumps them into <stats_dir> (with prefix \`$c_stat_files_prefix\`), along with a dump of the server configuration (with filename $c_configuration_dump_filename).
 
 If <stats_dir> exists, it's renamed to \`<stats_dir>.bak\`; if the renamed directory already exists, it's deleted.
+
+The \`--limit\` option limits the number of stats (dumps) collected.
 
 There are two processing modes: without input from stdin or with.
 
@@ -34,7 +37,7 @@ For example:
 will dump two sets of stats, each one including a stat named \`myvalue\` whose values are, for each cycle, respectively \`1\` and \`3\`."
 
 function decode_cmdline_parameters {
-  eval set -- "$(getopt --options hr:v: --long help,input-regex:,input-var-name: -- "$@")"
+  eval set -- "$(getopt --options hr:v:l: --long help,input-regex:,input-var-name:,limit: -- "$@")"
 
   while true ; do
     case "$1" in
@@ -46,6 +49,9 @@ function decode_cmdline_parameters {
         shift 2 ;;
       -v|--input-var-name)
         v_input_var_name=$2
+        shift 2 ;;
+      -l|--limit)
+        v_limit=$2
         shift 2 ;;
       --)
         shift
@@ -117,6 +123,12 @@ function cycle_dump_stats {
       dump_stats_snapshot "$i"
 
       sleep "0.$(printf '%04d' $((10000 - 10#$(date +%4N))))"
+
+      # The first condition is actually optional.
+      #
+      if [[ -n "$v_limit" ]] && (( i == v_limit - 1 )); then
+        exit
+      fi
     done
   else
     # Case: input comes from another process.
@@ -126,17 +138,19 @@ function cycle_dump_stats {
     while IFS= read -r line || [[ -n "$line" ]]; do
       echo "$line"
 
-      if [[ "$v_input_regex" != "" ]]; then
-        input_value=$(perl -ne "print /$v_input_regex/" <<< "$line")
-      else
-        input_value=$line
-      fi
+      if [[ -z "$v_limit" ]] || (( i < "$v_limit" )); then
+        if [[ "$v_input_regex" != "" ]]; then
+          input_value=$(perl -ne "print /$v_input_regex/" <<< "$line")
+        else
+          input_value=$line
+        fi
 
-      if [[ "$input_value" != "" ]]; then
-        dump_stats_snapshot "$i"
-        dump_input_value "$input_value" "$i"
+        if [[ "$input_value" != "" ]]; then
+          dump_stats_snapshot "$i"
+          dump_input_value "$input_value" "$i"
 
-        ((i+=1))
+          ((i+=1))
+        fi
       fi
     done
   fi
