@@ -187,7 +187,7 @@ class PlotDiagram
     start_index.upto(data_column_numbers).inject("") do |commands, i|
       column_reference = column_transformation ? column_transformation[i] : i
 
-      commands += " '#{data_file}' using #{using_prefix}#{column_reference} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
+      commands += " '#{data_file}' using #{using_prefix}#{column_reference} with lines #{smooth_option} title '#{titles[i - start_index]}'"
 
       commands += ', \\' if i < data_column_numbers
       commands + "\n"
