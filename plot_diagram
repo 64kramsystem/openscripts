@@ -105,9 +105,8 @@ class PlotDiagram
   end
 
   def prepare_gnuplot_commands(data_file, csv: false, no_x: false, auto_y_scale: false, fit: false, smooth: false, titles: nil, output: nil, **)
-    data = parse_data_file(data_file, csv)
+    data, x_time_format = parse_data_file(data_file, csv)
     data_column_numbers = find_data_columns_number(data)
-    x_time_format = find_x_time_format(data)
 
     check_data_and_parameters_consistency!(x_time_format, data_column_numbers, fit, auto_y_scale)
 
@@ -170,8 +169,8 @@ class PlotDiagram
   def prepare_command_set_y_range(data, fit, start_index)
     return "" if fit
 
-    all_positive = data.flat_map { |row| row[start_index - 1] }.all? { |i| i.to_f.positive? }
-    all_negative = data.flat_map { |row| row[start_index - 1] }.all? { |i| i.to_f.negative? }
+    all_positive = data.flat_map { |row| row[start_index - 1] }.all?(&:positive?)
+    all_negative = data.flat_map { |row| row[start_index - 1] }.all?(&:negative?)
 
     if all_positive
       "set yrange [0:]\n"
@@ -233,13 +232,17 @@ class PlotDiagram
       raise "No data found in the file!"
     end
 
-    data
+    x_time_format = find_x_time_format(data)
+
+    numbers_start_i = x_time_format ? 1 : 0
+
+    data = data.map { |row| row[0 ... numbers_start_i] + row[numbers_start_i .. -1].map(&:to_f) }
+
+    [data, x_time_format]
   end
 
   def find_x_time_format(data)
-    first_potential_timestamp = data[0][0][/^[\w-]+/]
-
-    case first_potential_timestamp
+    case data[0][0]
     when /^\d{,2}-\d{,2}$/
       "%m-%d"
     when /^(#{MONTHS.join'|'})-\d{,2}$/i
@@ -277,7 +280,7 @@ class PlotDiagram
   end
 
   def compute_column_transformation(data, start_index)
-    transposed_data = data.transpose[(start_index - 1) .. -1].map { |y_values| y_values.map(&:to_f) }
+    transposed_data = data.transpose[(start_index - 1) .. -1]
 
     shifts = transposed_data.map { |line_values| 0 - line_values.min }
 
