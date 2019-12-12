@@ -114,7 +114,7 @@ class PlotDiagram
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
 
     commands = prepare_command_output_settings(output)
-    commands += prepare_command_graph_properties(auto_y_scale)
+    commands += prepare_command_graph_properties(auto_y_scale, smooth)
     commands += prepare_command_csv_setting if csv
     commands += prepare_command_date_settings(no_x, x_time_format) if x_time_format
     commands += prepare_command_plot_keyword
@@ -157,9 +157,10 @@ class PlotDiagram
     end
   end
 
-  def prepare_command_graph_properties(auto_y_scale)
+  def prepare_command_graph_properties(auto_y_scale, smooth)
     command = "set offset graph 0, 0, #{Y_PADDING_FRACTION}, #{Y_PADDING_FRACTION}\n"
     command += "set format y ''\n" if auto_y_scale
+    command += "set samples 1000\n" if smooth
     command
   end
 
