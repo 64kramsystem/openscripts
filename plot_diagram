@@ -104,9 +104,13 @@ class PlotDiagram
 
   def prepare_gnuplot_commands(data_file, csv: false, no_x: false, auto_y_scale: false, smooth: false, titles: nil, output: nil, **)
     data = parse_data_file(data_file, csv)
-    x_time_format = find_x_time_format(data)
-    using_prefix, start_index, column_transformation = compute_using_settings(data, x_time_format, no_x, auto_y_scale)
     data_column_numbers = find_data_columns_number(data)
+    x_time_format = find_x_time_format(data)
+
+    check_data_and_parameters_consistency!(x_time_format, data_column_numbers)
+
+    using_prefix, start_index = compute_using_settings(x_time_format, no_x, data_column_numbers)
+    column_transformation = compute_column_transformation(data, start_index) if auto_y_scale
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
 
     commands = prepare_command_output_settings(output)
@@ -234,10 +238,14 @@ class PlotDiagram
     end
   end
 
-  # Returns [using_prefix, start_index, column_transformation]
+  def check_data_and_parameters_consistency!(x_time_format, data_column_numbers)
+    raise "Data is composed of only one date column!" if x_time_format && data_column_numbers == 1
+  end
+
+  # Returns [using_prefix, start_index]
   #
-  def compute_using_settings(data, x_time_format, no_x, auto_y_scale)
-    if x_time_format || !no_x
+  def compute_using_settings(x_time_format, no_x, data_column_numbers)
+    if x_time_format || (!no_x && data_column_numbers > 1)
       # Required when specifying time data.
       using_prefix = "1:"
       start_index = 2
@@ -245,25 +253,25 @@ class PlotDiagram
       start_index = 1
     end
 
-    if auto_y_scale
-      transposed_data = data.transpose[(start_index - 1) .. -1].map { |y_values| y_values.map(&:to_f) }
+    [using_prefix, start_index]
+  end
 
-      shifts = transposed_data.map { |line_values| 0 - line_values.min }
+  def compute_column_transformation(data, start_index)
+    transposed_data = data.transpose[(start_index - 1) .. -1].map { |y_values| y_values.map(&:to_f) }
 
-      ranges = transposed_data.zip(shifts).map { |line_values, shift| line_values.max + shift }
+    shifts = transposed_data.map { |line_values| 0 - line_values.min }
 
-      scaling_factors = ranges.map do |range|
-        if range == 0
-          1
-        else
-          ranges.max / range
-        end
+    ranges = transposed_data.zip(shifts).map { |line_values, shift| line_values.max + shift }
+
+    scaling_factors = ranges.map do |range|
+      if range == 0
+        1
+      else
+        ranges.max / range
       end
-
-      column_transformation = ->(i) { "(#{scaling_factors[i - 1]} * ($#{i} + #{shifts[i - 1]}))" }
     end
 
-    [using_prefix, start_index, column_transformation]
+    ->(i) { "(#{scaling_factors[i - 1]} * ($#{i} + #{shifts[i - 1]}))" }
   end
 
   def find_data_columns_number(data)
