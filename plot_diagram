@@ -107,6 +107,8 @@ class PlotDiagram
     data_column_numbers = find_data_columns_number(data)
     x_time_format = find_x_time_format(data)
 
+    check_data_and_parameters_consistency!(x_time_format, data_column_numbers)
+
     using_prefix, start_index = compute_using_settings(x_time_format, no_x, data_column_numbers)
     column_transformation = compute_column_transformation(data, start_index) if auto_y_scale
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
@@ -234,6 +236,10 @@ class PlotDiagram
     else
       nil
     end
+  end
+
+  def check_data_and_parameters_consistency!(x_time_format, data_column_numbers)
+    raise "Data is composed of only one date column!" if x_time_format && data_column_numbers == 1
   end
 
   # Returns [using_prefix, start_index]
