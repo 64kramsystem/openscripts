@@ -44,6 +44,7 @@ class PlotDiagramCommandLineDecoder
     SimpleScripting::Argv.decode(
       ['-c', '--csv',                     'Sets the input format as CSV'],
       ['-s', '--smooth',                  'Smooth line'],
+      ['-f', '--fit',                     'Fit the diagram, instead of starting Y at 0'],
       ['-x', '--no-x',                    'With multiple columns, build a diagram without X values'],
       ['-a', '--auto-y-scale',            'With multiple columns, autoscale all the lines to fit the diagram'],
       ['-t', '--titles TITLE_1,TITLE_N',  'Set the titles'],
@@ -68,6 +69,7 @@ class PlotDiagram
   #   :csv
   #   :smooth
   #   :no_x
+  #   :fit
   #   :auto_y_scale
   #   :titles
   #   :output
@@ -102,19 +104,19 @@ class PlotDiagram
     end
   end
 
-  def prepare_gnuplot_commands(data_file, csv: false, no_x: false, auto_y_scale: false, smooth: false, titles: nil, output: nil, **)
-    data = parse_data_file(data_file, csv)
+  def prepare_gnuplot_commands(data_file, csv: false, no_x: false, auto_y_scale: false, fit: false, smooth: false, titles: nil, output: nil, **)
+    data, x_time_format = parse_data_file(data_file, csv)
     data_column_numbers = find_data_columns_number(data)
-    x_time_format = find_x_time_format(data)
 
-    check_data_and_parameters_consistency!(x_time_format, data_column_numbers)
+    check_data_and_parameters_consistency!(x_time_format, data_column_numbers, fit, auto_y_scale)
 
     using_prefix, start_index = compute_using_settings(x_time_format, no_x, data_column_numbers)
     column_transformation = compute_column_transformation(data, start_index) if auto_y_scale
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
 
     commands = prepare_command_output_settings(output)
-    commands += prepare_command_graph_properties(auto_y_scale)
+    commands += prepare_command_graph_properties(auto_y_scale, smooth)
+    commands += prepare_command_set_y_range(data, fit, start_index)
     commands += prepare_command_csv_setting if csv
     commands += prepare_command_date_settings(no_x, x_time_format) if x_time_format
     commands += prepare_command_plot_keyword
@@ -157,10 +159,26 @@ class PlotDiagram
     end
   end
 
-  def prepare_command_graph_properties(auto_y_scale)
+  def prepare_command_graph_properties(auto_y_scale, smooth)
     command = "set offset graph 0, 0, #{Y_PADDING_FRACTION}, #{Y_PADDING_FRACTION}\n"
     command += "set format y ''\n" if auto_y_scale
+    command += "set samples 1000\n" if smooth
     command
+  end
+
+  def prepare_command_set_y_range(data, fit, start_index)
+    return "" if fit
+
+    all_positive = data.flat_map { |row| row[start_index - 1] }.all?(&:positive?)
+    all_negative = data.flat_map { |row| row[start_index - 1] }.all?(&:negative?)
+
+    if all_positive
+      "set yrange [0:]\n"
+    elsif all_negative
+      "set yrange [:0]\n"
+    else
+      ""
+    end
   end
 
   def prepare_command_csv_setting
@@ -186,7 +204,7 @@ class PlotDiagram
     start_index.upto(data_column_numbers).inject("") do |commands, i|
       column_reference = column_transformation ? column_transformation[i] : i
 
-      commands += " '#{data_file}' using #{using_prefix}#{column_reference} with linespoints #{smooth_option} title '#{titles[i - start_index]}'"
+      commands += " '#{data_file}' using #{using_prefix}#{column_reference} with lines #{smooth_option} title '#{titles[i - start_index]}'"
 
       commands += ', \\' if i < data_column_numbers
       commands + "\n"
@@ -214,13 +232,17 @@ class PlotDiagram
       raise "No data found in the file!"
     end
 
-    data
+    x_time_format = find_x_time_format(data)
+
+    numbers_start_i = x_time_format ? 1 : 0
+
+    data = data.map { |row| row[0 ... numbers_start_i] + row[numbers_start_i .. -1].map(&:to_f) }
+
+    [data, x_time_format]
   end
 
   def find_x_time_format(data)
-    first_potential_timestamp = data[0][0][/^[\w-]+/]
-
-    case first_potential_timestamp
+    case data[0][0]
     when /^\d{,2}-\d{,2}$/
       "%m-%d"
     when /^(#{MONTHS.join'|'})-\d{,2}$/i
@@ -238,8 +260,9 @@ class PlotDiagram
     end
   end
 
-  def check_data_and_parameters_consistency!(x_time_format, data_column_numbers)
+  def check_data_and_parameters_consistency!(x_time_format, data_column_numbers, fit, auto_y_scale)
     raise "Data is composed of only one date column!" if x_time_format && data_column_numbers == 1
+    raise "Fit mode is currently required when using auto Y scale!" if auto_y_scale && !fit
   end
 
   # Returns [using_prefix, start_index]
@@ -257,7 +280,7 @@ class PlotDiagram
   end
 
   def compute_column_transformation(data, start_index)
-    transposed_data = data.transpose[(start_index - 1) .. -1].map { |y_values| y_values.map(&:to_f) }
+    transposed_data = data.transpose[(start_index - 1) .. -1]
 
     shifts = transposed_data.map { |line_values| 0 - line_values.min }
 
