@@ -104,10 +104,11 @@ class PlotDiagram
 
   def prepare_gnuplot_commands(data_file, csv: false, no_x: false, auto_y_scale: false, smooth: false, titles: nil, output: nil, **)
     data = parse_data_file(data_file, csv)
-    x_time_format = find_x_time_format(data)
-    using_prefix, start_index = compute_using_settings(x_time_format, no_x)
-    column_transformation = compute_column_transformation(data, start_index) if auto_y_scale
     data_column_numbers = find_data_columns_number(data)
+    x_time_format = find_x_time_format(data)
+
+    using_prefix, start_index = compute_using_settings(x_time_format, no_x, data_column_numbers)
+    column_transformation = compute_column_transformation(data, start_index) if auto_y_scale
     titles = check_and_prepare_titles(titles, data_column_numbers, start_index)
 
     commands = prepare_command_output_settings(output)
@@ -237,8 +238,8 @@ class PlotDiagram
 
   # Returns [using_prefix, start_index]
   #
-  def compute_using_settings(x_time_format, no_x)
-    if x_time_format || !no_x
+  def compute_using_settings(x_time_format, no_x, data_column_numbers)
+    if x_time_format || (!no_x && data_column_numbers > 1)
       # Required when specifying time data.
       using_prefix = "1:"
       start_index = 2
