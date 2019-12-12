@@ -11,16 +11,18 @@ set -o pipefail
 c_default_log_files_glob="*.log"
 c_diagram_file_data_extension=txt
 c_diagram_file_extension=png
-c_temporary_merge_directory=$(mktemp -d)
+c_aggregates_file_prefix=aggregates_
+c_aggregates_file_extension=txt
+c_single_diagram_basename=all_vars
 
 # Executed as `perl -lane` code, with the values sent to stdin; the operations must print the result.
 #
 declare -A c_aggregates=(
   [average]='$total += $F[0]; END { print $total / $. }'
-  [total]='$total += $F[0]; END { print $total }'
+  [sum]='$total += $F[0]; END { print $total }'
 )
 
-c_help="Usage: $(basename "$0") [(-g|--log-files-glob) <pattern>] [(-s|--start <base_0_index>)] [(-o|--only) var_name{,var_name...}] [(-a|--aggregate) <function>] <stats_dir_1> {<stats_dir_N>, ...}
+c_help="Usage: $(basename "$0") [(-g|--log-files-glob) <pattern>] [(-s|--start <base_0_index>)] [(-o|--only) var_name{,var_name...}] [(-1|--single-diagram)] [(-a|--aggregate) <function>] [(-d|--destination) <dir>] <stats_dir_1> {<stats_dir_N>, ...}
 
 For each variable (found in the lexicographically first examined file), it collects the correponding values found in all the stat files in <stats_dir>, and generates a diagram file (named \`<var_name>.${c_diagram_file_extension}\`)
 
@@ -35,7 +37,9 @@ The default stat files glob pattern is \`$c_default_log_files_glob\`.
 
 If the \`--only\` option is passed, only the variables specified are selected.
 
-The \`--aggregate\` functionality applies the given function to the values of each variable, and prints them before displaying the diagrams.
+The \`--single-diagram\` option causes a single diagram to be generated (\`${c_single_diagram_basename}.${c_diagram_file_data_extension}\`), instead of one for each variable. This option requires \`--only\`, and only one \`<stats_dir>\`.
+
+The \`--aggregate\` functionality applies the given function to the values of each variable, and stores them as \`$c_aggregates_file_prefix<aggregate_name>.$c_aggregates_file_extension\` in the destination directory.
 
 The currently supported fucntions are: $(IFS=,; echo "${!c_aggregates[*]}").
 
@@ -48,13 +52,14 @@ The program \`plot_diagram\` (from openscripts) needs to be in \$PATH.
 
 v_start_index=0
 v_var_names_filter=
+v_single_diagram=
 v_aggregate_name=
 v_aggregate_code=
 v_log_files_glob=$c_default_log_files_glob
 v_reference_stat_files=
 v_reference_var_names=
-# v_merged_stat_files=()
 v_stat_directories=
+v_destination_dir=$(mktemp -d -t 'mysql_diagrams.XXXXXXXX')
 
 v_debug=
 v_test_data=
@@ -104,7 +109,7 @@ function find_var_values {
 # The options `--debug` and `--test-data` are not in the official help.
 #
 function decode_cmdline_parameters {
-  eval set -- "$(getopt --options hg:a:s:o: --long help,log-files-glob:,aggregate:,start:,only:,debug,test-data -- "$@")"
+  eval set -- "$(getopt --options hg:a:s:o:1d: --long help,log-files-glob:,aggregate:,start:,only:,single-diagram,destination:,debug,test-data -- "$@")"
 
   while true; do
     case "$1" in
@@ -123,6 +128,12 @@ function decode_cmdline_parameters {
       -o|--only)
         v_var_names_filter=$2
         shift 2 ;;
+      -1|--single-diagram)
+        v_single_diagram=1
+        shift ;;
+      -d|--destination)
+        v_destination_dir=$2
+        shift 2 ;;
       --debug)
         v_debug=1
         shift ;;
@@ -136,6 +147,10 @@ function decode_cmdline_parameters {
   done
 
   if [[ $# -lt 1 ]]; then
+    echo "$c_help"
+
+    exit 1
+  elif [[ "$v_single_diagram" == "1" ]] && [[ -z "$v_var_names_filter" || $# -ne 1 ]]; then
     echo "$c_help"
 
     exit 1
@@ -174,13 +189,13 @@ function create_test_data {
   rm -rf /tmp/stats{,2}
   mkdir -p /tmp/stats{,2}
 
-  printf "aaa 1\nbbb 2\nccc 3" > "/tmp/stats/stats_z 0.log"
-  printf "aaa 2\nbbb 2\nccc 5" > "/tmp/stats/stats_z 1.log"
-  printf "aaa 5\nbbb 6\nccc 1" > "/tmp/stats/stats_z 2.log"
+  printf "aaa 1\nbbb 2\nccc 30" > "/tmp/stats/stats_z 0.log"
+  printf "aaa 2\nbbb 2\nccc 50" > "/tmp/stats/stats_z 1.log"
+  printf "aaa 5\nbbb 6\nccc 10" > "/tmp/stats/stats_z 2.log"
 
-  printf "aaa 2\nbbb 4\nccc 6" > "/tmp/stats2/stats_z 0.log"
-  printf "aaa 4\nbbb 4\nccc 9" > "/tmp/stats2/stats_z 1.log"
-  printf "aaa 8\nbbb 9\nccc 2" > "/tmp/stats2/stats_z 2.log"
+  printf "aaa 2\nbbb 4\nccc 60" > "/tmp/stats2/stats_z 0.log"
+  printf "aaa 4\nbbb 4\nccc 90" > "/tmp/stats2/stats_z 1.log"
+  printf "aaa 8\nbbb 9\nccc 20" > "/tmp/stats2/stats_z 2.log"
 }
 
 function enable_debug {
@@ -269,50 +284,97 @@ function check_requirements {
 # fully, and the variable names and values are stored in a hash, then appended to the files
 # corresponding to each variable.
 #
-function prepare_merged_datafiles {
+function prepare_multi_dir_datafiles {
   [[ "$v_debug" == "1" ]] && echo -n "Preparing merged datafiles: " || true
 
-  mkdir -p "$c_temporary_merge_directory"
+  mkdir -p "$v_destination_dir"
 
   # Format: [var_name]="single line of stats"
   #
   declare -A var_stat_lines
 
   for var_name in "${v_reference_var_names[@]}"; do
-    var_stat_lines["$var_name"]=""
+    var_stat_lines["$var_name"]=
   done
 
   for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
     [[ "$v_debug" == "1" ]] && echo -n "." || true
 
-    # Computing the instances rather than `find`ing them, gives a non-negligible boost.
+    # Computing the instances, rather than `find`ing them, gives a non-negligible boost.
+    #
     local stat_file_instances=()
 
     for stat_directory in "${v_stat_directories[@]}"; do
       stat_file_instances+=("$stat_directory/$(basename "$reference_stat_file")")
     done
 
-    for stat_file_instance in "${stat_file_instances[@]}"; do
-      while IFS= read -r line; do
-        local var_name=${line% *}
-        local var_value=${line#* }
+    # Collect all the values of the variables across the instances of the stat file reference
+    # (that is, across directories).
 
-        if [[ -v var_stat_lines["$var_name"] ]]; then
-          [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
-          var_stat_lines["$var_name"]+=$var_value
-        fi
+    while read -r line || [[ -n "$line" ]]; do
+      local var_name=${line% *}
+      local var_value=${line#* }
 
-        unset var_data
-      done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$stat_file_instance")"
-    done
+      if [[ -v var_stat_lines["$var_name"] ]]; then
+        [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
+        var_stat_lines["$var_name"]+=$var_value
+      fi
+    done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "${stat_file_instances[@]}")"
+
+    # Output the lines of each variable in the variable (merged) output file.
 
     for var_name in "${v_reference_var_names[@]}"; do
-      local var_data_file="$c_temporary_merge_directory/${var_name}.${c_diagram_file_data_extension}"
+      echo "${var_stat_lines["$var_name"]}" >> "$v_destination_dir/${var_name}.${c_diagram_file_data_extension}"
 
-      echo "${var_stat_lines["$var_name"]}" >> "$var_data_file"
-
-      var_stat_lines["$var_name"]=""
+      var_stat_lines["$var_name"]=
     done
+
+    [[ "$v_debug" == "1" ]] && echo -n "." || true
+  done
+
+  [[ "$v_debug" == "1" ]] && echo || true
+}
+
+# Although the structure is very similar to the multi-dir one, it's different in the various
+# stages, which would require conditionals, leading to quite ugly code.
+#
+function prepare_single_diagram_datafiles {
+  [[ "$v_debug" == "1" ]] && echo -n "Preparing merged datafiles: " || true
+
+  mkdir -p "$v_destination_dir"
+
+  # There isn't a clean way to test if an array contains an entry, so we turn this one into an
+  # associative array.
+  #
+  declare -A reference_var_names
+
+  for var_name in "${v_reference_var_names[@]}"; do
+    reference_var_names["$var_name"]=
+  done
+
+  for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
+    [[ "$v_debug" == "1" ]] && echo -n "." || true
+
+    # In this mode, only one directory is allowed, so we don't need to collect the stat file
+    # instances.
+
+    local vars_line=
+
+    # Collect all the values in the stat file.
+
+    while read -r line || [[ -n "$line" ]]; do
+      local var_name=${line% *}
+      local var_value=${line#* }
+
+      if [[ -v reference_var_names["$var_name"] ]]; then
+        [[ -n "$vars_line" ]] && vars_line+=' ' || true
+        vars_line+=$var_value
+      fi
+    done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$reference_stat_file")"
+
+    # Output the lines in the (merged) output file.
+
+    echo "$vars_line" >> "$v_destination_dir/${c_single_diagram_basename}.${c_diagram_file_data_extension}"
 
     [[ "$v_debug" == "1" ]] && echo -n "." || true
   done
@@ -332,8 +394,7 @@ function create_diagrams {
   # However, that works for the very basic case of one line.
   #
   for var_name in "${v_reference_var_names[@]}"; do
-    local var_data_file
-    var_data_file="$c_temporary_merge_directory/${var_name}.${c_diagram_file_data_extension}"
+    local var_data_file=$v_destination_dir/${var_name}.${c_diagram_file_data_extension}
 
     local titles=()
 
@@ -345,7 +406,7 @@ function create_diagrams {
       done
     fi
 
-    plot_diagram -n -t "$(IFS=,; echo "${titles[*]}")" -o "$c_temporary_merge_directory/${var_name}.${c_diagram_file_extension}" "$var_data_file" 2> /dev/null
+    plot_diagram -n -t "$(IFS=,; echo "${titles[*]}")" -o "$v_destination_dir/${var_name}.${c_diagram_file_extension}" "$var_data_file" 2> /dev/null
 
     [[ "$v_debug" == "1" ]] && echo -n "." || true
   done
@@ -353,32 +414,66 @@ function create_diagrams {
   echo
 }
 
-function compute_and_print_aggregates {
-  echo '# Aggregates'
+function create_single_diagram {
+  [[ "$v_debug" == "1" ]] && echo 'Creating single diagram ...' || true
 
-  for var_name in "${v_reference_var_names[@]}"; do
-    for stats_directory in "${v_stat_directories[@]}"; do
-      mapfile -d '' stat_files < <(find_log_files "$stats_directory")
-      mapfile -d '' var_values < <(find_var_values "$var_name" "${stat_files[@]}")
+  local var_data_file=$v_destination_dir/${c_single_diagram_basename}.${c_diagram_file_data_extension}
+  local diagram_file=$v_destination_dir/${c_single_diagram_basename}.${c_diagram_file_extension}
 
-      local aggregate_result
-      aggregate_result=$(IFS=$'\n'; echo "${var_values[*]}" | perl -lane "$v_aggregate_code")
+  plot_diagram -a -n -t "$(IFS=,; echo "${v_reference_var_names[*]}")" -o "$diagram_file" "$var_data_file" 2> /dev/null
+}
+
+# Optimized similarly to prepare_multi_dir_datafiles().
+#
+function compute_aggregates {
+  for stats_directory in "${v_stat_directories[@]}"; do
+    # Format: [var_name]="<val1>\n<valN>..."
+    #
+    declare -A var_stat_values
+
+    for var_name in "${v_reference_var_names[@]}"; do
+      var_stat_values["$var_name"]=
+    done
+
+    for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
+      # Computing the instances rather than `find`ing them, gives a non-negligible boost.
+      local stat_file_instances=()
+
+      for stat_directory in "${v_stat_directories[@]}"; do
+        stat_file_instances+=("$stat_directory/$(basename "$reference_stat_file")")
+      done
+
+      while read -r line || [[ -n "$line" ]]; do
+        local var_name=${line% *}
+        local var_value=${line#* }
+
+        if [[ -v var_stat_values["$var_name"] ]]; then
+          [[ -n "${var_stat_values["$var_name"]}" ]] && var_stat_values["$var_name"]+=' ' || true
+          var_stat_values["$var_name"]+=${var_value}$'\n'
+        fi
+      done < "${stat_file_instances[@]}"
+    done
+
+    for var_name in "${v_reference_var_names[@]}"; do
+      local var_stat_aggregate_output=
 
       if [[ ${#v_stat_directories[@]} -gt 1 ]]; then
-        echo -n "$(basename "$stats_directory")."
+        var_stat_aggregate_output="$(basename "$stats_directory")."
       fi
 
-      echo "$var_name $v_aggregate_name: $aggregate_result"
+      var_stat_aggregate_output+="$var_name $v_aggregate_name: $(echo -n "${var_stat_values["$var_name"]}" | perl -ane "$v_aggregate_code")"
 
-      unset var_values
-      unset stat_files
+      echo "$var_stat_aggregate_output" >> "$v_destination_dir/${c_aggregates_file_prefix}${v_aggregate_name}.${c_aggregates_file_extension}"
+      [[ "$v_debug" == "1" ]] && echo "$var_stat_aggregate_output" || true
+
+      var_stat_values["$var_name"]=
     done
   done
 }
 
 function open_first_diagram {
   local first_diagram_file_found
-  first_diagram_file_found=$(find "$c_temporary_merge_directory" -maxdepth 1 -type f -name "*.${c_diagram_file_extension}" -print0 | sort -z | head -n 1 -z | tr -d '\0')
+  first_diagram_file_found=$(find "$v_destination_dir" -maxdepth 1 -type f -name "*.${c_diagram_file_extension}" -print0 | sort -z | head -n 1 -z | tr -d '\0')
 
   if [[ -z "$first_diagram_file_found" ]]; then
     echo "No diagram files found"
@@ -397,7 +492,12 @@ if [[ "$v_test_data" == "1" ]]; then create_test_data; fi
 if [[ "$v_debug" == "1" ]]; then enable_debug; fi
 prepare_variables
 check_requirements
-prepare_merged_datafiles
-create_diagrams
-if [[ "$v_aggregate_code" != "" ]]; then compute_and_print_aggregates; fi
+if [[ "$v_single_diagram" == "1" ]]; then
+  prepare_single_diagram_datafiles
+  create_single_diagram
+else
+  prepare_multi_dir_datafiles
+  create_diagrams
+fi
+if [[ "$v_aggregate_code" != "" ]]; then compute_aggregates; fi
 open_first_diagram
