@@ -71,6 +71,7 @@ v_stat_directories=
 v_destination_dir=$(mktemp -d -t 'mysql_diagrams.XXXXXXXX')
 
 v_debug=
+v_no_checks=
 v_test_data=
 
 ################################################################################
@@ -118,7 +119,7 @@ function find_var_values {
 # The options `--debug` and `--test-data` are not in the official help.
 #
 function decode_cmdline_parameters {
-  eval set -- "$(getopt --options hg:a:s:o:1d: --long help,log-files-glob:,aggregate:,start:,only:,single-diagram,destination:,debug,test-data -- "$@")"
+  eval set -- "$(getopt --options hg:a:s:o:1d: --long help,log-files-glob:,aggregate:,start:,only:,single-diagram,destination:,debug,no-checks,test-data -- "$@")"
 
   while true; do
     case "$1" in
@@ -145,6 +146,9 @@ function decode_cmdline_parameters {
         shift 2 ;;
       --debug)
         v_debug=1
+        shift ;;
+      --no-checks)
+        v_no_checks=1
         shift ;;
       --test-data)
         v_test_data=1
@@ -500,7 +504,7 @@ decode_cmdline_parameters "${@}"
 if [[ "$v_test_data" == "1" ]]; then create_test_data; fi
 if [[ "$v_debug" == "1" ]]; then enable_debug; fi
 prepare_variables
-check_requirements
+if [[ "$v_no_checks" != "1" ]]; then check_requirements; fi
 if [[ "$v_single_diagram" == "1" ]]; then
   prepare_single_diagram_datafiles
   create_single_diagram
