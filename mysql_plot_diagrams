@@ -362,6 +362,7 @@ function prepare_single_diagram_datafiles {
   declare -A reference_var_names
 
   for var_name in "${v_reference_var_names[@]}"; do
+    # shellcheck disable=SC2034  # S.C. doesn't recognize that the variable is used.
     reference_var_names["$var_name"]=
   done
 
