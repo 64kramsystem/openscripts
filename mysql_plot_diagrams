@@ -10,7 +10,7 @@ set -o pipefail
 
 c_default_log_files_glob="*.log"
 c_diagram_file_data_extension=txt
-c_diagram_file_extension=png
+c_diagram_file_extension=svg
 c_aggregates_file_prefix=aggregates_
 c_aggregates_file_extension=txt
 c_single_diagram_basename=all_vars
@@ -400,7 +400,7 @@ function create_diagrams {
 
   # Minimal gnuplot command to avoid using `plot_diagram` (variables need to be substituted):
   #
-  #     set terminal pngcairo size 1600,900
+  #     set terminal svg enhanced background rgb 'white' size 1600,900
   #     set output '$v_destination_dir/$var_name.$c_diagram_file_extension'
   #     plot '$v_destination_dir/$var_name.$c_diagram_file_data_extension' with lines title '$var_name'
   #
