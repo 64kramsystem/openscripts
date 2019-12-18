@@ -375,6 +375,9 @@ function prepare_single_diagram_datafiles {
     local vars_line=
 
     # Collect all the values in the stat file.
+    #
+    # Note that a side effect of the `perl` command is that tabs are converted to spaces, which
+    # makes splitting easy.
 
     while read -r line || [[ -n "$line" ]]; do
       local var_name=${line% *}
