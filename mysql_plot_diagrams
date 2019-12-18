@@ -440,6 +440,8 @@ function create_single_diagram {
 # Optimized similarly to prepare_multi_dir_datafiles().
 #
 function compute_aggregates {
+  [[ "$v_debug" == "1" ]] && echo 'Computing aggregates ...' || true
+
   for stats_directory in "${v_stat_directories[@]}"; do
     # Format: [var_name]="<val1>\n<valN>..."
     #
