@@ -116,7 +116,7 @@ function find_var_values {
 # MAIN STAGES
 ################################################################################
 
-# The options `--debug` and `--test-data` are not in the official help.
+# The debug-related options are are not in the official help, and they have only the long form.
 #
 function decode_cmdline_parameters {
   eval set -- "$(getopt --options hg:a:s:o:1d: --long help,log-files-glob:,aggregate:,start:,only:,single-diagram,destination:,debug,no-checks,test-data -- "$@")"
