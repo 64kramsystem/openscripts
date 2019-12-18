@@ -116,7 +116,7 @@ function find_var_values {
 # MAIN STAGES
 ################################################################################
 
-# The options `--debug` and `--test-data` are not in the official help.
+# The debug-related options are are not in the official help, and they have only the long form.
 #
 function decode_cmdline_parameters {
   eval set -- "$(getopt --options hg:a:s:o:1d: --long help,log-files-glob:,aggregate:,start:,only:,single-diagram,destination:,debug,no-checks,test-data -- "$@")"
@@ -375,6 +375,9 @@ function prepare_single_diagram_datafiles {
     local vars_line=
 
     # Collect all the values in the stat file.
+    #
+    # Note that a side effect of the `perl` command is that tabs are converted to spaces, which
+    # makes splitting easy.
 
     while read -r line || [[ -n "$line" ]]; do
       local var_name=${line% *}
@@ -440,6 +443,8 @@ function create_single_diagram {
 # Optimized similarly to prepare_multi_dir_datafiles().
 #
 function compute_aggregates {
+  [[ "$v_debug" == "1" ]] && echo 'Computing aggregates ...' || true
+
   for stats_directory in "${v_stat_directories[@]}"; do
     # Format: [var_name]="<val1>\n<valN>..."
     #
@@ -457,7 +462,10 @@ function compute_aggregates {
         stat_file_instances+=("$stat_directory/$(basename "$reference_stat_file")")
       done
 
+      # In order to avoid invoking perl for each cycle, we replace tabs via parameter expansion.
+      #
       while read -r line || [[ -n "$line" ]]; do
+        line="${line//$'\t'/ }"
         local var_name=${line% *}
         local var_value=${line#* }
 
