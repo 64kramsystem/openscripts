@@ -6,7 +6,7 @@ set -o nounset
 # shellcheck disable=SC2016
 help="Usage: $(basename "$0") [-d|--destination <dir>] [-t|--process-in-tmpdir] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
 
-Encodes to m4a and applies gain.
+Encodes to m4a and applies gain; by default, outputs to the current directory.
 
 The "'`input`'" values can be either files or directories:
 
