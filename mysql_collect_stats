@@ -82,7 +82,7 @@ function prepare_stats_dir {
 function dump_server_configuration {
   # The value of `optimizer_switch` is too long; ignore it.
   #
-  mysql -Nte 'SHOW GLOBAL VARIABLES WHERE Variable_name NOT LIKE "optimizer_switch"' > "$stats_dir/$c_configuration_dump_filename"
+  mysql -ANte 'SHOW GLOBAL VARIABLES WHERE Variable_name NOT LIKE "optimizer_switch"' > "$stats_dir/$c_configuration_dump_filename"
 }
 
 # Input: $1=log file name input.
@@ -97,11 +97,11 @@ function prepare_log_file_name {
 function dump_stats_snapshot {
   log_file_name="$(prepare_log_file_name "$1")"
 
-  mysql -Ne 'SHOW GLOBAL STATUS LIKE "Innodb\_%"' > "$log_file_name"
+  mysql -ANe 'SHOW GLOBAL STATUS LIKE "Innodb\_%"' > "$log_file_name"
 
   # For the checkpoint age computation, see the [specific article about text processing](/Theres-more-than-one-way-to-skin-a-perl).
   #
-  mysql -Ne 'SHOW ENGINE InnoDB STATUS\G' |
+  mysql -ANe 'SHOW ENGINE InnoDB STATUS\G' |
     awk 'BEGIN { ORS=" " }; /^(Log sequence number|Last checkpoint at)/ { print $4 }' |
     perl -lane 'print "Checkpoint_age ".($F[0] - $F[1])' >> \
     "$log_file_name"
