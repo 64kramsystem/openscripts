@@ -27,40 +27,58 @@ Requires aacgain and a recompiled FFmpeg.
 Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
 "
 
-eval set -- "$(getopt --options hd:tq:ar --long help,destination:,process-in-tmpdir,quality:,album,remove -- "$@")"
-
+input_files=
 destination="."
 quality="3"
 remove_file=
 process_in_tmpdir=
 
-while true ; do
-  case "$1" in
-    -h|--help)
-      echo "$help"
-      exit 0 ;;
-    -d|--destination)
-      destination="$2"
-      shift 2 ;;
-    -t|--process-in-tmpdir)
-      process_in_tmpdir=1
-      shift ;;
-    -q|--quality)
-      quality="$2"
-      shift 2 ;;
-    -r|--remove)
-      remove_file=1
-      shift ;;
-    --)
-      shift
-      break ;;
-  esac
-done
+function decode_commandline_params {
+  eval set -- "$(getopt --options hd:tq:ar --long help,destination:,process-in-tmpdir,quality:,album,remove -- "$@")"
 
-if [[ $# -eq 0 ]]; then
-  echo "$help"
-  exit 1
-fi
+  while true ; do
+    case "$1" in
+      -h|--help)
+        echo "$help"
+        exit 0 ;;
+      -d|--destination)
+        destination="$2"
+        shift 2 ;;
+      -t|--process-in-tmpdir)
+        process_in_tmpdir=1
+        shift ;;
+      -q|--quality)
+        quality="$2"
+        shift 2 ;;
+      -r|--remove)
+        remove_file=1
+        shift ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -eq 0 ]]; then
+    echo "$help"
+    exit 1
+  fi
+
+  input_files=("$@")
+}
+
+function encode_input_files {
+  for source_file in "${input_files[@]}"; do
+    if [[ -f "$source_file" ]]; then
+      encode_file "$source_file"
+    elif [[ -d "$source_file" ]]; then
+      encode_directory "$source_file"
+    else
+      echo "Source type not recognized: $source_file"
+      exit 1
+    fi
+  done
+}
 
 # If `process_in_tmpdir` is set, then the name of a temporary file with the same extension as `$1`
 # is printed; otherwise, `$1` is printed.
@@ -166,13 +184,5 @@ function encode_directory {
   [[ $remove_file == 1 ]] && rm -r "$1" || true
 }
 
-for source_file in "$@"; do
-  if [[ -f "$source_file" ]]; then
-    encode_file "$source_file"
-  elif [[ -d "$source_file" ]]; then
-    encode_directory "$source_file"
-  else
-    echo "Source type not recognized: $source_file"
-    exit 1
-  fi
-done
+decode_commandline_params "$@"
+encode_input_files
