@@ -182,11 +182,14 @@ function encode_directory {
   #
   aacgain -q -k -a -s r "${destination_subfiles[@]}"
 
-  mv "$intermediate_subdir" "$destination_subdir"
-
+  # Removing the source before moving is less clean than the reverse, but it simplifies the case of
+  # the source directory being encoded in-place.
+  #
   if [[ $remove_file == "1" ]]; then
     rm -r "$1"
   fi
+
+  mv "$intermediate_subdir" "$destination_subdir"
 }
 
 decode_commandline_params "$@"
