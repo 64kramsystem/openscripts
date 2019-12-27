@@ -4,7 +4,7 @@ set -o errexit
 set -o nounset
 
 # shellcheck disable=SC2016
-help="Usage: $(basename "$0") [-d|--destination <dir>] [-t|--process-in-tmpdir] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
+help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
 
 Encodes to m4a and applies gain; by default, outputs to the current directory.
 
@@ -15,8 +15,6 @@ The "'`input`'" values can be either files or directories:
   - album gain is applied, on a directory basis, to lossless files
   - non-audio files are ignored
   - subdirectories are not descended
-
-If \`process-in-tmpdir\` is set, files are processed in a temporary directory, instead of in-place. This helps on destinations like (GVFS) mounts on mobile devices, where file operations other than basic copy/move may fail.
 
 Compressed input audio files which are not flac are copied, without being reencoded.
 
@@ -31,10 +29,9 @@ input_files=
 destination="."
 quality="3"
 remove_file=
-process_in_tmpdir=
 
 function decode_commandline_params {
-  eval set -- "$(getopt --options hd:tq:ar --long help,destination:,process-in-tmpdir,quality:,album,remove -- "$@")"
+  eval set -- "$(getopt --options hd:q:ar --long help,destination:,quality:,album,remove -- "$@")"
 
   while true ; do
     case "$1" in
@@ -44,9 +41,6 @@ function decode_commandline_params {
       -d|--destination)
         destination="$2"
         shift 2 ;;
-      -t|--process-in-tmpdir)
-        process_in_tmpdir=1
-        shift ;;
       -q|--quality)
         quality="$2"
         shift 2 ;;
@@ -86,15 +80,10 @@ function encode_input_files {
   done
 }
 
-# If `process_in_tmpdir` is set, then the name of a temporary file with the same extension as `$1`
-# is printed; otherwise, `$1` is printed.
+# Generate a temporary file with the same extension as `$1`.
 #
 function create_intermediate_file_name {
-  if [[ $process_in_tmpdir == 1 ]]; then
-    mktemp --suffix=".${1##*.}"
-  else
-    echo "$1"
-  fi
+  mktemp --suffix=".${1##*.}"
 }
 
 function encode_file {
@@ -129,9 +118,7 @@ function encode_file {
   #
   aacgain -q -k -r -s r "$intermediate_file"
 
-  if [[ $process_in_tmpdir == 1 ]]; then
-    mv "$intermediate_file" "$destination_file"
-  fi
+  mv "$intermediate_file" "$destination_file"
 
   if [[ $remove_file == 1 ]]; then
     rm -f "$source_file"
@@ -141,12 +128,7 @@ function encode_file {
 function encode_directory {
   destination_subdir="$destination/$(basename "$1")"
 
-  if [[ $process_in_tmpdir == 1 ]]; then
-    intermediate_subdir="$(mktemp -d)"
-  else
-    intermediate_subdir="$destination_subdir"
-    mkdir -p "$intermediate_subdir"
-  fi
+  intermediate_subdir="$(mktemp -d)"
 
   for source_subfile in "$1"/*; do
     file_mime_type="$(file --mime-type "$source_subfile" | grep -oP '\S+/\S+$')"
@@ -189,9 +171,7 @@ function encode_directory {
   #
   aacgain -q -k -a -s r "$intermediate_subdir"/*
 
-  if [[ $process_in_tmpdir == "1" ]]; then
-    mv "$intermediate_subdir" "$destination_subdir"
-  fi
+  mv "$intermediate_subdir" "$destination_subdir"
 
   if [[ $remove_file == "1" ]]; then
     rm -r "$1"
