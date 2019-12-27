@@ -87,6 +87,10 @@ function create_intermediate_file_name {
 }
 
 function encode_file {
+  local file_mime_type
+  local destination_file
+  local intermediate_file
+
   file_mime_type="$(file --mime-type "$1" | grep -oP '\S+/\S+$')"
 
   case "$file_mime_type" in
@@ -126,11 +130,16 @@ function encode_file {
 }
 
 function encode_directory {
-  destination_subdir="$destination/$(basename "$1")"
+  local destination_subdir
+  local intermediate_subdir
 
+  destination_subdir="$destination/$(basename "$1")"
   intermediate_subdir="$(mktemp -d)"
 
   for source_subfile in "$1"/*; do
+    local file_mime_type
+    local destination_subfile
+
     file_mime_type="$(file --mime-type "$source_subfile" | grep -oP '\S+/\S+$')"
 
     case "$file_mime_type" in
