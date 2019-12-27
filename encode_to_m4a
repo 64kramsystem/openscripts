@@ -91,7 +91,7 @@ function encode_input_files {
 #
 function create_intermediate_file_name {
   if [[ $process_in_tmpdir == 1 ]]; then
-    echo "$(mktemp --suffix=".${1##*.}")"
+    mktemp --suffix=".${1##*.}"
   else
     echo "$1"
   fi
@@ -129,9 +129,13 @@ function encode_file {
   #
   aacgain -q -k -r -s r "$intermediate_file"
 
-  [[ $process_in_tmpdir == 1 ]] && mv "$intermediate_file" "$destination_file" || true
+  if [[ $process_in_tmpdir == 1 ]]; then
+    mv "$intermediate_file" "$destination_file"
+  fi
 
-  [[ $remove_file == 1 ]] && rm -f "$source_file" || true
+  if [[ $remove_file == 1 ]]; then
+    rm -f "$source_file"
+  fi
 }
 
 function encode_directory {
@@ -185,9 +189,13 @@ function encode_directory {
   #
   aacgain -q -k -a -s r "$intermediate_subdir"/*
 
-  [[ $process_in_tmpdir == 1 ]] && mv "$intermediate_subdir" "$destination_subdir" || true
+  if [[ $process_in_tmpdir == "1" ]]; then
+    mv "$intermediate_subdir" "$destination_subdir"
+  fi
 
-  [[ $remove_file == 1 ]] && rm -r "$1" || true
+  if [[ $remove_file == "1" ]]; then
+    rm -r "$1"
+  fi
 }
 
 decode_commandline_params "$@"
