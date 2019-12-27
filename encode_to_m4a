@@ -67,6 +67,12 @@ function decode_commandline_params {
   input_files=("$@")
 }
 
+function activate_debug {
+  exec 5> "$(dirname "$(mktemp)")/$(basename "$0").log"
+  BASH_XTRACEFD="5"
+  set -x
+}
+
 function encode_input_files {
   for source_file in "${input_files[@]}"; do
     if [[ -f "$source_file" ]]; then
@@ -185,4 +191,5 @@ function encode_directory {
 }
 
 decode_commandline_params "$@"
+activate_debug
 encode_input_files
