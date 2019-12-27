@@ -132,6 +132,7 @@ function encode_file {
 function encode_directory {
   local destination_subdir
   local intermediate_subdir
+  local destination_subfiles=()
 
   destination_subdir="$destination/$(basename "$1")"
   intermediate_subdir="$(mktemp -d)"
@@ -149,6 +150,8 @@ function encode_directory {
       destination_subfile="$intermediate_subdir/$(basename "${source_subfile%.*}.m4a")"
 
       ffmpeg -y -hide_banner -loglevel fatal -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
+
+      destination_subfiles+=("$destination_subfile")
       ;;
     audio/x-m4a | video/mp4 | audio/mpeg )
       echo "Copying $source_subfile..."
@@ -156,6 +159,8 @@ function encode_directory {
       destination_subfile="$intermediate_subdir/$(basename "$source_subfile")"
 
       cp "$source_subfile" "$destination_subfile"
+
+      destination_subfiles+=("$destination_subfile")
       ;;
     audio/* )
       echo "Unsupported file type for file source \"$source_subfile\": $file_mime_type"
@@ -175,10 +180,7 @@ function encode_directory {
 
   # See `-s -r` note in the previous invocation.
   #
-  # We can use the wildcard because aacgain ignores non-audio files (prints the names while
-  # scanning, but doesn't process them).
-  #
-  aacgain -q -k -a -s r "$intermediate_subdir"/*
+  aacgain -q -k -a -s r "${destination_subfiles[@]}"
 
   mv "$intermediate_subdir" "$destination_subdir"
 
