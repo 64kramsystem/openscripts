@@ -4,9 +4,9 @@ set -o errexit
 set -o nounset
 
 # shellcheck disable=SC2016
-help="Usage: $(basename "$0") [-d|--destination <dir>] [-t|--process-in-tmpdir] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
+help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
 
-Encodes to m4a and applies gain.
+Encodes to m4a and applies gain; by default, outputs to the current directory.
 
 The "'`input`'" values can be either files or directories:
 
@@ -15,8 +15,6 @@ The "'`input`'" values can be either files or directories:
   - album gain is applied, on a directory basis, to lossless files
   - non-audio files are ignored
   - subdirectories are not descended
-
-If \`process-in-tmpdir\` is set, files are processed in a temporary directory, instead of in-place. This helps on destinations like (GVFS) mounts on mobile devices, where file operations other than basic copy/move may fail.
 
 Compressed input audio files which are not flac are copied, without being reencoded.
 
@@ -27,53 +25,72 @@ Requires aacgain and a recompiled FFmpeg.
 Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
 "
 
-eval set -- "$(getopt --options hd:tq:ar --long help,destination:,process-in-tmpdir,quality:,album,remove -- "$@")"
-
+input_files=
 destination="."
 quality="3"
 remove_file=
-process_in_tmpdir=
 
-while true ; do
-  case "$1" in
-    -h|--help)
-      echo "$help"
-      exit 0 ;;
-    -d|--destination)
-      destination="$2"
-      shift 2 ;;
-    -t|--process-in-tmpdir)
-      process_in_tmpdir=1
-      shift ;;
-    -q|--quality)
-      quality="$2"
-      shift 2 ;;
-    -r|--remove)
-      remove_file=1
-      shift ;;
-    --)
-      shift
-      break ;;
-  esac
-done
+function decode_commandline_params {
+  eval set -- "$(getopt --options hd:q:ar --long help,destination:,quality:,album,remove -- "$@")"
 
-if [[ $# -eq 0 ]]; then
-  echo "$help"
-  exit 1
-fi
+  while true ; do
+    case "$1" in
+      -h|--help)
+        echo "$help"
+        exit 0 ;;
+      -d|--destination)
+        destination="$2"
+        shift 2 ;;
+      -q|--quality)
+        quality="$2"
+        shift 2 ;;
+      -r|--remove)
+        remove_file=1
+        shift ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
 
-# If `process_in_tmpdir` is set, then the name of a temporary file with the same extension as `$1`
-# is printed; otherwise, `$1` is printed.
+  if [[ $# -eq 0 ]]; then
+    echo "$help"
+    exit 1
+  fi
+
+  input_files=("$@")
+}
+
+function activate_debug {
+  exec 5> "$(dirname "$(mktemp)")/$(basename "$0").log"
+  BASH_XTRACEFD="5"
+  set -x
+}
+
+function encode_input_files {
+  for source_file in "${input_files[@]}"; do
+    if [[ -f "$source_file" ]]; then
+      encode_file "$source_file"
+    elif [[ -d "$source_file" ]]; then
+      encode_directory "$source_file"
+    else
+      echo "Source type not recognized: $source_file"
+      exit 1
+    fi
+  done
+}
+
+# Generate a temporary file with the same extension as `$1`.
 #
 function create_intermediate_file_name {
-  if [[ $process_in_tmpdir == 1 ]]; then
-    echo "$(mktemp --suffix=".${1##*.}")"
-  else
-    echo "$1"
-  fi
+  mktemp --suffix=".${1##*.}"
 }
 
 function encode_file {
+  local file_mime_type
+  local destination_file
+  local intermediate_file
+
   file_mime_type="$(file --mime-type "$1" | grep -oP '\S+/\S+$')"
 
   case "$file_mime_type" in
@@ -105,22 +122,30 @@ function encode_file {
   #
   aacgain -q -k -r -s r "$intermediate_file"
 
-  [[ $process_in_tmpdir == 1 ]] && mv "$intermediate_file" "$destination_file" || true
+  mv "$intermediate_file" "$destination_file"
 
-  [[ $remove_file == 1 ]] && rm -f "$source_file" || true
+  if [[ $remove_file == 1 ]]; then
+    rm -f "$source_file"
+  fi
 }
 
 function encode_directory {
-  destination_subdir="$destination/$(basename "$1")"
+  local destination_subdir
+  local intermediate_subdir
+  local destination_subfiles=()
 
-  if [[ $process_in_tmpdir == 1 ]]; then
-    intermediate_subdir="$(mktemp -d)"
-  else
-    intermediate_subdir="$destination_subdir"
-    mkdir -p "$intermediate_subdir"
+  destination_subdir="$destination/$(basename "$1")"
+  intermediate_subdir="$(mktemp -d)"
+
+  if [[ "$(readlink -f "$1")" == "$(readlink -f "$destination_subdir")" && $remove_file != 1 ]]; then
+    echo "Destination matches the source \`$1\`; this is only allowed when \`--remove\` is specified."
+    exit 1
   fi
 
   for source_subfile in "$1"/*; do
+    local file_mime_type
+    local destination_subfile
+
     file_mime_type="$(file --mime-type "$source_subfile" | grep -oP '\S+/\S+$')"
 
     case "$file_mime_type" in
@@ -130,6 +155,8 @@ function encode_directory {
       destination_subfile="$intermediate_subdir/$(basename "${source_subfile%.*}.m4a")"
 
       ffmpeg -y -hide_banner -loglevel fatal -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
+
+      destination_subfiles+=("$destination_subfile")
       ;;
     audio/x-m4a | video/mp4 | audio/mpeg )
       echo "Copying $source_subfile..."
@@ -137,6 +164,8 @@ function encode_directory {
       destination_subfile="$intermediate_subdir/$(basename "$source_subfile")"
 
       cp "$source_subfile" "$destination_subfile"
+
+      destination_subfiles+=("$destination_subfile")
       ;;
     audio/* )
       echo "Unsupported file type for file source \"$source_subfile\": $file_mime_type"
@@ -156,23 +185,18 @@ function encode_directory {
 
   # See `-s -r` note in the previous invocation.
   #
-  # We can use the wildcard because aacgain ignores non-audio files (prints the names while
-  # scanning, but doesn't process them).
+  aacgain -q -k -a -s r "${destination_subfiles[@]}"
+
+  # Removing the source before moving is less clean than the reverse, but it simplifies the case of
+  # the source directory being encoded in-place.
   #
-  aacgain -q -k -a -s r "$intermediate_subdir"/*
+  if [[ $remove_file == "1" ]]; then
+    rm -r "$1"
+  fi
 
-  [[ $process_in_tmpdir == 1 ]] && mv "$intermediate_subdir" "$destination_subdir" || true
-
-  [[ $remove_file == 1 ]] && rm -r "$1" || true
+  mv "$intermediate_subdir" "$destination_subdir"
 }
 
-for source_file in "$@"; do
-  if [[ -f "$source_file" ]]; then
-    encode_file "$source_file"
-  elif [[ -d "$source_file" ]]; then
-    encode_directory "$source_file"
-  else
-    echo "Source type not recognized: $source_file"
-    exit 1
-  fi
-done
+decode_commandline_params "$@"
+activate_debug
+encode_input_files
