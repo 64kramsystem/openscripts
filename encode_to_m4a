@@ -137,6 +137,11 @@ function encode_directory {
   destination_subdir="$destination/$(basename "$1")"
   intermediate_subdir="$(mktemp -d)"
 
+  if [[ "$(readlink -f "$1")" == "$(readlink -f "$destination_subdir")" && $remove_file != 1 ]]; then
+    echo "Destination matches the source \`$1\`; this is only allowed when \`--remove\` is specified."
+    exit 1
+  fi
+
   for source_subfile in "$1"/*; do
     local file_mime_type
     local destination_subfile
