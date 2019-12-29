@@ -14,6 +14,7 @@ v_limit=
 v_mysql_user=
 v_mysql_password=
 v_mysql_credential_options=()
+v_stats_dir=
 
 c_help="Usage: $(basename "$0") [(-r|--input-regex)=<regex>] [(-v|--input-var-name)=<var_name>] [(-l|--limit)=<number>] [(-c|--mysql-credentials <user>:[<password>])] <stats_dir>
 
@@ -70,7 +71,7 @@ function decode_cmdline_parameters {
     echo "$c_help"
     exit 1
   else
-    stats_dir="$1"
+    v_stats_dir="$1"
   fi
 }
 
@@ -80,28 +81,28 @@ function prepare_mysql_credential_options {
 }
 
 function prepare_stats_dir {
-  if [[ -d "${stats_dir}.bak" ]]; then
-    rm -rf "${stats_dir}.bak"
+  if [[ -d "${v_stats_dir}.bak" ]]; then
+    rm -rf "${v_stats_dir}.bak"
   fi
 
-  if [[ -d "$stats_dir" ]]; then
-    mv "$stats_dir"{,.bak}
+  if [[ -d "$v_stats_dir" ]]; then
+    mv "$v_stats_dir"{,.bak}
   fi
 
-  mkdir "$stats_dir"
+  mkdir "$v_stats_dir"
 }
 
 function dump_server_configuration {
   # The value of `optimizer_switch` is too long; ignore it.
   #
-  mysql "${v_mysql_credential_options[@]}" -ANte 'SHOW GLOBAL VARIABLES WHERE Variable_name NOT LIKE "optimizer_switch"' > "$stats_dir/$c_configuration_dump_filename"
+  mysql "${v_mysql_credential_options[@]}" -ANte 'SHOW GLOBAL VARIABLES WHERE Variable_name NOT LIKE "optimizer_switch"' > "$v_stats_dir/$c_configuration_dump_filename"
 }
 
 # Input: $1=log file name input.
 # Outputs to stdout.
 #
 function prepare_log_file_name {
-  echo -n "$stats_dir/${c_stat_files_prefix}$(printf "%0${c_log_index_number_size}i" "$1").log"
+  echo -n "$v_stats_dir/${c_stat_files_prefix}$(printf "%0${c_log_index_number_size}i" "$1").log"
 }
 
 # Input: $1=cycle index.
