@@ -107,7 +107,7 @@ function prepare_log_file_name {
 # Input: $1=cycle index.
 #
 function dump_stats_snapshot {
-  log_file_name="$(prepare_log_file_name "$1")"
+  local log_file_name="$(prepare_log_file_name "$1")"
 
   mysql "${v_mysql_credential_options[@]}" -ANe 'SHOW GLOBAL STATUS LIKE "Innodb\_%"' > "$log_file_name"
 
@@ -122,7 +122,7 @@ function dump_stats_snapshot {
 # Input: $1=input value, $2=cycle index
 #
 function dump_input_value {
-  log_file_name="$(prepare_log_file_name "$2")"
+  local log_file_name="$(prepare_log_file_name "$2")"
 
   echo "$v_input_var_name $1" >> "$log_file_name"
 }
