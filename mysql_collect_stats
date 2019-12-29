@@ -11,8 +11,11 @@ c_configuration_dump_filename=configuration.txt
 v_input_regex=
 v_input_var_name="Input value"
 v_limit=
+v_mysql_user=
+v_mysql_password=
+v_mysql_credential_options=()
 
-c_help="Usage: $(basename "$0") [(-r|--input-regex)=<regex>] [(-v|--input-var-name)=<var_name>] [(-l|--limit)=<number>] <stats_dir>
+c_help="Usage: $(basename "$0") [(-r|--input-regex)=<regex>] [(-v|--input-var-name)=<var_name>] [(-l|--limit)=<number>] [(-c|--mysql-credentials <user>:[<password>])] <stats_dir>
 
 Collects the MySQL status values and dumps them into <stats_dir> (with prefix \`$c_stat_files_prefix\`), along with a dump of the server configuration (with filename $c_configuration_dump_filename).
 
@@ -37,7 +40,7 @@ For example:
 will dump two sets of stats, each one including a stat named \`myvalue\` whose values are, for each cycle, respectively \`1\` and \`3\`."
 
 function decode_cmdline_parameters {
-  eval set -- "$(getopt --options hr:v:l: --long help,input-regex:,input-var-name:,limit: -- "$@")"
+  eval set -- "$(getopt --options hr:v:l:c: --long help,input-regex:,input-var-name:,limit:,mysql-credentials: -- "$@")"
 
   while true ; do
     case "$1" in
@@ -53,6 +56,10 @@ function decode_cmdline_parameters {
       -l|--limit)
         v_limit=$2
         shift 2 ;;
+      -c|--mysql-credentials)
+        v_mysql_user=${2%%:*}
+        v_mysql_password=${2#*:}
+        shift 2 ;;
       --)
         shift
         break ;;
@@ -65,6 +72,11 @@ function decode_cmdline_parameters {
   else
     stats_dir="$1"
   fi
+}
+
+function prepare_mysql_credential_options {
+  [[ "$v_mysql_user" != "" ]] && v_mysql_credential_options+=(-u "$v_mysql_user") || true
+  [[ "$v_mysql_password" != "" ]] && v_mysql_credential_options+=(-p "$v_mysql_password") || true
 }
 
 function prepare_stats_dir {
@@ -82,7 +94,7 @@ function prepare_stats_dir {
 function dump_server_configuration {
   # The value of `optimizer_switch` is too long; ignore it.
   #
-  mysql -ANte 'SHOW GLOBAL VARIABLES WHERE Variable_name NOT LIKE "optimizer_switch"' > "$stats_dir/$c_configuration_dump_filename"
+  mysql "${v_mysql_credential_options[@]}" -ANte 'SHOW GLOBAL VARIABLES WHERE Variable_name NOT LIKE "optimizer_switch"' > "$stats_dir/$c_configuration_dump_filename"
 }
 
 # Input: $1=log file name input.
@@ -97,11 +109,11 @@ function prepare_log_file_name {
 function dump_stats_snapshot {
   log_file_name="$(prepare_log_file_name "$1")"
 
-  mysql -ANe 'SHOW GLOBAL STATUS LIKE "Innodb\_%"' > "$log_file_name"
+  mysql "${v_mysql_credential_options[@]}" -ANe 'SHOW GLOBAL STATUS LIKE "Innodb\_%"' > "$log_file_name"
 
   # For the checkpoint age computation, see the [specific article about text processing](/Theres-more-than-one-way-to-skin-a-perl).
   #
-  mysql -ANe 'SHOW ENGINE InnoDB STATUS\G' |
+  mysql "${v_mysql_credential_options[@]}" -ANe 'SHOW ENGINE InnoDB STATUS\G' |
     awk 'BEGIN { ORS=" " }; /^(Log sequence number|Last checkpoint at)/ { print $4 }' |
     perl -lane 'print "Checkpoint_age ".($F[0] - $F[1])' >> \
     "$log_file_name"
@@ -157,6 +169,7 @@ function cycle_dump_stats {
 }
 
 decode_cmdline_parameters "${@}"
+prepare_mysql_credential_options
 prepare_stats_dir
 dump_server_configuration
 cycle_dump_stats
