@@ -334,7 +334,7 @@ function prepare_multi_dir_datafiles {
         [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
         var_stat_lines["$var_name"]+=$var_value
       fi
-    done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "${stat_file_instances[@]}")"
+    done < <(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "${stat_file_instances[@]}")
 
     # Output the lines of each variable in the variable (merged) output file.
 
@@ -389,7 +389,7 @@ function prepare_single_diagram_datafiles {
         [[ -n "$vars_line" ]] && vars_line+=' ' || true
         vars_line+=$var_value
       fi
-    done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$reference_stat_file")"
+    done < <(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$reference_stat_file")
 
     # Output the lines in the (merged) output file.
 
@@ -456,27 +456,32 @@ function compute_aggregates {
       var_stat_values["$var_name"]=
     done
 
+    # Computing the instances rather than `find`ing them, gives a non-negligible boost.
+    local stat_file_instances=()
+
     for reference_stat_file in "${v_reference_stat_files[@]:$v_start_index}"; do
-      # Computing the instances rather than `find`ing them, gives a non-negligible boost.
-      local stat_file_instances=()
-
-      for stat_directory in "${v_stat_directories[@]}"; do
-        stat_file_instances+=("$stat_directory/$(basename "$reference_stat_file")")
-      done
-
-      # In order to avoid invoking perl for each cycle, we replace tabs via parameter expansion.
-      #
-      while read -r line || [[ -n "$line" ]]; do
-        line="${line//$'\t'/ }"
-        local var_name=${line% *}
-        local var_value=${line#* }
-
-        if [[ -v var_stat_values["$var_name"] ]]; then
-          [[ -n "${var_stat_values["$var_name"]}" ]] && var_stat_values["$var_name"]+=' ' || true
-          var_stat_values["$var_name"]+=${var_value}$'\n'
-        fi
-      done < "${stat_file_instances[@]}"
+      stat_file_instances+=("$stats_directory/$(basename "$reference_stat_file")")
     done
+
+    # We have two problems to solve, in relation to stat files:
+    #
+    # 1. they don't end with a newline;
+    # 2. they use tabs.
+    #
+    # Additionally, for performance reasons, we can't iterate the files individually.
+    #
+    # Solving these problems make also the script more solid; we do this in one pass with Perl.
+    #
+    # An alternative is to replace tabs via Bash parameters expansion (`${line//$'\t'/ }`).
+    #
+    while read -r line || [[ -n "$line" ]]; do
+      local var_name=${line% *}
+      local var_value=${line#* }
+
+      if [[ -v var_stat_values["$var_name"] ]]; then
+        var_stat_values["$var_name"]+=${var_value}$'\n'
+      fi
+    done < <(perl -lpe 's/\t/ /; END { print }' "${stat_file_instances[@]}")
 
     for var_name in "${v_reference_var_names[@]}"; do
       local var_stat_aggregate_output=
