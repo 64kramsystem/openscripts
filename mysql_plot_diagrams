@@ -472,7 +472,6 @@ function compute_aggregates {
         local var_value=${line#* }
 
         if [[ -v var_stat_values["$var_name"] ]]; then
-          [[ -n "${var_stat_values["$var_name"]}" ]] && var_stat_values["$var_name"]+=' ' || true
           var_stat_values["$var_name"]+=${var_value}$'\n'
         fi
       done < "${stat_file_instances[@]}"
