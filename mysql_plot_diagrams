@@ -334,7 +334,7 @@ function prepare_multi_dir_datafiles {
         [[ -n "${var_stat_lines["$var_name"]}" ]] && var_stat_lines["$var_name"]+=' ' || true
         var_stat_lines["$var_name"]+=$var_value
       fi
-    done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "${stat_file_instances[@]}")"
+    done < <(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "${stat_file_instances[@]}")
 
     # Output the lines of each variable in the variable (merged) output file.
 
@@ -389,7 +389,7 @@ function prepare_single_diagram_datafiles {
         [[ -n "$vars_line" ]] && vars_line+=' ' || true
         vars_line+=$var_value
       fi
-    done <<< "$(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$reference_stat_file")"
+    done < <(perl -lne 'print "$1 $2" if /^(\w+)\s+(\d+(\.\d+)?)$/' "$reference_stat_file")
 
     # Output the lines in the (merged) output file.
 
@@ -481,7 +481,7 @@ function compute_aggregates {
       if [[ -v var_stat_values["$var_name"] ]]; then
         var_stat_values["$var_name"]+=${var_value}$'\n'
       fi
-    done <<< "$(perl -lpe 's/\t/ /; END { print }' "${stat_file_instances[@]}")"
+    done < <(perl -lpe 's/\t/ /; END { print }' "${stat_file_instances[@]}")
 
     for var_name in "${v_reference_var_names[@]}"; do
       local var_stat_aggregate_output=
