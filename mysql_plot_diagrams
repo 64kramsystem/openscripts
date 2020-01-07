@@ -19,6 +19,19 @@ c_single_diagram_basename=all_vars
 #
 declare -A c_aggregates=(
   [average]='$total += $F[0]; END { printf "%.2f", $total / $. }'
+  [stddev]='
+    push @elements, $F[0];
+    END {
+      $average = sum(@elements) / @elements;
+      print(
+        sqrt(
+          sum(
+            map { ($_ - $average) ** 2 } @elements
+          ) / @elements
+        )
+      )
+    }
+  '
   [sum]='$total += $F[0]; END { printf "%.2f", $total }'
 )
 
