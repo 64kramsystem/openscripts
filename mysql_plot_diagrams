@@ -19,6 +19,19 @@ c_single_diagram_basename=all_vars
 #
 declare -A c_aggregates=(
   [average]='$total += $F[0]; END { printf "%.2f", $total / $. }'
+  [stddev]='
+    push @elements, $F[0];
+    END {
+      $average = sum(@elements) / @elements;
+      print(
+        sqrt(
+          sum(
+            map { ($_ - $average) ** 2 } @elements
+          ) / @elements
+        )
+      )
+    }
+  '
   [sum]='$total += $F[0]; END { printf "%.2f", $total }'
 )
 
@@ -490,7 +503,7 @@ function compute_aggregates {
         var_stat_aggregate_output="$(basename "$stats_directory")."
       fi
 
-      var_stat_aggregate_output+="$var_name $v_aggregate_name: $(echo -n "${var_stat_values["$var_name"]}" | perl -ane "$v_aggregate_code")"
+      var_stat_aggregate_output+="$var_name $v_aggregate_name: $(echo -n "${var_stat_values["$var_name"]}" | perl '-MList::Util qw/sum/' -M'Math::Complex' -ane "$v_aggregate_code")"
 
       echo "$var_stat_aggregate_output" >> "$v_destination_dir/${c_aggregates_file_prefix}${v_aggregate_name}.${c_aggregates_file_extension}"
       [[ "$v_debug" == "1" ]] && echo "$var_stat_aggregate_output" || true
