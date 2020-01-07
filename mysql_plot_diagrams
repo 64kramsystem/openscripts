@@ -18,8 +18,8 @@ c_single_diagram_basename=all_vars
 # Executed as `perl -lane` code, with the values sent to stdin; the operations must print the result.
 #
 declare -A c_aggregates=(
-  [average]='$total += $F[0]; END { print $total / $. }'
-  [sum]='$total += $F[0]; END { print $total }'
+  [average]='$total += $F[0]; END { printf "%.2f", $total / $. }'
+  [sum]='$total += $F[0]; END { printf "%.2f", $total }'
 )
 
 c_help="Usage: $(basename "$0") [options] <stats_dir_1> {<stats_dir_N>,...}
