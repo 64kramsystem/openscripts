@@ -169,8 +169,8 @@ class PlotDiagram
   def prepare_command_set_y_range(data, fit, start_index)
     return "" if fit
 
-    all_positive = data.flat_map { |row| row[start_index - 1] }.all?(&:positive?)
-    all_negative = data.flat_map { |row| row[start_index - 1] }.all?(&:negative?)
+    all_positive = data.flat_map { |row| row[start_index - 1] }.all? { |n| n&.positive? }
+    all_negative = data.flat_map { |row| row[start_index - 1] }.all? { |n| n&.negative? }
 
     if all_positive
       "set yrange [0:]\n"
