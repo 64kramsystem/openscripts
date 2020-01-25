@@ -10,21 +10,21 @@ function ft {
   fi
 
   local c_help='
-  Usage: ft row[.column] [command]
+Usage: ft row[.column] [command]
 
-  `ft` extract the line/token at the specified coordinates, prints it to the screen, and copies it to the clipboard.
+`ft` extract the line/token at the specified coordinates, prints it to the screen, and copies it to the clipboard.
 
-  If run as standalone command, it will re-execute the last command in history, and process its output.
-  Otherwise (that is, in a pipeline), the stdin content will be processed.
+If run as standalone command, it will re-execute the last command in history, and process its output.
+Otherwise (that is, in a pipeline), the stdin content will be processed.
 
-  The full command used for the processing is added to the shell history.
+The full command used for the processing is added to the shell history.
 
-  In order to use this function, `source` the enclosing file (`ft_function`) it in the appropriate shell init file.
+In order to use this function, `source` the enclosing file (`ft_function`) it in the appropriate shell init file.
 
-  Examples:
-  - ft +2                                    # re-executes the last command, and copies the second top line
-  - printf "a f0\nb f1\nc f2" | ft 1.2 subl  # extracts "2", and executes `subl f2`
-  '
+Examples:
+- ft +2                                    # re-executes the last command, and copies the second top line
+- printf "a f0\nb f1\nc f2" | ft 1.2 subl  # extracts "2", and executes `subl f2`
+'
 
   if [[ $# -eq 0 ]] || [[ $# -gt 2 ]]; then
     echo "$c_help"
