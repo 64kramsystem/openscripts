@@ -28,6 +28,7 @@
   - `clean_kernel_packages`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
   - `downer`: download and automatically install packages/images from web pages
   - `download_ubuntu_packages`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
+  - `ft(_function)`: very handy script for extracting a token/line from the output of a command
   - `gitio`: generate a short GitHub URL, and copy it to the clipboard
   - `install_btrfs_checker`: monthly scrubs the BTRFS partitions and notifies the user on logon
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
@@ -43,6 +44,7 @@ I will slowly add remaining or new ones.
 
 Latest additions (not including updates):
 
+- 2020/Jan/25: `ft(_function)`
 - 2020/Jan/01: `purge_trash`
 - 2019/Dec/06: `mysql_collect_stats` and `mysql_plot_diagrams`
 - 2019/Oct/23: `fill_labels`
