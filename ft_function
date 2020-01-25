@@ -1,0 +1,76 @@
+#!/bin/zsh
+
+# This script needs to be `source`d, because it requires access to the `history` of the current
+# shell.
+#
+function ft {
+  if [[ "$ZSH_VERSION" == "" ]]; then
+    echo "ft() (currently) only supports ZSH"
+    return 1
+  fi
+
+  local c_help='
+Usage: ft row[.column] [command]
+
+`ft` extract the line/token at the specified coordinates, prints it to the screen, and copies it to the clipboard.
+
+If run as standalone command, it will re-execute the last command in history, and process its output.
+Otherwise (that is, in a pipeline), the stdin content will be processed.
+
+The full command used for the processing is added to the shell history.
+
+In order to use this function, `source` the enclosing file (`ft_function`) it in the appropriate shell init file.
+
+Examples:
+- ft +2                                    # re-executes the last command, and copies the second top line
+- printf "a f0\nb f1\nc f2" | ft 1.2 subl  # extracts "2", and executes `subl f2`
+'
+
+  if [[ $# -eq 0 ]] || [[ $# -gt 2 ]]; then
+    echo "$c_help"
+    return 1
+  elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "$c_help"
+    return 0
+  fi
+
+  # WATCH OUT! In Zsh, array indexing is 1-based
+  #
+  # Bash equivalent: mapfile -td. coordinates < <(echo "$1")
+  #
+  local coordinates=(${(s/./)1})
+
+  # tr: strip newline
+  local text_processing_command="tail -n ${coordinates[1]} | head -n 1 | tr -d '\n'"
+
+  if [[ "${coordinates[2]}" != "" ]]; then
+    text_processing_command+=" | awk '{printf \$${coordinates[2]}}'"
+  fi
+
+  if [[ "${2:-}" == "" ]]; then
+    text_processing_command+=" | tee >(xsel -ib)"
+  else
+    text_processing_command+=" | xargs $2"
+  fi
+
+  if [[ -t 0 ]]; then
+    # 'history 1' will return itself, therefore, we actually need to fetch the beforelast command
+    # this won't work as intended, if the command is more than 1 line long.
+    #
+    # In bash, we need `head` instead of `tail`.
+    #
+    local previous_command
+    previous_command=$(history 2 | tail -n 1 | cut -c 8-)
+
+    local full_command="$previous_command | $text_processing_command"
+    local history_command="$previous_command | ft $@"
+
+    # Add to history. The Bash equivalent is `history -s`
+    #
+    print -s "$history_command"
+  else
+    local full_command="$text_processing_command"
+  fi
+
+  zsh -c "$full_command"
+}
