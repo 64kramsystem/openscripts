@@ -14,6 +14,9 @@
 #
 # Note that batch mode (`--batch`) queries are still logged, so we need to handle this.
 
+# Used in EXPLAIN check
+shopt -s nocasematch
+
 query_thread_id=$(mysql -se "SELECT thread_id FROM mysql.general_log WHERE command_type = 'Query' AND thread_id != CONNECTION_ID()" | tail -n 1)
 
 query=$(mysql -se "SELECT argument FROM mysql.general_log WHERE command_type = 'Query' AND thread_id = $query_thread_id" | tail -n 1)
@@ -23,6 +26,19 @@ if [[ $query_used_db != "" ]]; then
   query="USE $query_used_db; $query"
 fi
 
+# The \G modifier is a MySQL client functionality, not stored in the general log. For this reason,
+# we manually don't use table ouput when the explain format is specified.
+#
+if [[ $query == "EXPLAIN FORMAT="* ]]; then
+  # In tab-separated mode, newlines are escaped, so we unescape them.
+  # We also remove the EXPLAIN header.
+  #
+  query_output_formatting='1d; s/\\n/\n/g'
+else
+  query_output_formatting=''
+  table_option="-t"
+fi
+
 echo "Running query: \"$query\""
 
-mysql -te "$query" | tee >(xsel -ib)
+mysql $table_option -e "$query" | sed "$query_output_formatting" | tee >(xsel -ib)
