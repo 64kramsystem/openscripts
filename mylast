@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Run the last query, and copy the result to the clipboard (in table format).
+#
+# Requires `general_log = ON` and `log_output = TABLE` server settings.
+#
+# For simplicity, it relies on the assumption that each connection has a new thread id; without
+# this, a `USE` invocation from a previous connection with the same thread id would be
+# inappropriately executed.
+# For dev environments, this logic is good enough and not worth the extra complexity to handle the
+# case above.
+#
+# Regardless, this approach is obviously not suited for non-deterministic functions, e.g. RAND().
+#
+# Note that batch mode (`--batch`) queries are still logged, so we need to handle this.
+
+query_thread_id=$(mysql -se "SELECT thread_id FROM mysql.general_log WHERE command_type = 'Query' AND thread_id != CONNECTION_ID()" | tail -n 1)
+
+query=$(mysql -se "SELECT argument FROM mysql.general_log WHERE command_type = 'Query' AND thread_id = $query_thread_id" | tail -n 1)
+query_used_db=$(mysql -se "SELECT argument FROM mysql.general_log WHERE command_type = 'Init DB' AND thread_id = $query_thread_id" | tail -n 1)
+
+if [[ $query_used_db != "" ]]; then
+  query="USE $query_used_db; $query"
+fi
+
+echo "Running query: \"$query\""
+
+mysql -te "$query" | tee >(xsel -ib)
