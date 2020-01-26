@@ -34,6 +34,7 @@
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
   - `mysql_collect_stats`: collects MySQL server statistics over a session (global status values), in a convenient structure for processing
   - `mysql_plot_diagrams`: plots diagrams (via GNU Plot), with the stats collected via `mysql_collect_stats`
+  - `mylast`: runs the last executed MySQL query, and copies the result to the clipboard
   - `purge_trash`: purge the trash files trashed before a certain threashold
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
@@ -44,6 +45,7 @@ I will slowly add remaining or new ones.
 
 Latest additions (not including updates):
 
+- 2020/Jan/26: `mylast`
 - 2020/Jan/25: `ft(_function)`
 - 2020/Jan/01: `purge_trash`
 - 2019/Dec/06: `mysql_collect_stats` and `mysql_plot_diagrams`
