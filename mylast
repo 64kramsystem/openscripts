@@ -27,16 +27,28 @@ query=$(mysql -se "SELECT argument FROM mysql.general_log WHERE command_type = '
 query_used_db=$(mysql -se "SELECT argument FROM mysql.general_log WHERE command_type = 'Init DB' AND thread_id = $query_thread_id" | tail -n 1)
 
 # The \G modifier is a MySQL client functionality, not stored in the general log. For this reason,
-# we manually don't use table ouput when the explain format is specified.
+# we manually don't use table ouput in some cases
 #
-if [[ $query == "EXPLAIN FORMAT="* ]]; then
-  # Remove the EXPLAIN header (`1d`).
-  #
-  query_output_formatting='1d; s/\\n/\n/g'
-else
-  query_output_formatting=''
-  table_option="-t"
-fi
+# `-N` removes the result header.
+#
+# If the number of `\G` cases increase, a hash table can be comfortably used.
+#
+case "$query" in
+  "EXPLAIN FORMAT="*)
+    query_output_formatting='s/\\n/\n/g'
+    output_option="-N"
+    ;;
+  "SHOW CREATE TABLE"*)
+    # Remove the table name from the first result line.
+    #
+    query_output_formatting='1 s/.*\t//; s/\\n/\n/g'
+    output_option="-N"
+    ;;
+  *)
+    query_output_formatting=''
+    output_option="-t"
+  ;;
+esac
 
 if [[ $query_used_db != "" ]]; then
   query="USE $query_used_db; $query"
@@ -46,4 +58,4 @@ echo "# Query ##########################"
 echo "$query"
 echo "##################################"
 
-mysql $table_option -e "$query" | sed "$query_output_formatting" | tee >(xsel -ib)
+mysql $output_option -e "$query" | sed "$query_output_formatting" | tee >(xsel -ib)
