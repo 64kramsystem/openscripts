@@ -43,5 +43,5 @@ response="$(curl -si https://git.io -F "url=$1" "${custom_name_option[@]}")"
 if [[ $response =~ 422 ]]; then
   echo "$response" | grep '^Status: '
 else
-  echo "$response" | perl -lane '/Location: (.*)/ && print $1' | tee >(xsel -ib)
+  echo "$response" | perl -ne '/^Location: (\S+)/ && print $1' | tee >(xsel -ib)
 fi
