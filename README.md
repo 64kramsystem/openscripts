@@ -20,6 +20,7 @@
   - `plot_diagram`: plots a diagram from a text file, via GNU Plot (and Ruby),  with better support for batch processing than `plot_2y_diagram`
   - `plot_2y_diagram`: plots a diagram with two y scales from a text file, via GNU Plot (and Ruby)
   - `spell`: spell a phrase, with customizable alphabets
+  - `texerak`: convenient wrapper around Tesseract, to OCR images/documents
 - system (user facing)
   - `connect_bt_device`: connects a BT device, working around the complete garbage that is Bluetooth, Bluez, and the BT Ubuntu support
   - `ejectdisk`: unmounts and powers off a device, or all the connected USB storage devices
@@ -45,6 +46,7 @@ I will slowly add remaining or new ones.
 
 Latest additions (not including updates):
 
+- 2020/Jan/07: `texerak`
 - 2020/Jan/26: `mylast`
 - 2020/Jan/25: `ft(_function)`
 - 2020/Jan/01: `purge_trash`
