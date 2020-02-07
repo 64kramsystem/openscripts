@@ -1,0 +1,103 @@
+#!/bin/bash
+
+set -o errexit
+set -o errtrace
+set -o nounset
+set -o pipefail
+shopt -s nocasematch
+
+c_help="\
+Usage: $(basename "$0") [-h|--help] [-l|--language] files...
+
+OCRs the files using tesseract, using intermediate files when necessary (ie. pdf).
+The output files have the same name as the input ones, with the extension replaced with \`txt\`.
+
+Requires Tesseract and ImageMagick to be installed.
+
+The language can also be specified via the \`\$TEXERAK_LANGUAGE\` environment variable (the parameter has higher priority).
+See \`tesseract --list-langs\` for the available languages.
+
+Example:
+
+  texerak --language deu source.png source.pdf
+"
+c_tiff_intermediate=$(dirname "$(mktemp)")/texerak_intermediate.tiff
+
+v_language=${TEXERAK_LANGUAGE:-}
+v_files=
+v_language_option=()
+
+function prepare_parameters {
+  eval set -- "$(getopt --options hl: --long help,language: --name "$(basename "$0")" -- "$@")"
+
+  while true ; do
+    case "$1" in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -l|--language)
+        v_language="$2"
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  v_files=("$@")
+}
+
+function ocr_source {
+  source=$1
+
+  echo "OCRing $source..."
+
+  bare_destination=${source%.*}
+
+  if [[ "$source" == *".pdf" ]]; then
+    echo "- converting to intermediate format..."
+
+    # See https://diging.atlassian.net/wiki/spaces/DCH/pages/5275668/Tutorial+Text+Extraction+and+OCR+with+Tesseract+and+ImageMagick.
+    #
+    convert -density 300 "$source" -depth 8 -strip -background white -alpha off "$c_tiff_intermediate"
+    source=$c_tiff_intermediate
+  fi
+
+  if [[ "$v_language" != "" ]]; then
+    v_language_option=(-l "$v_language")
+  fi
+
+  # Grep exit codes are not the most convenient for this logic.
+  #
+  { tesseract "${v_language_option[@]}" "$source" "$bare_destination" 3>&2 2>&1 1>&3 | perl -ne 'print unless /^(Tesseract Open Source|Page )/' >&3; } 3>&2 2>&1
+
+  remove_intermediate
+}
+
+function remove_intermediate {
+  # `rm -f` works as well.
+  #
+  if [[ -f "$c_tiff_intermediate" ]]; then
+    rm "$c_tiff_intermediate"
+  fi
+}
+
+function ocr_sources {
+  for source in "${v_files[@]}"; do
+    ocr_source "$source"
+  done
+}
+
+###########################################################################
+# MAIN BODY
+###########################################################################
+
+exec 5> "$(dirname "$(mktemp)")/$(basename "$0").log"
+BASH_XTRACEFD="5"
+set -x
+
+prepare_parameters "$@"
+
+trap remove_intermediate ERR
+
+ocr_sources
