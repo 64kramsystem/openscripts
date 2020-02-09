@@ -28,6 +28,7 @@
   - `ownsync`: command line sync script for Owncloud/Nextcloud, with conflicts handling
 - system (sysadmin)
   - `clean_kernel_packages`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
+  - `clean_recents`: clean the recent used file entries whose basename matches the specified patterns
   - `downer`: download and automatically install packages/images from web pages
   - `download_ubuntu_packages`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
   - `ft(_function)`: very handy script for extracting a token/line from the output of a command
@@ -47,6 +48,7 @@ I will slowly add remaining or new ones.
 
 Latest additions (not including updates):
 
+- 2020/Feb/09: `clean_recents`
 - 2020/Feb/09: `control_music_player`
 - 2020/Feb/07: `texerak`
 - 2020/Jan/26: `mylast`
