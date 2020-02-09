@@ -1,0 +1,148 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+################################################################################
+# CONSTANTS/VARIABLES
+################################################################################
+
+c_gmusicbrowser_socket_file="$HOME/.config/gmusicbrowser/gmusicbrowser.fifo"
+c_supported_players=(clementine mpv gmusicbrowser) # process name
+
+c_help="\
+Usage: $(basename "$0") (previous|play_pause|next|quit) [socket]
+
+Finds one of the supported players, if running, and executes the provided action.
+
+The supported players are: $(IFS=,; echo "${c_supported_players[*]}")
+
+The [socket] parameter is currently required only for mpv; gmusicbrowser uses the default one (unless provided).
+
+This script is intended to be associated to system global key bindings.
+In MATE, for example, this script will assign them (watch out - it resets existing custom bindings):
+
+    ruby -rshellwords <<'RUBY'
+      bindings = [
+        ['Previous song',              'control_music_player previous   /run/user/1000/play_random_musik.sock',  '<Mod4>F9' ],
+        ['Play/pause',                 'control_music_player play_pause /run/user/1000/play_random_musik.sock',  '<Mod4>F10'],
+        ['Next song',                  'control_music_player next       /run/user/1000/play_random_musik.sock',  '<Mod4>F11'],
+        ['Next album',                 'control_music_player quit       /run/user/1000/play_random_musik.sock',  '<Mod4>F12'],
+      ]
+
+      puts \"Purging existing bindings...\"
+
+      ``dconf reset -f /org/mate/desktop/keybindings/``
+
+      bindings.each_with_index do |(name, action, combination), i|
+        raise \"Binding data can't include single quotes\" if (name + action + combination).include?(\"'\")
+
+        puts \"Binding #{name.inspect}...\"
+        \`dconf write /org/mate/desktop/keybindings/custom#{i}/name    #{(\"'\" + name        + \"'\").shellescape}\`
+        \`dconf write /org/mate/desktop/keybindings/custom#{i}/action  #{(\"'\" + action      + \"'\").shellescape}\`
+        \`dconf write /org/mate/desktop/keybindings/custom#{i}/binding #{(\"'\" + combination + \"'\").shellescape}\`
+      end
+    RUBY
+"
+
+v_command=
+v_socket_file=
+
+################################################################################
+# HELPERS
+################################################################################
+
+function process_command_line_options {
+  if [[ $# -lt 1 || $# -gt 2 ]]; then
+    echo "$c_help"
+    exit 1
+  elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    echo "$c_help"
+    exit 0
+  fi
+
+  v_command=$1
+  v_socket_file=${2:-}
+}
+
+function find_running_player {
+  for process_name in "${c_supported_players[@]}"; do
+    if pgrep "$process_name" > /dev/null; then
+      echo -n "$process_name"
+      return
+    fi
+  done
+
+  echo "No supported player found running!"
+  exit 1
+}
+
+################################################################################
+# PLAYER_COMMANDS
+################################################################################
+
+function clementine_previous {
+  clementine --previous
+}
+
+function clementine_play_pause {
+  clementine --play-pause
+}
+
+function clementine_next {
+  clementine --next
+}
+function clementine_quit {
+  pkill clementine
+}
+
+function mpv_previous {
+  echo '{ "command": ["playlist-prev"] }' | socat - "$v_socket_file"
+}
+
+function mpv_play_pause {
+  echo '{ "command": ["cycle", "pause"] }' | socat - "$v_socket_file"
+}
+
+function mpv_next {
+  echo '{ "command": ["playlist-next", "force"] }' | socat - "$v_socket_file"
+}
+
+function mpv_quit {
+  echo '{ "command": ["quit"] }' | socat - "$v_socket_file"
+}
+
+# gmusicbrowser
+
+function gmusicbrowser_previous {
+  echo "PrevSong" > "${v_socket_file:-$c_gmusicbrowser_socket_file}"
+}
+
+function gmusicbrowser_play_pause {
+  echo "PlayPause" > "${v_socket_file:-$c_gmusicbrowser_socket_file}"
+}
+
+function gmusicbrowser_next {
+  echo "NextSong" > "${v_socket_file:-$c_gmusicbrowser_socket_file}"
+}
+
+function gmusicbrowser_quit {
+  pkill gmusicbrowser
+}
+
+################################################################################
+# MAIN BODY
+################################################################################
+
+process_command_line_options "$@"
+
+running_player=$(find_running_player)
+command_fx_name=${running_player}_${v_command}
+
+if declare -f "$command_fx_name" > /dev/null; then
+  "$command_fx_name" > /dev/null
+else
+  echo "The command \`$1\` is not supported for the player \`$running_player\`."
+  exit 1
+fi
