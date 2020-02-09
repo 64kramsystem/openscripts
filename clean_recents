@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+
+require 'simple_scripting/argv'
+require 'rexml/document'
+
+LONG_HELP=<<~HELP
+  Clean the recent used file entries whose basename matches the specified patterns.
+
+  If the patterns are composed only of alphanumeric characters, they're assumed to be extensions; if they include any wildcard, they'll be considered glob patterns.
+
+  Examples:
+
+    `odt`:    match files with `odt` extension
+    `pizza*`: match files starting with `pizza`, but not `a_pizza`
+    `*.o?s`:  match files with `ods` extension
+HELP
+
+class CleanRecents
+  RECENTS_FILE = File.expand_path('.local/share/recently-used.xbel', '~')
+
+  def execute(raw_patterns)
+    document = REXML::Document.new(IO.read(RECENTS_FILE))
+    document_root = document.elements.first
+
+    regex_patterns = raw_patterns.map(&method(:convert_pattern_to_regex))
+
+    document_root.elements.each do |bookmark|
+      full_filename = bookmark.attributes['href']
+      base_filename = File.basename(full_filename)
+
+      regex_patterns.each do |pattern|
+        if base_filename.match?(pattern)
+          puts full_filename
+          document_root.delete(bookmark)
+        end
+      end
+    end
+
+    save_prettified_xml(document)
+  end
+
+  private
+
+  def convert_pattern_to_regex(raw_pattern)
+    # For simplicity, we assume that the user doesn't pass weird stuff, like newlines.
+    #
+    if raw_pattern =~ /^[a-z0-9]+$/i
+      /\.#{raw_pattern}$/
+    else
+      Regexp.new('^' + raw_pattern.gsub('*', '.*').gsub('?', '.') + '$')
+    end
+  end
+
+  def save_prettified_xml(document)
+    xml_formatter = REXML::Formatters::Pretty.new
+    xml_formatter.compact = true
+
+    File.open(RECENTS_FILE, 'w') { |file| xml_formatter.write(document, file) }
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  options = SimpleScripting::Argv.decode(
+    '*patterns',
+    long_help: LONG_HELP
+  ) || exit
+
+  CleanRecents.new.execute(options[:patterns])
+end
