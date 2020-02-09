@@ -48,7 +48,7 @@ I will slowly add remaining or new ones.
 Latest additions (not including updates):
 
 - 2020/Feb/09: `control_music_player`
-- 2020/Jan/07: `texerak`
+- 2020/Feb/07: `texerak`
 - 2020/Jan/26: `mylast`
 - 2020/Jan/25: `ft(_function)`
 - 2020/Jan/01: `purge_trash`
