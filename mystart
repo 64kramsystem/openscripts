@@ -1,0 +1,123 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+c_mysql_symlink_basename=mysql
+c_help='Usage: '"$(basename "$0")"' [-c|--config <configfile>] [<version>]
+
+Switches MySQL (via symlink) to the selected version, creates the required directories (purging them, if required) and starts it.
+
+Assumes a layout like the following:
+
+$MYSTART_MYSQL_VERSIONS_ROOT
+├── mysql-5.7.29-linux-glibc2.12-x86_64
+│   ├── bin
+│   │   ├── innochecksum
+│   ...
+├── mysql-8.0.18-linux-glibc2.12-x86_64
+│   ├── bin
+│   │   ├── innochecksum
+│   ...
+├── mysql-8.0.19-linux-glibc2.12-x86_64
+│   ├── bin
+│   │   ├── innochecksum
+│   ...
+└── '"$c_mysql_symlink_basename"' -> mysql-5.7.29-linux-glibc2.12-x86_64
+
+where `'"$c_mysql_symlink_basename"'` is symlink to the current MySQL version.
+
+The `version` parameter is a prefix of the desired version; if not specified, the latest version will be used.
+
+The MySQL supported versions are 5.7 and 8.0.
+
+Examples, using the above structure, of switch+run:
+
+- `mystart 5.7`    -> `mysql-5.7.29-linux-glibc2.12-x86_64`
+- `mystart 8`      -> `mysql-8.0.18-linux-glibc2.12-x86_64`
+- `mystart 8.0.19` -> `mysql-8.0.19-linux-glibc2.12-x86_64`
+- `mystart`        -> `mysql-8.0.19-linux-glibc2.12-x86_64`
+
+Requires:
+
+- $MYSTART_MYSQL_VERSIONS_ROOT, $MYSTART_DATA_LOCATION, $MYSTART_LOGS_LOCATION.
+- `mystop` to be in $PATH
+- `$MYSTART_MYSQL_VERSIONS_ROOT/mysql/bin` to be in $PATH'
+
+exec 5> "$(dirname "$(mktemp)")/$(basename "$0").log"
+BASH_XTRACEFD="5"
+set -x
+
+v_configfile=
+v_mysql_version=
+
+function prepare_parameters {
+  eval set -- "$(getopt --options hc: --long help,config: --name "$(basename "$0")" -- "$@")"
+
+  while true ; do
+    case "$1" in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -c|--config)
+        v_configfile="$2"
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -gt 1 ]]; then
+    echo "$c_help"
+    exit 1
+  elif [[ $# -eq 1 ]]; then
+    v_mysql_version=$1
+  fi
+}
+
+function switch_symlink {
+  mysql_symlink=$MYSTART_MYSQL_VERSIONS_ROOT/$c_mysql_symlink_basename
+
+  if [[ "$v_mysql_version" != "" ]]; then
+    mysql_version_location=$(ls -1d "$MYSTART_MYSQL_VERSIONS_ROOT/mysql-$v_mysql_version"*/ | tail -n 1)
+    echo "Switching to $(basename "$mysql_version_location")..."
+    ln -sfn "$mysql_version_location" "$mysql_symlink"
+  else
+    mysql_version_location=$(readlink -f "$mysql_symlink")
+    echo "Using (existing) $(basename "$mysql_version_location ")..."
+  fi
+}
+
+function create_directories {
+  mkdir -p "$MYSTART_DATA_LOCATION"
+
+  # Won't have any effect if it's the same as the previous.
+  #
+  mkdir -p "$MYSTART_LOGS_LOCATION"
+}
+
+function initialize_and_start_mysql {
+  config_option=()
+  log_option=()
+
+  if [[ "$v_configfile" != "" ]]; then
+    config_option+=("--defaults-file=$v_configfile")
+  fi
+
+  if [[ "$(basename "$mysql_version_location")" == "mysql-5.7."* ]]; then
+    log_option+=("--log-error")
+  fi
+
+  # `--default-file` must precede `--initialize-insecure`!!
+  #
+  mysqld "${config_option[@]}" --initialize-insecure
+  mysqld "${config_option[@]}" "${log_option[@]}" --daemonize
+}
+
+prepare_parameters "$@"
+mystop
+switch_symlink
+create_directories
+initialize_and_start_mysql

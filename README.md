@@ -18,8 +18,8 @@
   - `encode_to_m4a`: encodes and normalizes input files to m4a, using ffmpeg/libsdk_aac
   - `fill_labels`: prepares an OpenDocument with addresses, to be printed on a standard A4 page with 96x50.8mm labels
   - `mk_invoice`: prepares a generic (software engineering) invoice in Office Open XML format, using a template, and the data provided in the configuration file
-  - `plot_diagram`: plots a diagram from a text file, via GNU Plot (and Ruby),  with better support for batch processing than `plot_2y_diagram`
   - `plot_2y_diagram`: plots a diagram with two y scales from a text file, via GNU Plot (and Ruby)
+  - `plot_diagram`: plots a diagram from a text file, via GNU Plot (and Ruby),  with better support for batch processing than `plot_2y_diagram`
   - `spell`: spell a phrase, with customizable alphabets
   - `texerak`: convenient wrapper around Tesseract, to OCR images/documents
 - system (user facing)
@@ -35,9 +35,10 @@
   - `gitio`: generate a short GitHub URL, and copy it to the clipboard
   - `install_btrfs_checker`: monthly scrubs the BTRFS partitions and notifies the user on logon
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
+  - `mylast`: runs the last executed MySQL query, and copies the result to the clipboard
   - `mysql_collect_stats`: collects MySQL server statistics over a session (global status values), in a convenient structure for processing
   - `mysql_plot_diagrams`: plots diagrams (via GNU Plot), with the stats collected via `mysql_collect_stats`
-  - `mylast`: runs the last executed MySQL query, and copies the result to the clipboard
+  - `mystart`/`mystop`: start/stop MySQL, automatically switching between version, and preparing the data
   - `purge_trash`: purge the trash files trashed before a certain threashold
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
@@ -48,6 +49,7 @@ I will slowly add remaining or new ones.
 
 Latest additions (not including updates):
 
+- 2020/Feb/10: `mystart`/`mystop`
 - 2020/Feb/09: `clean_recents`
 - 2020/Feb/09: `control_music_player`
 - 2020/Feb/07: `texerak`
