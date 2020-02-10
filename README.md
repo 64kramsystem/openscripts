@@ -38,6 +38,7 @@
   - `mysql_collect_stats`: collects MySQL server statistics over a session (global status values), in a convenient structure for processing
   - `mysql_plot_diagrams`: plots diagrams (via GNU Plot), with the stats collected via `mysql_collect_stats`
   - `mylast`: runs the last executed MySQL query, and copies the result to the clipboard
+  - `mystart`/`mystop`: start/stop MySQL, automatically switching between version, and preparing the data
   - `purge_trash`: purge the trash files trashed before a certain threashold
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
@@ -48,6 +49,7 @@ I will slowly add remaining or new ones.
 
 Latest additions (not including updates):
 
+- 2020/Feb/10: `mystart`/`mystop`
 - 2020/Feb/09: `clean_recents`
 - 2020/Feb/09: `control_music_player`
 - 2020/Feb/07: `texerak`
