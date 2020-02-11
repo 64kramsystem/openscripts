@@ -35,11 +35,16 @@ With input, the script runs once for each line, and terminates once EOF is reach
                    if a line doesn't match, stats are not captured for that cycle.
 - \`--input-var-name\`: the name of the variable captured by the regex above; defaults to \`$v_input_var_name\`.
 
-For example:
+Examples:
 
+    # Base collection from a remote server
+    #
+    $(basename "$0") -H 10.0.2.2 -c myuser:mypassword /tmp/mystats
+
+    # Dump two sets of stats, each including a stat named \`myvalue\` whose values are, for each cycle, respectively \`1\` and \`3\`
+    #
     printf \"_1_\\n_a_\\n_3_\" | $(basename "$0") -r '(\d)' --input-var-name myvalue /tmp/mystats
-
-will dump two sets of stats, each one including a stat named \`myvalue\` whose values are, for each cycle, respectively \`1\` and \`3\`."
+"
 
 function decode_cmdline_parameters {
   eval set -- "$(getopt --options hr:v:l:H:c: --long help,input-regex:,input-var-name:,limit:,mysql-host:,mysql-credentials: -- "$@")"
