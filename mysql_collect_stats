@@ -76,7 +76,7 @@ function decode_cmdline_parameters {
 }
 
 function prepare_mysql_credential_options {
-  [[ "$v_mysql_user" != "" ]] && v_mysql_credential_options+=(-u "$v_mysql_user") || true
+  [[ "$v_mysql_user"     != "" ]] && v_mysql_credential_options+=(-u "$v_mysql_user")    || true
   [[ "$v_mysql_password" != "" ]] && v_mysql_credential_options+=(-p"$v_mysql_password") || true  # no space before the value!
 }
 
