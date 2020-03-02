@@ -3,6 +3,12 @@
 set -o errexit
 set -o nounset
 
+# It's not clear if in theory, files could be analyzed individually for track gain, then the audio
+# gain to be applied without recomputing, but it doesn't work based on testing:
+#
+#     for f in *.m4a; do aacgain -s r "$f"; done
+#     aacgain -k -a *.m4a
+
 # shellcheck disable=SC2016
 help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
 
@@ -20,7 +26,7 @@ Compressed input audio files which are not flac are copied, without being reenco
 
 The codec used is libfdk_aac, in VBR, with a default quality of 3 (~110 kbps).
 
-Requires aacgain and a recompiled FFmpeg.
+Requires aacgain, a recompiled FFmpeg, and GNU Parallel.
 
 Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
 "
@@ -67,6 +73,15 @@ function activate_debug {
   set -x
 }
 
+function check_prerequisites {
+  if ! [[ -x "$(command -v parallel)" ]]; then
+    >&2 echo 'The `parallel` binary is not in $PATH.'
+    exit 1
+  fi
+}
+
+# For simplicity, only files in directories are encoded in parallel.
+#
 function encode_input_files {
   for source_file in "${input_files[@]}"; do
     if [[ -f "$source_file" ]]; then
@@ -100,7 +115,7 @@ function encode_file {
     destination_file="$destination/$(basename "${1%.*}.m4a")"
     intermediate_file="$(create_intermediate_file_name "$destination_file")"
 
-    ffmpeg -y -hide_banner -loglevel fatal -i "$1" -vn -c:a libfdk_aac -vbr "$quality" "$intermediate_file"
+    ffmpeg -y -hide_banner -loglevel error -i "$1" -vn -c:a libfdk_aac -vbr "$quality" "$intermediate_file"
     ;;
   audio/x-m4a | video/mp4 | audio/mpeg )
     echo "Copying $1..."
@@ -133,9 +148,13 @@ function encode_directory {
   local destination_subdir
   local intermediate_subdir
   local destination_subfiles=()
+  # Don't care that this file is not deleted after an error; it's small and in the temporary
+  # directory.
+  local parallel_commands_list_file=
 
   destination_subdir="$destination/$(basename "$1")"
   intermediate_subdir="$(mktemp -d)"
+  parallel_commands_list_file=$(mktemp)
 
   if [[ "$(readlink -f "$1")" == "$(readlink -f "$destination_subdir")" && $remove_file != 1 ]]; then
     echo "Destination matches the source \`$1\`; this is only allowed when \`--remove\` is specified."
@@ -150,11 +169,11 @@ function encode_directory {
 
     case "$file_mime_type" in
     audio/x-flac | audio/x-wav )
-      echo "Encoding $source_subfile..."
+      echo "Adding $source_subfile to encoding queue..."
 
       destination_subfile="$intermediate_subdir/$(basename "${source_subfile%.*}.m4a")"
 
-      ffmpeg -y -hide_banner -loglevel fatal -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
+      echo "ffmpeg -y -hide_banner -loglevel error -i $(printf "%q" "$source_subfile") -vn -c:a libfdk_aac -vbr $quality $(printf "%q" "$destination_subfile")" >> "$parallel_commands_list_file"
 
       destination_subfiles+=("$destination_subfile")
       ;;
@@ -181,6 +200,12 @@ function encode_directory {
     esac
   done
 
+  echo "Encoding audio files..."
+
+  parallel < "$parallel_commands_list_file"
+
+  rm "$parallel_commands_list_file"
+
   echo "Normalizing (album) $destination_subdir (tmp dir: $intermediate_subdir)..."
 
   # See `-s -r` note in the previous invocation.
@@ -198,5 +223,6 @@ function encode_directory {
 }
 
 decode_commandline_params "$@"
+check_prerequisites
 activate_debug
 encode_input_files
