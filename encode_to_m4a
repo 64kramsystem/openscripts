@@ -100,7 +100,7 @@ function encode_file {
     destination_file="$destination/$(basename "${1%.*}.m4a")"
     intermediate_file="$(create_intermediate_file_name "$destination_file")"
 
-    ffmpeg -y -hide_banner -loglevel fatal -i "$1" -vn -c:a libfdk_aac -vbr "$quality" "$intermediate_file"
+    ffmpeg -y -hide_banner -loglevel error -i "$1" -vn -c:a libfdk_aac -vbr "$quality" "$intermediate_file"
     ;;
   audio/x-m4a | video/mp4 | audio/mpeg )
     echo "Copying $1..."
@@ -154,7 +154,7 @@ function encode_directory {
 
       destination_subfile="$intermediate_subdir/$(basename "${source_subfile%.*}.m4a")"
 
-      ffmpeg -y -hide_banner -loglevel fatal -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
+      ffmpeg -y -hide_banner -loglevel error -i "$source_subfile" -vn -c:a libfdk_aac -vbr "$quality" "$destination_subfile"
 
       destination_subfiles+=("$destination_subfile")
       ;;
