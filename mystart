@@ -4,8 +4,11 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# The --tmp functionality is undocumented not to pollute the current help, which is already quite
+# long.
+
 c_mysql_symlink_basename=mysql
-c_help='Usage: '"$(basename "$0")"' [-c|--config <configfile>] [<version>]
+c_help='Usage: '"$(basename "$0")"' [-c|--config <configfile>] [-t|--tmp] [<version>]
 
 Switches MySQL (via symlink) to the selected version, creates the required directories (purging them, if required) and starts it.
 
@@ -51,9 +54,10 @@ set -x
 
 v_configfile=
 v_mysql_version=
+v_create_and_connect_to_tmp_schema=
 
 function prepare_parameters {
-  eval set -- "$(getopt --options hc: --long help,config: --name "$(basename "$0")" -- "$@")"
+  eval set -- "$(getopt --options hc:t --long help,config:,tmp --name "$(basename "$0")" -- "$@")"
 
   while true ; do
     case "$1" in
@@ -63,6 +67,9 @@ function prepare_parameters {
       -c|--config)
         v_configfile="$2"
         shift 2 ;;
+      -t|--tmp)
+        v_create_and_connect_to_tmp_schema=1
+        shift ;;
       --)
         shift
         break ;;
@@ -116,8 +123,17 @@ function initialize_and_start_mysql {
   mysqld "${config_option[@]}" "${log_option[@]}" --daemonize
 }
 
+function create_and_connect_to_tmp_schema {
+  mysql -e "CREATE SCHEMA tmp"
+  mysql tmp
+}
+
 prepare_parameters "$@"
 mystop
 switch_symlink
 create_directories
 initialize_and_start_mysql
+
+if [[ "$v_create_and_connect_to_tmp_schema" == "1" ]]; then
+  create_and_connect_to_tmp_schema
+fi
