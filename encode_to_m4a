@@ -83,10 +83,14 @@ function check_prerequisites {
 # For simplicity, only files in directories are encoded in parallel.
 #
 function encode_input_files {
+  local source_file_for_type_check
+
   for source_file in "${input_files[@]}"; do
-    if [[ -f "$source_file" ]]; then
+    source_file_for_type_check=$(readlink -f "$source_file")
+
+    if [[ -f "$source_file_for_type_check" ]]; then
       encode_file "$source_file"
-    elif [[ -d "$source_file" ]]; then
+    elif [[ -d "$source_file_for_type_check" ]]; then
       encode_directory "$source_file"
     else
       echo "Source type not recognized: $source_file"
@@ -106,8 +110,15 @@ function encode_file {
   local destination_file
   local intermediate_file
   local source_file=$1
+  local source_file_for_type_check
 
-  file_mime_type="$(file --mime-type "$source_file" | grep -oP '\S+/\S+$')"
+  if [[ -L $source_file ]]; then
+    source_file_for_type_check=$(readlink -f "$source_file")
+  else
+    source_file_for_type_check=$source_file
+  fi
+
+  file_mime_type="$(file --mime-type "$source_file_for_type_check" | grep -oP '\S+/\S+$')"
 
   case "$file_mime_type" in
   audio/flac | audio/x-flac | audio/x-wav )
