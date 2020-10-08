@@ -13,6 +13,7 @@ class GenerateWikiHomeToc
     Each directory is an HTML header level, and the files contained are an entry in the section.
     Files come before directories; for each type, the entries are sorted case-insensitively.
 
+    The directory name is prettified, with similar logic to ActiveSupport's `titleize()`.
     If a document has an H1 header, it's used as entry description, otherwise, the filename is used (with minor editing).
 
     Links to Markdown documents are changed so that opening them in GitHub will show the HTML page (instead of the raw content).
@@ -75,7 +76,12 @@ class GenerateWikiHomeToc
     if parents_count == 1
       ""
     else
-      "\n" + ('#' * parents_count) + " " + File.basename(dir_path) + "\n\n"
+      prettified_dirname = File
+        .basename(dir_path)
+        .capitalize
+        .tr('-_', ' ')
+
+      "\n" + ('#' * parents_count) + " " + prettified_dirname + "\n\n"
     end
   end
 
