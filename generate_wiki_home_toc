@@ -4,7 +4,8 @@ require 'simple_scripting/argv'
 
 class GenerateWikiHomeToc
   DEFAULT_DIRECTORY = '.'
-  HOME_DIRECTORY_HEADER = "# Home\n\n"
+  HOME_HEADER = "# Home"
+  ROOT_DIRECTORY_HEADER = "## Root"
   HOME_FILE = 'Home.md'
 
   LONG_HELP = <<~STR
@@ -22,7 +23,7 @@ class GenerateWikiHomeToc
   def execute(directory: DEFAULT_DIRECTORY)
     Dir.chdir(directory)
 
-    output = HOME_DIRECTORY_HEADER
+    output = "#{HOME_HEADER}\n\n#{ROOT_DIRECTORY_HEADER}\n\n"
     output += print_formatted_directory('.')
 
     IO.write(HOME_FILE, output)
