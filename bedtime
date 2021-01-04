@@ -1,0 +1,55 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-o|--off] hh:mm hh:mm
+
+Sets two Systemd timers at the given times, the first for a suspend, and the second for a shutdown.
+
+Watch out! If the computer is rebooted, the timers will need to be set again."
+
+v_suspend_time=
+v_shutdown_time=
+
+function decode_commandline_parameters {
+  eval set -- "$(getopt --options h --long help -- "$@")"
+
+  while true ; do
+    case "$1" in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 2 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_suspend_time=$1
+  v_shutdown_time=$2
+}
+
+# Techcnically, this allows also other formats (e.g. full dates).
+#
+function check_times {
+  date -d "$v_suspend_time" > /dev/null
+  date -d "$v_shutdown_time" > /dev/null
+}
+
+function set_timers {
+  systemd-run --user --on-calendar="$v_suspend_time" /bin/systemctl suspend
+  systemd-run --user --on-calendar="$v_shutdown_time" /bin/systemctl shutdown
+}
+
+decode_commandline_parameters "$@"
+check_times
+set_timers
