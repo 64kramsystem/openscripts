@@ -38,7 +38,7 @@ function decode_commandline_parameters {
   v_shutdown_time=$2
 }
 
-# Techcnically, this allows also other formats (e.g. full dates).
+# Technically, this allows also other formats (e.g. full dates).
 #
 function check_times {
   date -d "$v_suspend_time" > /dev/null
