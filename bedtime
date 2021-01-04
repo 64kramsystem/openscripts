@@ -45,9 +45,11 @@ function check_times {
   date -d "$v_shutdown_time" > /dev/null
 }
 
+# Watch out! The shutdown command is `poweroff`.
+#
 function set_timers {
   systemd-run --user --on-calendar="$v_suspend_time" /bin/systemctl suspend
-  systemd-run --user --on-calendar="$v_shutdown_time" /bin/systemctl shutdown
+  systemd-run --user --on-calendar="$v_shutdown_time" /bin/systemctl poweroff
 }
 
 decode_commandline_parameters "$@"
