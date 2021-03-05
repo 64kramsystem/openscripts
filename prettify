@@ -11,6 +11,8 @@ require 'yaml'
 
 class Processor
 
+  # This represents both extensions and formats.
+  #
   SUPPORTED_FORMATS = %w(json xml html yml yaml)
 
   def process(filenames, backup: false, format: nil)
