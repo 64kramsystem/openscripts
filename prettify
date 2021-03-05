@@ -7,24 +7,23 @@ require 'fileutils'
 require 'json'
 require 'rexml/document'
 require 'nokogiri'
+require 'yaml'
 
 class Processor
 
-  SUPPORTED_FORMATS = %w(json xml html)
+  # This represents both extensions and formats.
+  #
+  SUPPORTED_FORMATS = %w(json xml html yml yaml)
 
-  def initialize(backup: false)
-    @backup = backup
-  end
-
-  def process(filenames, format: nil)
+  def process(filenames, backup: false, format: nil)
     Array(filenames).each do |filename|
       puts "Prettifying #{filename}..."
-
-      FileUtils.cp(filename, "#{filename}.bak") if @backup
 
       content = IO.read(filename)
 
       prettified_content = prettify(filename, content, format: format)
+
+      FileUtils.cp(filename, "#{filename}.bak") if backup
 
       IO.write(filename, prettified_content)
     end
@@ -76,13 +75,29 @@ class HtmlPrettifier
 
 end
 
+class YamlPrettifier
+
+  def prettify(content)
+    YAML.load(content).to_yaml
+  end
+
+end
+
+YmlPrettifier = YamlPrettifier
+
 if $PROGRAM_NAME == __FILE__
   params = SimpleScripting::Argv.decode(
     ['-b', '--backup',        'Backup original file, appending `.bak`'],
     ['-f', '--format FORMAT', "Forces the format; valid values: #{Processor::SUPPORTED_FORMATS.join(', ')}"],
     '*filenames',
-    long_help: "Prettifies #{Processor::SUPPORTED_FORMATS.join('/')} files (relies on the file extension for detecting the format)."
+    long_help: <<~HELP
+      Prettifies #{Processor::SUPPORTED_FORMATS.join('/')} files (relies on the file extension for detecting the format).
+
+      Watch out! YAML comments are stripped.
+    HELP
   ) || exit
 
-  Processor.new(backup: params[:backup]).process(params[:filenames], format: params[:format])
+  filenames = params.delete(:filenames)
+
+  Processor.new.process(filenames, **params)
 end
