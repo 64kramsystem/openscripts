@@ -11,7 +11,7 @@ require 'yaml'
 
 class Processor
 
-  SUPPORTED_FORMATS = %w(json xml html)
+  SUPPORTED_FORMATS = %w(json xml html yml yaml)
 
   def process(filenames, backup: false, format: nil)
     Array(filenames).each do |filename|
@@ -76,17 +76,23 @@ end
 class YamlPrettifier
 
   def prettify(content)
-    YAML.load(content)
+    YAML.load(content).to_yaml
   end
 
 end
+
+YmlPrettifier = YamlPrettifier
 
 if $PROGRAM_NAME == __FILE__
   params = SimpleScripting::Argv.decode(
     ['-b', '--backup',        'Backup original file, appending `.bak`'],
     ['-f', '--format FORMAT', "Forces the format; valid values: #{Processor::SUPPORTED_FORMATS.join(', ')}"],
     '*filenames',
-    long_help: "Prettifies #{Processor::SUPPORTED_FORMATS.join('/')} files (relies on the file extension for detecting the format)."
+    long_help: <<~HELP
+      Prettifies #{Processor::SUPPORTED_FORMATS.join('/')} files (relies on the file extension for detecting the format).
+
+      Watch out! YAML comments are stripped.
+    HELP
   ) || exit
 
   filenames = params.delete(:filenames)
