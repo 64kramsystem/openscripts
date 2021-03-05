@@ -7,6 +7,7 @@ require 'fileutils'
 require 'json'
 require 'rexml/document'
 require 'nokogiri'
+require 'yaml'
 
 class Processor
 
@@ -68,6 +69,14 @@ class HtmlPrettifier
 
   def prettify(content)
     Nokogiri::XML(content,&:noblanks).to_s
+  end
+
+end
+
+class YamlPrettifier
+
+  def prettify(content)
+    YAML.load(content)
   end
 
 end
