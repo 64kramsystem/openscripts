@@ -12,15 +12,11 @@ class Processor
 
   SUPPORTED_FORMATS = %w(json xml html)
 
-  def initialize(backup: false)
-    @backup = backup
-  end
-
-  def process(filenames, format: nil)
+  def process(filenames, backup: false, format: nil)
     Array(filenames).each do |filename|
       puts "Prettifying #{filename}..."
 
-      FileUtils.cp(filename, "#{filename}.bak") if @backup
+      FileUtils.cp(filename, "#{filename}.bak") if backup
 
       content = IO.read(filename)
 
@@ -84,5 +80,7 @@ if $PROGRAM_NAME == __FILE__
     long_help: "Prettifies #{Processor::SUPPORTED_FORMATS.join('/')} files (relies on the file extension for detecting the format)."
   ) || exit
 
-  Processor.new(backup: params[:backup]).process(params[:filenames], format: params[:format])
+  filenames = params.delete(:filenames)
+
+  Processor.new.process(filenames, **params)
 end
