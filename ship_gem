@@ -242,5 +242,5 @@ if __FILE__ == $PROGRAM_NAME
 
   increment_type = options.delete(:increment_type)
 
-  ShipGem.new.execute(increment_type, options)
+  ShipGem.new.execute(increment_type, **options)
 end
