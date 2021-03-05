@@ -16,11 +16,11 @@ class Processor
     Array(filenames).each do |filename|
       puts "Prettifying #{filename}..."
 
-      FileUtils.cp(filename, "#{filename}.bak") if backup
-
       content = IO.read(filename)
 
       prettified_content = prettify(filename, content, format: format)
+
+      FileUtils.cp(filename, "#{filename}.bak") if backup
 
       IO.write(filename, prettified_content)
     end
