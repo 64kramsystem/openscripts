@@ -1,8 +1,6 @@
 #!/usr/bin/env ruby
-# -*- coding: utf-8 -*-
 
 require 'open-uri'
-require 'open_uri_redirections'
 require 'ruby-progressbar'
 require 'uri'
 
@@ -64,7 +62,7 @@ class DownloadUbuntuPackages
     # will lead to a page which still has the "all" architecture links.
     #
     package_download_address = download_address(codename, DEFAULT_ARCHITECTURE, package)
-    package_download_page = open(package_download_address, allow_redirections: :safe).read
+    package_download_page = URI.open(package_download_address).read
 
     # Must find a better identifier than `You can download the requested file`.
     #
