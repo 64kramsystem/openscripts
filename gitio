@@ -7,41 +7,46 @@ set -o nounset
 help="\
 Usage: $(basename "$0") [-h|--help] <url> [<custom_name>]
 
-Generates git.io url, optionally, with a custom name, and copies the resulting URL to the clipboard.
+Generates a git.io URL, and copies it to the clipboard (with the protocol stripped).
 
 Requires xsel.
 
-IMPORTANT: It seems that it's not possible to use custom names anymore (the parameter is ignored).
+Vanity URLs are not supported, since it seems they've been discontinued (the parameter is ignored).
 "
 
-eval set -- "$(getopt --options h --long help -- "$@")"
+v_source_url=
 
-while true; do
-  case "$1" in
-    -h|--help)
-      echo "$help"
-      exit 0 ;;
-    --)
-      shift
-      break ;;
-  esac
-done
+function decode_cmdline_arguments {
+  eval set -- "$(getopt --options h --long help -- "$@")"
 
-if (($# < 1 || $# > 2)); then
-  echo "$help"
-  exit 1
-fi
+  while true; do
+    case "$1" in
+      -h|--help)
+        echo "$help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
 
-if [[ "${2:-}" != "" ]]; then
-  custom_name_option=("-F code=\"$2\"")
-fi
+  if (($# != 1)); then
+    echo "$help"
+    exit 1
+  fi
 
-echo "curl -si https://git.io -F "url=$1" "${custom_name_option[@]}""
+  v_source_url=$1
+}
 
-response="$(curl -si https://git.io -F "url=$1" "${custom_name_option[@]}")"
+function generate_url {
+  local response=$(curl -si https://git.io -F "url=$v_source_url")
 
-if [[ $response =~ 422 ]]; then
-  echo "$response" | grep '^Status: '
-else
-  echo "$response" | perl -ne '/^Location: (\S+)/ && print $1' | tee >(xsel -ib)
-fi
+  if [[ $response =~ 422 ]]; then
+    echo "$response" | grep '^Status: '
+  else
+    echo "${response/https:\/\//}" | perl -ne '/^Location: (\S+)/ && print $1' | tee >(xsel -ib)
+  fi
+}
+
+decode_cmdline_arguments "$@"
+generate_url
