@@ -7,7 +7,7 @@ set -o nounset
 help="\
 Usage: $(basename "$0") [-h|--help] <url> [<custom_name>]
 
-Generates git.io url, optionally, with a custom name, and copies the resulting URL to the clipboard.
+Generates git.io url, optionally, with a custom name, and copies the resulting URL to the clipboard (with the protocol stripped).
 
 Requires xsel.
 
@@ -43,5 +43,5 @@ response="$(curl -si https://git.io -F "url=$1" "${custom_name_option[@]}")"
 if [[ $response =~ 422 ]]; then
   echo "$response" | grep '^Status: '
 else
-  echo "$response" | perl -ne '/^Location: (\S+)/ && print $1' | tee >(xsel -ib)
+  echo "${response/https:\/\//}" | perl -ne '/^Location: (\S+)/ && print $1' | tee >(xsel -ib)
 fi
