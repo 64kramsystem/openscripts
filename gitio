@@ -36,8 +36,6 @@ if [[ "${2:-}" != "" ]]; then
   custom_name_option=("-F code=\"$2\"")
 fi
 
-echo "curl -si https://git.io -F "url=$1" "${custom_name_option[@]}""
-
 response="$(curl -si https://git.io -F "url=$1" "${custom_name_option[@]}")"
 
 if [[ $response =~ 422 ]]; then
