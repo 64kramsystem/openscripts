@@ -14,28 +14,39 @@ Requires xsel.
 Vanity URLs are not supported, since it seems they've been discontinued (the parameter is ignored).
 "
 
-eval set -- "$(getopt --options h --long help -- "$@")"
+v_source_url=
 
-while true; do
-  case "$1" in
-    -h|--help)
-      echo "$help"
-      exit 0 ;;
-    --)
-      shift
-      break ;;
-  esac
-done
+function decode_cmdline_arguments {
+  eval set -- "$(getopt --options h --long help -- "$@")"
 
-if (($# != 1)); then
-  echo "$help"
-  exit 1
-fi
+  while true; do
+    case "$1" in
+      -h|--help)
+        echo "$help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
 
-response=$(curl -si https://git.io -F "url=$1")
+  if (($# != 1)); then
+    echo "$help"
+    exit 1
+  fi
 
-if [[ $response =~ 422 ]]; then
-  echo "$response" | grep '^Status: '
-else
-  echo "${response/https:\/\//}" | perl -ne '/^Location: (\S+)/ && print $1' | tee >(xsel -ib)
-fi
+  v_source_url=$1
+}
+
+function generate_url {
+  local response=$(curl -si https://git.io -F "url=$v_source_url")
+
+  if [[ $response =~ 422 ]]; then
+    echo "$response" | grep '^Status: '
+  else
+    echo "${response/https:\/\//}" | perl -ne '/^Location: (\S+)/ && print $1' | tee >(xsel -ib)
+  fi
+}
+
+decode_cmdline_arguments "$@"
+generate_url
