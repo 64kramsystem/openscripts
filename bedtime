@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-o|--off] hh:mm [hh:mm]
+c_help="Usage: $(basename "$0") hh:mm [hh:mm]
 
 Set two Systemd timers at the given times, the first for a suspend, and the second for a shutdown. If only one is provided, only the shutdown is performed.
 
