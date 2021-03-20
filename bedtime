@@ -6,13 +6,13 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-o|--off] hh:mm hh:mm
+c_help="Usage: $(basename "$0") hh:mm [hh:mm]
 
-Sets two Systemd timers at the given times, the first for a suspend, and the second for a shutdown.
+Set two Systemd timers at the given times, the first for a suspend, and the second for a shutdown. If only one is provided, only the shutdown is performed.
 
 Watch out! If the computer is rebooted, the timers will need to be set again."
 
-v_suspend_time=
+v_suspend_time= # optional
 v_shutdown_time=
 
 function decode_commandline_parameters {
@@ -29,26 +29,34 @@ function decode_commandline_parameters {
     esac
   done
 
-  if [[ $# -ne 2 ]]; then
+  if [[ $# -eq 1 ]]; then
+    v_shutdown_time=$1
+  elif [[ $# -eq 2 ]]; then
+    v_suspend_time=$1
+    v_shutdown_time=$2
+  else
     echo "$c_help"
     exit 1
   fi
-
-  v_suspend_time=$1
-  v_shutdown_time=$2
 }
 
 # Technically, this allows also other formats (e.g. full dates).
 #
 function check_times {
-  date -d "$v_suspend_time" > /dev/null
+  if [[ -n $v_suspend_time ]]; then
+    date -d "$v_suspend_time" > /dev/null
+  fi
+
   date -d "$v_shutdown_time" > /dev/null
 }
 
 # Watch out! The shutdown command is `poweroff`.
 #
 function set_timers {
-  systemd-run --user --on-calendar="$v_suspend_time" /bin/systemctl suspend
+  if [[ -n $v_suspend_time ]]; then
+    systemd-run --user --on-calendar="$v_suspend_time" /bin/systemctl suspend
+  fi
+
   systemd-run --user --on-calendar="$v_shutdown_time" /bin/systemctl poweroff
 }
 
