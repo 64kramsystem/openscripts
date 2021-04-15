@@ -6,14 +6,24 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
+c_shutdown_warning_time=10 # minutes
+c_shutdown_warning_message="Warning! The system is going to be shut down in $c_shutdown_warning_time minutes!"
 c_help="Usage: $(basename "$0") hh:mm [hh:mm]
 
 Set two Systemd timers at the given times, the first for a suspend, and the second for a shutdown. If only one is provided, only the shutdown is performed.
 
+A warning is displayed $((c_shutdown_warning_time)) minutes before the shutdown.
+
 Watch out! If the computer is rebooted, the timers will need to be set again."
 
+# User-provided
+#
 v_suspend_time= # optional
 v_shutdown_time=
+
+# Internal
+#
+v_shutdown_warning_time=
 
 function decode_commandline_parameters {
   eval set -- "$(getopt --options h --long help -- "$@")"
@@ -50,6 +60,10 @@ function check_times {
   date -d "$v_shutdown_time" > /dev/null
 }
 
+function set_shutdown_warning_time {
+  v_shutdown_warning_time=$(substract_time "$v_shutdown_time" $((c_shutdown_warning_time * 60)))
+}
+
 # Watch out! The shutdown command is `poweroff`.
 #
 function set_timers {
@@ -57,9 +71,22 @@ function set_timers {
     systemd-run --user --on-calendar="$v_suspend_time" /bin/systemctl suspend
   fi
 
+  systemd-run --user --on-calendar="$v_shutdown_warning_time" /usr/bin/zenity --info --text "$c_shutdown_warning_message"
+
   systemd-run --user --on-calendar="$v_shutdown_time" /bin/systemctl poweroff
+}
+
+function substract_time {
+  local reference_time=$1
+  local substraction_secs=$2
+
+  local reference_time_secs
+  reference_time_secs=$(date -d "$reference_time" +"%s")
+
+  date '+%Y-%m-%d %H:%M:%S' --date="@$((reference_time_secs - substraction_secs))"
 }
 
 decode_commandline_parameters "$@"
 check_times
+set_shutdown_warning_time
 set_timers
