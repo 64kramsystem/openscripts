@@ -68,12 +68,12 @@ function set_shutdown_warning_time {
 #
 function set_timers {
   if [[ -n $v_suspend_time ]]; then
-    systemd-run --user --on-calendar="$v_suspend_time" /bin/systemctl suspend
+    systemd-run --user --on-calendar="$v_suspend_time" --unit="bedtime-suspend" /bin/systemctl suspend
   fi
 
-  systemd-run --user --on-calendar="$v_shutdown_warning_time" /usr/bin/zenity --info --text "$c_shutdown_warning_message"
+  systemd-run --user --on-calendar="$v_shutdown_warning_time" --unit="bedtime-warning" /usr/bin/zenity --info --text "$c_shutdown_warning_message"
 
-  systemd-run --user --on-calendar="$v_shutdown_time" /bin/systemctl poweroff
+  systemd-run --user --on-calendar="$v_shutdown_time" --unit="bedtime-shutdown" /bin/systemctl poweroff
 }
 
 decode_commandline_parameters "$@"
