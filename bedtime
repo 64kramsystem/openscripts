@@ -50,14 +50,27 @@ function decode_commandline_parameters {
   fi
 }
 
-# Technically, this allows also other formats (e.g. full dates).
+# Technically, more complex timestamps are allowed (since `date` supports other formats).
 #
 function check_times {
+  local suspend_time_secs
+  local shutdown_time_secs
+
+  suspend_time_secs=$(date +%s -d "$v_suspend_time")
+  shutdown_time_secs=$(date +%s -d "$v_shutdown_time")
+  current_time_secs=$(date +%s)
+
   if [[ -n $v_suspend_time ]]; then
-    date -d "$v_suspend_time" > /dev/null
+    if ((suspend_time_secs < current_time_secs)); then
+      >&2 echo "The suspend time is earlier than the current time!"
+      exit 1
+    fi
   fi
 
-  date -d "$v_shutdown_time" > /dev/null
+  if ((shutdown_time_secs < current_time_secs)); then
+    >&2 echo "The shutdown time is earlier than the current time!"
+    exit 1
+  fi
 }
 
 function set_shutdown_warning_time {
