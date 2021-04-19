@@ -61,29 +61,19 @@ function check_times {
 }
 
 function set_shutdown_warning_time {
-  v_shutdown_warning_time=$(substract_time "$v_shutdown_time" $((c_shutdown_warning_time * 60)))
+  v_shutdown_warning_time=$(date '+%F %T' --date="$v_shutdown_time $(date +%Z) - $c_shutdown_warning_time minutes")
 }
 
 # Watch out! The shutdown command is `poweroff`.
 #
 function set_timers {
   if [[ -n $v_suspend_time ]]; then
-    systemd-run --user --on-calendar="$v_suspend_time" /bin/systemctl suspend
+    systemd-run --user --on-calendar="$v_suspend_time" --unit="bedtime-suspend" /bin/systemctl suspend
   fi
 
-  systemd-run --user --on-calendar="$v_shutdown_warning_time" /usr/bin/zenity --info --text "$c_shutdown_warning_message"
+  systemd-run --user --on-calendar="$v_shutdown_warning_time" --unit="bedtime-warning" /usr/bin/zenity --info --text "$c_shutdown_warning_message"
 
-  systemd-run --user --on-calendar="$v_shutdown_time" /bin/systemctl poweroff
-}
-
-function substract_time {
-  local reference_time=$1
-  local substraction_secs=$2
-
-  local reference_time_secs
-  reference_time_secs=$(date -d "$reference_time" +"%s")
-
-  date '+%Y-%m-%d %H:%M:%S' --date="@$((reference_time_secs - substraction_secs))"
+  systemd-run --user --on-calendar="$v_shutdown_time" --unit="bedtime-shutdown" /bin/systemctl poweroff
 }
 
 decode_commandline_parameters "$@"
