@@ -148,12 +148,12 @@ function delete_old_versions {
   echo
 
   for ((i = 0; i < old_object_versions_count; i+=v_batch_size)); do
-    local batch_last_i=$((i + v_batch_size - 1))
+    local next_batch_i=$((i + v_batch_size))
 
-    echo "Deleting records from $i to $batch_last_i${v_execute:- (dry run)}..."
+    echo "Deleting records from $i to $((next_batch_i -1))${v_execute:- (dry run)}..."
 
     local old_versions
-    old_versions=$(jq "[ .[$i:$batch_last_i] | .[] | {Key,VersionId} ]" "$c_old_objects_file")
+    old_versions=$(jq "[ .[$i:$next_batch_i] | .[] | {Key,VersionId} ]" "$c_old_objects_file")
 
     local batch_filename=$c_old_objects_batch_files_prefix-$i.json
     cat > "$batch_filename" << EOF
@@ -171,19 +171,19 @@ EOF
 
 function delete_markers {
   local markers_count
-  markers_count=$(jq 'length' "$c_markers_file")
+  markers_count=$(cat "$c_markers_file" | jq 'length')
 
   echo "Markers number: $markers_count"
 
   echo
 
   for ((i=0; i < markers_count; i+=v_batch_size)); do
-    local batch_last_i=$((i + v_batch_size - 1))
+    local next_batch_i=$((i + v_batch_size))
 
-    echo "Deleting markers from $i to $batch_last_i${v_execute:- (dry run)}..."
+    echo "Deleting markers from $i to $((next_batch_i - 1))${v_execute:- (dry run)}..."
 
     local markers
-    markers=$(jq "[ .[$i:$batch_last_i] | .[] | {Key,VersionId} ]" "$c_markers_file")
+    markers=$(jq "[ .[$i:$next_batch_i] | .[] | {Key,VersionId} ]" "$c_markers_file")
 
     local batch_filename=$c_markers_batch_files_prefix-$i.json
     cat > "$batch_filename.json" << EOF
