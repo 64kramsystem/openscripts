@@ -1,5 +1,4 @@
 #!/bin/bash
-# shellcheck disable=SC2002 # annoying `cat | jq`
 
 set -o errexit
 set -o pipefail
@@ -25,7 +24,14 @@ v_data_dir=
 v_batch_size=1000
 v_execute=        # boolean: false=blank, true=anything else
 
-v_no_of_obj=
+old_object_versions_count=
+
+c_summary_file_prefix=current-objects-summary
+c_all_objects_file=all-objects.json
+c_old_objects_file=old-objects.json
+c_markers_file=delete-markers.json
+c_old_objects_batch_files_prefix=deleted-files-start-index-
+c_markers_batch_files_prefix=deleted-markers-start-index-
 
 c_blank_prefix_dirname=blank_prefix
 c_help="Usage: $(basename "$0") [-h|--help] [-x|--execute] [-p|--prefix <prefix>] [-b|--batch-size <size>] [-d|--data-dir <dir>] <bucket_name>
@@ -75,7 +81,7 @@ function decode_cmdline_options {
   fi
 
   v_bucket=$1
-  v_data_dir=${data_dir:-$(pwd)/${v_prefix:-$c_blank_prefix_dirname}}
+  v_data_dir=${data_dir:-$(dirname "$(mktemp)")/${v_prefix:-$c_blank_prefix_dirname}}
 }
 
 function print_params {
@@ -89,8 +95,7 @@ function print_params {
 
 function create_and_switch_to_prefix_objects_dir {
   if [[ -d $v_data_dir ]]; then
-    echo "The data dir already exists. Press enter to delete it and proceed..."
-    read -rsn 1
+    echo "The data dir already exists; deleting it..."
     rm -r "$v_data_dir"
     echo
   fi
@@ -104,100 +109,105 @@ function register_exit_hook {
   trap _exit_hook EXIT
 }
 
-function get_prefix_size {
-  local filename=$1
+function print_current_objects_summary {
+  local suffix=${1:-}
 
-  echo -n "Objects number/size currently${v_prefix:+ with prefix '$v_prefix'} (current version): "
+  local summary_filename=$c_summary_file_prefix$suffix.txt
 
-  aws s3 ls --summarize --human-readable "s3://$v_bucket/$v_prefix" --recursive > "$filename"
+  echo -n "Objects number/size${v_prefix:+ with prefix '$v_prefix'} (current version): "
 
-  tail -2 "$filename" | perl -0777 -ne 'print join("/", m/: (.+)$/mg)."\n"'
+  aws s3 ls --summarize --human-readable "s3://$v_bucket/$v_prefix" --recursive > "$summary_filename"
+
+  tail -2 "$summary_filename" | perl -0777 -ne 'print join("/", m/: (.+)$/mg)."\n"'
 }
 
-function find_objects_total_number {
-  local filename=$1
-
-  echo -n "Total no. of objects${v_prefix:+ with prefix '$v_prefix'} including old version objects: "
-
-  aws s3api list-object-versions --max-items 2 --prefix "$v_prefix" --bucket "$v_bucket" | jq '.Versions' | tee "$filename"
-
-  cat "$filename" | jq 'length'
+function store_all_object_versions_list {
+  aws s3api list-object-versions --bucket "$v_bucket" --prefix "$v_prefix" > "$c_all_objects_file"
 }
 
-function find_and_set_old_version_objects_number {
-  local all_objects_filename=$1
-  local old_objects_filename=$2
+function print_all_object_versions_count {
+  echo -n "Objects number${v_prefix:+ with prefix '$v_prefix'} (including old versions): "
 
-  echo -n "Old version objects${v_prefix:+ with prefix '$v_prefix'}: "
+  jq 'length' "$c_all_objects_file"
+}
 
-  cat "$all_objects_filename" | jq '.[] | select(.IsLatest | not)' | jq -s '.' > "$old_objects_filename"
-  v_no_of_obj=$(cat "$old_objects_filename" | jq 'length')
+function store_old_object_versions_list {
+  jq '[ .Versions | .[] | select(.IsLatest | not) ]' "$c_all_objects_file" > "$c_old_objects_file"
+}
 
-  echo "$v_no_of_obj"
+function store_markers_list {
+  jq '.DeleteMarkers' "$c_all_objects_file" > "$c_markers_file"
 }
 
 function delete_old_versions {
-  local filename_prefix=$1
+  local old_object_versions_count
+  old_object_versions_count=$(jq 'length' "$c_old_objects_file")
+
+  echo "Objects number${v_prefix:+ with prefix '$v_prefix'} (old versions): $old_object_versions_count"
 
   echo
 
-  for ((i = 0; i < v_no_of_obj; i+=v_batch_size)); do
-    local oldversions
-    local next=$((i + v_batch_size - 1))
+  for ((i = 0; i < old_object_versions_count; i+=v_batch_size)); do
+    local batch_last_i=$((i + v_batch_size - 1))
 
-    echo "Deleting records from $i to $next${v_execute:- (dry run)}..."
+    echo "Deleting records from $i to $batch_last_i${v_execute:- (dry run)}..."
 
-    oldversions=$(cat "old-objects-$v_bucket.json" |  jq '.[] | {Key,VersionId}' | jq -s '.' | jq ".[$i:$next]")
-    cat > "$filename_prefix$i.json" << EOF
+    local old_versions
+    old_versions=$(jq "[ .[$i:$batch_last_i] | .[] | {Key,VersionId} ]" "$c_old_objects_file")
+
+    local batch_filename=$c_old_objects_batch_files_prefix-$i.json
+    cat > "$batch_filename" << EOF
 {
-"Objects":$oldversions,
-"Quiet":true
+"Objects": $old_versions,
+"Quiet": true
 }
 EOF
 
     if [[ -n $v_execute ]]; then
-      aws s3api delete-objects --bucket "$v_bucket" --delete "file://$filename_prefix$i.json"
+      aws s3api delete-objects --bucket "$v_bucket" --delete "file://$batch_filename"
     fi
   done
 }
 
 function delete_markers {
-  local filename_prefix=$1
+  local markers_count
+  markers_count=$(jq 'length' "$c_markers_file")
+
+  echo "Markers number: $markers_count"
 
   echo
 
-  aws s3api list-object-versions --bucket "$v_bucket" --prefix "$v_prefix"  | jq '.DeleteMarkers' > "delete-markers-$v_bucket.json"
+  for ((i=0; i < markers_count; i+=v_batch_size)); do
+    local batch_last_i=$((i + v_batch_size - 1))
 
-  local no_of_markers
-  no_of_markers=$(cat "delete-markers-$v_bucket.json" | jq 'length')
+    echo "Deleting markers from $i to $batch_last_i${v_execute:- (dry run)}..."
 
-  for ((i=0; i < no_of_markers; i+=v_batch_size)); do
     local markers
-    local next=$((i + v_batch_size - 1))
+    markers=$(jq "[ .[$i:$batch_last_i] | .[] | {Key,VersionId} ]" "$c_markers_file")
 
-    echo "Deleting markers from $i to $next${v_execute:- (dry run)}..."
-
-    markers=$(cat "delete-markers-$v_bucket.json" |  jq '.[] | {Key,VersionId}' | jq -s '.' | jq ".[$i:$next]")
-
-    cat > "$filename_prefix$i.json" << EOF
+    local batch_filename=$c_markers_batch_files_prefix-$i.json
+    cat > "$batch_filename.json" << EOF
 {
-"Objects":$markers,
-"Quiet":true
+"Objects": $markers,
+"Quiet": true
 }
 EOF
     if [[ -n $v_execute ]]; then
-      aws s3api delete-objects --bucket "$v_bucket" --delete "file://$filename_prefix$i.json"
+      aws s3api delete-objects --bucket "$v_bucket" --delete "file://$batch_filename"
     fi
   done
 }
 
 decode_cmdline_options "$@"
 print_params
+
 create_and_switch_to_prefix_objects_dir
 register_exit_hook
-get_prefix_size "object-list-$v_bucket.txt"
-find_objects_total_number "all-objects-$v_bucket.json"
-find_and_set_old_version_objects_number "all-objects-$v_bucket.json" "old-objects-$v_bucket.json"
-delete_old_versions "deleted-files-start-index-"
-delete_markers "deleted-markers-start-index-"
-get_prefix_size "object-list-$v_bucket-AFTER-DELETION.txt"
+print_current_objects_summary
+store_all_object_versions_list
+print_all_object_versions_count
+store_old_object_versions_list
+store_markers_list
+delete_old_versions
+delete_markers
+print_current_objects_summary '-AFTER-DELETION'
