@@ -210,4 +210,6 @@ store_old_object_versions_list
 store_markers_list
 delete_old_versions
 delete_markers
-print_current_objects_summary '-AFTER-DELETION'
+if [[ -n $v_execute ]]; then
+  print_current_objects_summary '-AFTER-DELETION'
+fi
