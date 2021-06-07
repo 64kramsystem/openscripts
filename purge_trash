@@ -19,7 +19,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 elif [[ $# -gt 1 ]]; then
   echo "Unexpected number of parameters"
   exit 1
-elif ! grep -qP "^trash-cli\s+install$" <<< $(dpkg --get-selections); then
+elif ! grep -qP "^trash-cli\s+install$" <<< "$(dpkg --get-selections)"; then
   echo 'The `trash-cli` package is required!'
   exit 1
 fi
@@ -28,7 +28,7 @@ threshold_days=${1:-$c_default_threshold_days}
 threshold_seconds=$((threshold_days * 24 * 60 * 60))
 
 while IFS= read -r line || [[ -n "$line" ]]; do
-  trash_date=$(echo $line | awk '{print $1 " " $2}')
+  trash_date=$(echo "$line" | awk '{print $1 " " $2}')
 
   trash_date_in_seconds=$(date -d "$trash_date" +"%s")
   current_date_in_seconds=$(date +"%s")
@@ -36,8 +36,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   if ((trash_date_in_seconds < current_date_in_seconds - threshold_seconds)); then
     echo "Deleting: $line ..."
 
-    file_basename=$(basename "$(echo $line | perl -lane 'print "@F[2..$#F]"')")
+    file_basename=$(basename "$(echo "$line" | perl -lane 'print "@F[2..$#F]"')")
 
-    trash-rm "$file_basename"
+    if ! trash-rm "$file_basename"; then
+      echo "Could not remove \`$file_basename\` from the trash!"
+    fi
   fi
 done <<< "$(trash-list | sort)"
