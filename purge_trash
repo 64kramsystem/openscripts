@@ -24,6 +24,14 @@ elif ! grep -qP "^trash-cli\s+install$" <<< "$(dpkg --get-selections)"; then
   exit 1
 fi
 
+# This is used only for notifying runtime errors.
+#
+if tty -s; then
+  error_notifier="echo"
+else
+  error_notifier=notify-send
+fi
+
 threshold_days=${1:-$c_default_threshold_days}
 threshold_seconds=$((threshold_days * 24 * 60 * 60))
 
@@ -39,7 +47,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     file_basename=$(basename "$(echo "$line" | perl -lane 'print "@F[2..$#F]"')")
 
     if ! trash-rm "$file_basename"; then
-      echo "Could not remove \`$file_basename\` from the trash!"
+      "$error_notifier" "Could not remove \`$file_basename\` from the trash!"
     fi
   fi
 done <<< "$(trash-list | sort)"
