@@ -100,9 +100,9 @@ class Downer
   end
 
   def install_pkg_package(package_file)
-    puts "- installing #{installation_pkg_file}..."
+    puts "- installing #{package_file}..."
 
-    `sudo installer -package #{installation_pkg_file.shellescape} -target /`
+    `sudo installer -package #{package_file.shellescape} -target /`
   end
 end
 
