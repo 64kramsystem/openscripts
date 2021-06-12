@@ -6,7 +6,6 @@ require 'simple_scripting/argv'
 require 'shellwords'
 
 class Downer
-
   def execute(page_address, file_link_pattern, options = {})
     file_link = find_file_link(page_address, file_link_pattern, relative_path: options[:relative_path])
     package_file = download_file(file_link)
@@ -101,15 +100,13 @@ class Downer
   end
 
   def install_pkg_package(package_file)
-    puts "- installing #{installation_pkg_file}..."
+    puts "- installing #{package_file}..."
 
-    `sudo installer -package #{installation_pkg_file.shellescape} -target /`
+    `sudo installer -package #{package_file.shellescape} -target /`
   end
-
 end
 
 if __FILE__ == $0
-
   options = SimpleScripting::Argv.decode(
     ['-a', '--application APPLICATION', 'Use the given application'],
     ['-r', '--relative-path',           'Assume that the URL path is relative'],
@@ -122,5 +119,4 @@ if __FILE__ == $0
   file_link_pattern = /#{file_link_pattern}/
 
   Downer.new.execute(page_address, file_link_pattern, options)
-
 end
