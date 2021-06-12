@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 
+require 'fileutils'
 require 'open-uri'
 require 'open_uri_redirections'
 require 'simple_scripting/argv'
 require 'shellwords'
 
 class Downer
-
   def execute(page_address, file_link_pattern, options = {})
     file_link = find_file_link(page_address, file_link_pattern, relative_path: options[:relative_path])
     package_file = download_file(file_link)
@@ -73,6 +73,15 @@ class Downer
     `sudo gdebi --non-interactive #{package_file.shellescape}`
   end
 
+  # Not really a package.
+  #
+  def install_run_package(package_file)
+    puts "- installing #{package_file}..."
+
+    FileUtils.chmod '+x', package_file
+    `sudo #{package_file.shellescape}`
+  end
+
   # This is not straightforward. Currently, we support only the most common case of dmg+pkg.
   #
   # A general outline is provided at https://apple.stackexchange.com/q/73926.
@@ -101,15 +110,13 @@ class Downer
   end
 
   def install_pkg_package(package_file)
-    puts "- installing #{installation_pkg_file}..."
+    puts "- installing #{package_file}..."
 
-    `sudo installer -package #{installation_pkg_file.shellescape} -target /`
+    `sudo installer -package #{package_file.shellescape} -target /`
   end
-
 end
 
 if __FILE__ == $0
-
   options = SimpleScripting::Argv.decode(
     ['-a', '--application APPLICATION', 'Use the given application'],
     ['-r', '--relative-path',           'Assume that the URL path is relative'],
@@ -122,5 +129,4 @@ if __FILE__ == $0
   file_link_pattern = /#{file_link_pattern}/
 
   Downer.new.execute(page_address, file_link_pattern, options)
-
 end
