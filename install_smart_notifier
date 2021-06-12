@@ -5,7 +5,7 @@ set -o errexit
 # Variables ####################################################################
 
 username=$(who | awk '{print $1}')
-user_home=$(getent passwd $username | cut -f6 -d:)
+user_home=$(getent passwd "$username" | cut -f6 -d:)
 
 smartd_run_file=/etc/smartmontools/run.d/10mail
 message_file=/var/lib/smart_warning.txt
@@ -36,7 +36,7 @@ fi
 
 # Checks #######################################################################
 
-if [[ "$EUID" != 0 ]]; then
+if [[ $EUID != 0 ]]; then
   echo "Please re-run this script as root!"
   exit 1
 fi
@@ -52,13 +52,13 @@ cp "\$1" $message_file
 chown $username: $message_file
 TEXT
 
-sudo chmod 755 $smartd_run_file
+sudo chmod 755 "$smartd_run_file"
 
 # Notifier #####################################################################
 
 echo "Installing $notification_script ..."
 
-cat <<TEXT > $notification_script
+cat <<TEXT > "$notification_script"
 #!/bin/bash
 
 if [[ -f $message_file && \$(cat $message_file) != "" ]]; then
@@ -67,8 +67,8 @@ if [[ -f $message_file && \$(cat $message_file) != "" ]]; then
 fi
 TEXT
 
-chmod 755 $notification_script
-chown $username: $notification_script
+chmod 755 "$notification_script"
+chown "$username": "$notification_script"
 
 # Startup application definition ###############################################
 
