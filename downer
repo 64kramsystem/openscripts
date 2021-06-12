@@ -19,7 +19,7 @@ class Downer
   def download_page(address)
     puts "Address: #{address}"
 
-    open(address, allow_redirections: :all).read
+    URI.open(address, allow_redirections: :all).read
   end
 
   def find_file_link(page_address, file_link_pattern, relative_path:)
@@ -37,7 +37,7 @@ class Downer
   def download_file(file_link)
     puts "- downloading link #{file_link}..."
 
-    file = open(file_link)
+    file = URI.open(file_link)
     file.close
 
     new_filename = "/tmp/#{File.basename(file_link)}"
