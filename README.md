@@ -41,6 +41,7 @@
   - `mysql_plot_diagrams`: plots diagrams (via GNU Plot), with the stats collected via `mysql_collect_stats`
   - `mystart`/`mystop`: start/stop MySQL, automatically switching between version, and preparing the data
   - `purge_trash`: purge the trash files trashed before a certain threashold
+  - `script_template`: create a Bash script template, and sets the permissions
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
 
@@ -50,6 +51,7 @@ I will slowly add remaining or new ones.
 
 Latest additions (not including updates):
 
+- 2021/Jun/21: `script_template`
 - 2020/Feb/10: `mystart`/`mystop`
 - 2020/Feb/09: `clean_recents`
 - 2020/Feb/09: `control_music_player`
