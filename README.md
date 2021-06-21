@@ -46,27 +46,3 @@
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
 
 I will slowly add remaining or new ones.
-
-## Latest additions
-
-Latest additions (not including updates):
-
-- 2021/Jun/21: `script_template`
-- 2020/Feb/10: `mystart`/`mystop`
-- 2020/Feb/09: `clean_recents`
-- 2020/Feb/09: `control_music_player`
-- 2020/Feb/07: `texerak`
-- 2020/Jan/26: `mylast`
-- 2020/Jan/25: `ft(_function)`
-- 2020/Jan/01: `purge_trash`
-- 2019/Dec/06: `mysql_collect_stats` and `mysql_plot_diagrams`
-- 2019/Oct/23: `fill_labels`
-- 2019/Oct/21: `gitio`
-- 2019/Sep/03: `encode_to_m4a`
-- 2019/Aug/15: `plot_diagram` and `plot_2y_diagram`
-- 2019/Jul/07: `winetmp`
-- 2019/Apr/30: `spell`
-- 2019/Mar/31: `mk_invoice`
-- 2019/Mar/26: `connect_bt_device`
-- 2019/Mar/18: `generate_wiki_home_toc`
-- 2018/Dec/20: `downer`
