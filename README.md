@@ -1,6 +1,6 @@
-# OpenScripts #
+# OpenScripts
 
-`OS` is a collection of some of my scripts for personal use:
+OpenScripts is a collection of some of my scripts for personal use:
 
 - concurrency
   - `interruptible_job_scheduler.rb`: a scheduler for interruptible process-based job(s)
@@ -45,4 +45,4 @@
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
 
-I will slowly add remaining or new ones.
+I keep adding new content/update old one.
