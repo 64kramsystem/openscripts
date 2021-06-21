@@ -1,0 +1,99 @@
+#!/bin/bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] <filename>
+
+Creates a Bash script template, and sets the permissions."
+
+# shellcheck disable=2016 # single quote no expansion
+c_template='#!/bin/bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] [-x|--xxx] [-y|-yyy param2] <arg>"
+
+v_param1=
+v_param2=
+v_arg=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hpP: --long help,param1,param2: --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -p|--param1)
+        v_param1=1
+        shift ;;
+      -P|--param2)
+        v_param2=$2
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_arg=$1
+}
+
+function main {
+  echo "$v_param1/$v_param2/$v_arg"
+}
+
+decode_cmdline_args "$@"
+main'
+
+v_filename=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_filename=$1
+}
+
+function main {
+  echo "$c_template" > "$v_filename"
+  chmod +x "$v_filename"
+}
+
+decode_cmdline_args "$@"
+main
