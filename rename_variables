@@ -6,7 +6,7 @@ require 'active_support/inflector'
 class RenameVariables
   VALID_PATTERN = /^([A-Z][a-z]+)([A-Z][a-z]+)$/
 
-  def initialize(from, to)
+  def initialize(from, to, use_prefix: false)
     check_pattern(from)
     check_pattern(to)
 
@@ -14,7 +14,7 @@ class RenameVariables
     @to_full = to
 
     @from_name = from[VALID_PATTERN, 2]
-    @to_name = to[VALID_PATTERN, 2]
+    @to_name = use_prefix ? to[VALID_PATTERN, 1] : to[VALID_PATTERN, 2]
   end
 
   def execute(filenames)
@@ -98,9 +98,12 @@ if __FILE__ == $PROGRAM_NAME
     - `jellyfish` -> `curse`
 
     Currently, only variables name in the format `PrefixName` are supported.
+
+    If `--prefix` is specified, the prefix is used in the second pass (e.g. "Flying").
   STR
 
   options = SimpleScripting::Argv.decode(
+    ['-p', '--prefix', 'Use name prefix in the second pass'],
     'from',
     'to',
     '*filenames',
@@ -109,5 +112,5 @@ if __FILE__ == $PROGRAM_NAME
 
   from, to, filenames = options.fetch_values(:from, :to, :filenames)
 
-  RenameVariables.new(from, to).execute(filenames)
+  RenameVariables.new(from, to, use_prefix: !!options[:prefix]).execute(filenames)
 end
