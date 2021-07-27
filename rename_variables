@@ -1,0 +1,113 @@
+#!/usr/bin/env ruby
+
+require 'simple_scripting/argv'
+require 'active_support/inflector'
+
+class RenameVariables
+  VALID_PATTERN = /^([A-Z][a-z]+)([A-Z][a-z]+)$/
+
+  def initialize(from, to)
+    check_pattern(from)
+    check_pattern(to)
+
+    @from_full = from
+    @to_full = to
+
+    @from_name = from[VALID_PATTERN, 2]
+    @to_name = to[VALID_PATTERN, 2]
+  end
+
+  def execute(filenames)
+    filenames.each do |filename|
+      puts "- #{File.basename(filename)}"
+
+      old_file_content = IO.read(filename)
+      new_file_content = old_file_content
+
+      token_methods.each do |meth|
+        from, to = send(meth, @from_full, @to_full)
+        puts "  - #{from} => #{to}..."
+        new_file_content = new_file_content.gsub(from, to)
+      end
+
+      token_methods.each do |meth|
+        from, to = send(meth, @from_name, @to_name)
+        puts "  - #{from} => #{to}..."
+        new_file_content = new_file_content.gsub(from, to)
+      end
+
+      puts
+
+      IO.write("/tmp/#{File.basename(filename)}", old_file_content)
+      IO.write(filename, new_file_content)
+    end
+  end
+
+  private
+
+  def check_pattern(pattern)
+    raise "Invalid pattern" if pattern !~ VALID_PATTERN
+  end
+
+  def token_methods
+    self.private_methods.grep(/_tokens$/)
+  end
+
+  # WATCH OUT! The definition order is crucial.
+
+  # `FlyingJellyfish` -> `FlyingCurse`
+  #
+  def camel_case_tokens(from, to)
+    # This is the base format, so no changes are required.
+    #
+    [from, to]
+  end
+
+  # `FLYING_JELLYFISH` -> `FLYING_CURSE`
+  #
+  def upper_case_tokens(from, to)
+    [from.underscore.upcase, to.underscore.upcase]
+  end
+
+  # `flying_jellyfishes` -> `flying_curses`
+  #
+  def plural_underscore_tokens(from, to)
+    [from.underscore.pluralize, to.underscore.pluralize]
+  end
+
+  # `flying_jellyfish` -> `flying_curse`
+  #
+  def singular_underscore_tokens(from, to)
+    [from.underscore, to.underscore]
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  long_help = <<~STR
+    Renames two variables that are composite (or optionally one), in all the case combinations.
+
+    For example, `FlyingJellyfish FlyingCurse` as (from to) will perform the following renames:
+
+    - `FlyingJellyfish` -> `FlyingCurse`
+    - `FLYING_JELLYFISH` -> `FLYING_CURSE`
+    - `flying_jellyfishes` -> `flying_curses`
+    - `flying_jellyfish` -> `flying_curse`
+    - `Jellyfish` -> `Curse`
+    - `JELLYFISH` -> `CURSE`
+    - `jellyfishes` -> `curses`
+    - `jellyfish` -> `curse`
+
+    Currently, only variables name in the format `PrefixName` are supported.
+  STR
+
+  options = SimpleScripting::Argv.decode(
+    'from',
+    'to',
+    '*filenames',
+    long_help: long_help
+  ) || exit
+
+  from, to, filenames = options.fetch_values(:from, :to, :filenames)
+
+  RenameVariables.new(from, to).execute(filenames)
+end
