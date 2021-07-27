@@ -12,6 +12,7 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `git_purge_empty_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in master.
 - programming
   - `prettify`: prettifies files; supports XML and JSON
+  - `rename_variables`: rename variables/constants with composite names
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
 - "real-world"
   - `bedtime`: sets two (systemd) timers, one to suspend the computer, and the other to shut it down
