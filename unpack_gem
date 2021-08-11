@@ -1,0 +1,61 @@
+#!/bin/bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] <gem_filename> [out_parent_dir]
+
+Typical gem unpack, with additional operations like directory creation, gemspec extraction (when not present), etc."
+
+v_gem_filename=
+v_out_parent_dir=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hpP: --long help,param1,param2: --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -lt 1 || $# -gt 2 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_gem_filename=$(readlink -f "$1")
+  v_out_parent_dir=${2:-$PWD}
+}
+
+function main {
+  set -x
+
+  cd "$v_out_parent_dir"
+
+  gem unpack "$v_gem_filename"
+
+  local unpacked_dirname
+  unpacked_dirname=$(basename "${v_gem_filename%.gem}")
+  cd "$unpacked_dirname"
+
+  local gemspec_filename
+  gemspec_filename=$(basename "${v_gem_filename%-*}").gemspec
+  if [[ ! -s $gemspec_filename ]]; then
+    tar xv -O -f "$v_gem_filename" metadata.gz | gunzip > "$gemspec_filename"
+  fi
+}
+
+decode_cmdline_args "$@"
+main
