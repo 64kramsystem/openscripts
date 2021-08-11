@@ -14,6 +14,7 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `prettify`: prettifies files; supports XML and JSON
   - `rename_variables`: rename variables/constants with composite names
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
+  - `unpack_gem`: unpacks a gem, with additional operations like directory creation, gemspec extraction (when not present), etc.
 - "real-world"
   - `bedtime`: sets two (systemd) timers, one to suspend the computer, and the other to shut it down
   - `control_music_player`: performs actions on a music player running in the background (supports Clementine, MPV, GMusicBrowser...)
