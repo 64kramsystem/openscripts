@@ -27,6 +27,8 @@ class InvoiceGenerator
     @configuration = configuration
   end
 
+  # Returns the output filename
+  #
   def generate(service_days, options = {})
     service_month = compute_service_month(options)
 
@@ -43,9 +45,7 @@ class InvoiceGenerator
 
     compress_directory(TEMPLATE_DIR, outfile, ignore: [TEMPLATE_FILE], rename: { TEMPLATE_BAK => TEMPLATE_FILE })
 
-    puts outfile
-
-    open_file(outfile)
+    outfile
   ensure
     File.delete(TEMPLATE_BAK) if File.exist?(TEMPLATE_BAK)
   end
@@ -152,18 +152,6 @@ class InvoiceGenerator
       raise "Unrecognized expenses expression!"
     end
   end
-
-  # Trivial: assumes mac or linux.
-  #
-  def open_file(filename)
-    if RbConfig::CONFIG['host_os'] =~ /darwin|mac os/
-      open_command = "open"
-    else
-      open_command = "xdg-open"
-    end
-
-    `#{open_command} #{filename.shellescape}`
-  end
 end
 
 if __FILE__ == $PROGRAM_NAME
@@ -191,5 +179,5 @@ if __FILE__ == $PROGRAM_NAME
 
   service_days = options.delete(:service_days).to_f
 
-  InvoiceGenerator.new.generate(service_days, options)
+  puts InvoiceGenerator.new.generate(service_days, options)
 end
