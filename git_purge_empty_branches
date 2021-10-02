@@ -3,16 +3,20 @@
 set -o errexit
 
 c_configuration_file="$HOME/.$(basename "$0")"
+c_development_branch_config_key=custom.development-branch
+
+v_dev_branch=
 
 if [[ $# -gt 0 ]]; then
   echo "Usage: $(basename "$0")"
   echo
-  echo "Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in master."
+  echo "Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in the dev branch."
   echo "Can be run from any branch, but requires a clean tree."
   echo
-  echo "Before performing the purge, the repository is synced, and master is rebased."
+  echo "Before performing the purge, the repository is synced, and the dev branch is rebased."
   echo
-  echo "A branch is never deleted if it's called "'`master'" or if it's included in the configfile ($c_configuration_file)"
+  echo "A branch is never deleted if it's the dev branch, or if it's included in the configfile ($c_configuration_file)"
+  echo "The development branch is either configured via '$c_development_branch_config_key' git config key, or via origin/HEAD."
   echo
   echo "The configfile format is composed of multiple lines in the format '<repo_dirname>:<branches_regexp>'."
   echo "Empty lines are ignored."
@@ -29,6 +33,10 @@ if ! git status | grep -q "nothing to commit, working tree clean"; then
   echo 'Please commit/stash any change before proceeding!'
   exit 1
 fi
+
+# FIND DEV BRANCH ################################
+
+v_dev_branch=$(git config "$c_development_branch_config_key" || git rev-parse --abbrev-ref origin/HEAD | awk -F/ '{print $NF}')
 
 # LOAD PROTECTED BRANCHES ########################
 
@@ -49,14 +57,14 @@ done < "$c_configuration_file"
 git fetch --all --tags --prune
 echo
 
-# CHECKOUT AND REBASE MASTER #####################
+# CHECKOUT AND REBASE THE DEV BRANCH #############
 
 saved_location=$(git rev-parse --abbrev-ref HEAD)
 
-if [[ $saved_location != "master" ]]; then
+if [[ $saved_location != "$v_dev_branch" ]]; then
   # Keep the message consistent with the one when checkout back to this branch (see script last
   # operation).
-  git checkout master 2>&1 | head -n 1
+  git checkout "$v_dev_branch" 2>&1 | head -n 1
   echo
 fi
 
@@ -71,8 +79,8 @@ protected_branches_pattern=${protected_branches["$repo_dirname"]}
 # If no protected branches are specified, use a phony pattern (will match empty branch names, which are not possible).
 protected_branches_pattern=${protected_branches_pattern:-^$}
 
-for branch in $(git branch | cut -c 3- | grep -v '^master$' | grep -vP "$protected_branches_pattern" ); do
-  if ! git cherry master "$branch" | grep -q '^+'; then
+for branch in $(git branch | cut -c 3- | grep -v "^$v_dev_branch\$" | grep -vP "$protected_branches_pattern" ); do
+  if ! git cherry "$v_dev_branch" "$branch" | grep -q '^+'; then
     git branch -D "$branch"
     echo
 
@@ -85,7 +93,7 @@ done
 
 # RETURN TO STARTING BRANCH ######################
 
-if [[ $saved_location != "master" && $(git cat-file -t "$saved_location" 2> /dev/null) ]]; then
+if [[ $saved_location != "$v_dev_branch" && $(git cat-file -t "$saved_location" 2> /dev/null) ]]; then
   # The output is very noisy for non-named branches.
   git checkout - 2>&1 | head -n 1
   echo
