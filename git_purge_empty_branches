@@ -4,28 +4,30 @@ set -o errexit
 
 c_configuration_file="$HOME/.$(basename "$0")"
 c_development_branch_config_key=custom.development-branch
+c_help="\
+Usage: $(basename "$0")
+
+Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in the dev branch.
+Can be run from any branch, but requires a clean tree.
+
+Before performing the purge, the repository is synced, and the dev branch is rebased.
+
+A branch is never deleted if it's the dev branch, or if it's included in the configfile ($c_configuration_file)
+The development branch is either configured via '$c_development_branch_config_key' git config key, or via origin/HEAD.
+
+The configfile format is composed of multiple lines in the format '<repo_dirname>:<branches_regexp>'.
+Empty lines are ignored.
+
+Example configfile:
+
+  qemu-pinning:^.*-pinning$
+  myrepo:^(branch1|branch2)$
+"
 
 v_dev_branch=
 
 if [[ $# -gt 0 ]]; then
-  echo "Usage: $(basename "$0")"
-  echo
-  echo "Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in the dev branch."
-  echo "Can be run from any branch, but requires a clean tree."
-  echo
-  echo "Before performing the purge, the repository is synced, and the dev branch is rebased."
-  echo
-  echo "A branch is never deleted if it's the dev branch, or if it's included in the configfile ($c_configuration_file)"
-  echo "The development branch is either configured via '$c_development_branch_config_key' git config key, or via origin/HEAD."
-  echo
-  echo "The configfile format is composed of multiple lines in the format '<repo_dirname>:<branches_regexp>'."
-  echo "Empty lines are ignored."
-  echo
-  echo "Example configfile:"
-  echo
-  echo "  qemu-pinning:^.*-pinning$"
-  echo "  myrepo:^(branch1|branch2)$"
-
+  echo "$c_help"
   exit 0
 fi
 
