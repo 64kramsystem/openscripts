@@ -10,7 +10,7 @@ Usage: $(basename "$0")
 Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in the dev branch.
 Can be run from any branch, but requires a clean tree.
 
-Before performing the purge, the repository is synced, and the dev branch is rebased.
+Before performing the purge, the remotes are synced, and the dev branch is rebased on origin and upstream, and pushed.
 
 A branch is never deleted if it's the dev branch, or if it's included in the configfile ($c_configuration_file)
 The development branch is either configured via '$c_development_branch_config_key' git config key, or via origin/HEAD.
@@ -25,78 +25,106 @@ Example configfile:
 "
 
 v_dev_branch=
+declare -A v_protected_branches
+v_start_branch=
 
-if [[ $# -gt 0 ]]; then
-  echo "$c_help"
-  exit 0
-fi
-
-if ! git status | grep -q "nothing to commit, working tree clean"; then
-  echo 'Please commit/stash any change before proceeding!'
-  exit 1
-fi
-
-# FIND DEV BRANCH ################################
-
-v_dev_branch=$(git config "$c_development_branch_config_key" || git rev-parse --abbrev-ref origin/HEAD | awk -F/ '{print $NF}')
-
-# LOAD PROTECTED BRANCHES ########################
-
-declare -A protected_branches
-
-# Make sure the file exists.
-#
-touch "$c_configuration_file"
-
-while IFS='= ' read -r key value || [ -n "$key" ]; do
-  if [[ "$key" != "" ]]; then
-    protected_branches["$key"]="$value"
+function decode_cmdline_params {
+  if [[ $# -gt 0 ]]; then
+    echo "$c_help"
+    exit 0
   fi
-done < "$c_configuration_file"
+}
 
-# SYNC REPOSITORY ################################
+function check_working_tree {
+  if ! git status | grep -q "nothing to commit, working tree clean"; then
+    echo 'Please commit/stash any change before proceeding!'
+    exit 1
+  fi
+}
 
-git fetch --all --tags --prune
-echo
+function store_branch_names {
+  v_dev_branch=$(git config "$c_development_branch_config_key" || git rev-parse --abbrev-ref origin/HEAD | awk -F/ '{print $NF}')
+  v_start_branch=$(git rev-parse --abbrev-ref HEAD)
+}
 
-# CHECKOUT AND REBASE THE DEV BRANCH #############
+function set_protected_branches {
+  # Make sure the file exists.
+  #
+  touch "$c_configuration_file"
 
-saved_location=$(git rev-parse --abbrev-ref HEAD)
-
-if [[ $saved_location != "$v_dev_branch" ]]; then
-  # Keep the message consistent with the one when checkout back to this branch (see script last
-  # operation).
-  git checkout "$v_dev_branch" 2>&1 | head -n 1
-  echo
-fi
-
-git rebase
-echo
-
-# DELETE "EMPTY" BRANCHES ########################
-
-repo_dirname=$(basename "$(readlink -f .)")
-protected_branches_pattern=${protected_branches["$repo_dirname"]}
-
-# If no protected branches are specified, use a phony pattern (will match empty branch names, which are not possible).
-protected_branches_pattern=${protected_branches_pattern:-^$}
-
-for branch in $(git branch | cut -c 3- | grep -v "^$v_dev_branch\$" | grep -vP "$protected_branches_pattern" ); do
-  if ! git cherry "$v_dev_branch" "$branch" | grep -q '^+'; then
-    git branch -D "$branch"
-    echo
-
-    if git branch -r | grep "origin/$branch\$"; then
-      git push origin :"$branch"
-      echo
+  while IFS='= ' read -r key value || [ -n "$key" ]; do
+    if [[ $key != "" ]]; then
+      v_protected_branches[$key]="$value"
     fi
-  fi
-done
+  done < "$c_configuration_file"
+}
 
-# RETURN TO STARTING BRANCH ######################
-
-if [[ $saved_location != "$v_dev_branch" && $(git cat-file -t "$saved_location" 2> /dev/null) ]]; then
-  # The output is very noisy for non-named branches.
-  git checkout - 2>&1 | head -n 1
+function sync_repositories {
+  git fetch --all --tags --prune
   echo
-fi
+}
+
+function switch_to_dev_branch {
+  if [[ $v_start_branch != "$v_dev_branch" ]]; then
+    # Keep the message consistent with the one when checkout back to this branch (see return_to_starting_branch()).
+    git checkout "$v_dev_branch" 2>&1 | head -n 1
+    echo
+  fi
+}
+
+# Syncs with upstream only if defined.
+function sync_dev_branch_with_remotes {
+  git rebase
+  echo
+
+  local upstream_url
+  upstream_url=$(git ls-remote --get-url upstream)
+
+  # If the remote is not defined, `ls-remote` returns the passed value.
+  if [[ $upstream_url != "upstream" ]]; then
+    git rebase upstream/"$v_dev_branch"
+    echo
+  fi
+
+  git push
+}
+
+function delete_empty_branches {
+  local repo_dirname protected_branches_pattern
+
+  repo_dirname=$(basename "$(readlink -f .)")
+  # If no protected branches are specified, use a phony pattern (will match empty branch names, which are not possible).
+  protected_branches_pattern=${v_protected_branches[$repo_dirname]:-^$}
+
+  for branch in $(git branch | cut -c 3- | grep -v "^$v_dev_branch\$" | grep -vP "$protected_branches_pattern" ); do
+    if ! git cherry "$v_dev_branch" "$branch" | grep -q '^+'; then
+      git branch -D "$branch"
+      echo
+
+      if git branch -r | grep "origin/$branch\$"; then
+        git push origin :"$branch"
+        echo
+      fi
+    fi
+  done
+}
+
+function return_to_starting_branch {
+  if [[ $v_start_branch != "$v_dev_branch" && $(git cat-file -t "$v_start_branch" 2> /dev/null) ]]; then
+    # The output is very noisy for non-named branches.
+    git checkout - 2>&1 | head -n 1
+    echo
+  fi
+}
+
+# MAIN ###########################################
+
+decode_cmdline_params "$@"
+check_working_tree
+store_branch_names
+set_protected_branches
+sync_repositories
+switch_to_dev_branch
+sync_dev_branch_with_remotes
+delete_empty_branches
+return_to_starting_branch
