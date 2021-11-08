@@ -9,7 +9,7 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `update_markdown_chapter_references`: generates/updates a Table Of Contents, and navigation links, in a collection of Markdown documents
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
 - git
-  - `git_maintain_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in master.
+  - `git_maintain_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in the main branch; also syncs with upstream
 - programming
   - `prettify`: prettifies files; supports XML and JSON
   - `rename_variables`: rename variables/constants with composite names
