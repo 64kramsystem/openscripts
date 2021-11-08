@@ -10,7 +10,7 @@ Usage: $(basename "$0")
 Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in the dev branch.
 Can be run from any branch, but requires a clean tree.
 
-Before performing the purge, the repository is synced, and the dev branch is rebased.
+Before performing the purge, the remotes are synced, and the dev branch is rebased on origin and upstream, and pushed.
 
 A branch is never deleted if it's the dev branch, or if it's included in the configfile ($c_configuration_file)
 The development branch is either configured via '$c_development_branch_config_key' git config key, or via origin/HEAD.
@@ -72,9 +72,21 @@ function switch_to_dev_branch {
   fi
 }
 
-function rebase_dev_branch {
+# Syncs with upstream only if defined.
+function sync_dev_branch_with_remotes {
   git rebase
   echo
+
+  local upstream_url
+  upstream_url=$(git ls-remote --get-url upstream)
+
+  # If the remote is not defined, `ls-remote` returns the passed value.
+  if [[ $upstream_url != "upstream" ]]; then
+    git rebase upstream/"$v_dev_branch"
+    echo
+  fi
+
+  git push
 }
 
 function delete_empty_branches {
@@ -113,6 +125,6 @@ store_branch_names
 set_protected_branches
 sync_repositories
 switch_to_dev_branch
-rebase_dev_branch
+sync_dev_branch_with_remotes
 delete_empty_branches
 return_to_starting_branch
