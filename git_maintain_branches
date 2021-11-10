@@ -15,7 +15,7 @@ Before performing the purge, the remotes are synced, and the dev branch is rebas
 A branch is never deleted if it's the dev branch, or if it's included in the configfile ($c_configuration_file)
 The development branch is either configured via '$c_development_branch_config_key' git config key, or via origin/HEAD.
 
-The configfile format is composed of multiple lines in the format '<repo_dirname>:<branches_regexp>'.
+The configfile is required; its format is composed of multiple lines in the format '<repo_dirname>:<branches_regexp>'.
 Empty lines are ignored.
 
 Example configfile:
@@ -48,9 +48,11 @@ function store_branch_names {
 }
 
 function set_protected_branches {
-  # Make sure the file exists.
-  #
-  touch "$c_configuration_file"
+  if [[ ! -e $c_configuration_file ]]; then
+    # Without it, it's guaranteed to accidentally push/delete branches that must not be touched.
+    >&2 echo "The configuration file is important and required!"
+    exit 1
+  fi
 
   while IFS='= ' read -r key value || [ -n "$key" ]; do
     if [[ $key != "" ]]; then
