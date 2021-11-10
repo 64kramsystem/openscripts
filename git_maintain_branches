@@ -7,12 +7,14 @@ c_development_branch_config_key=custom.development-branch
 c_help="\
 Usage: $(basename "$0")
 
-Delete all the branches (local, and their remote tracked) that haven't any commits that aren't in the dev branch.
+Delete all the branches (local, and their corresponding remote) that haven't any commits that aren't in the dev branch.
 Can be run from any branch, but requires a clean tree.
 
-Before performing the purge, the remotes are synced, and the dev branch is rebased on origin and upstream, and pushed.
+Before performing the purge, the repos are synced, and the dev branch is rebased on origin and upstream; then it's pushed if it's not protected.
 
-A branch is never pushed/deleted if it's included in the configfile ($c_configuration_file); the dev branch is never deleted.
+Branches in the configfile ($c_configuration_file) are called 'protected', and they're never pushed/deleted.
+The development branch is never deleted regardless.
+
 The development branch is either configured via '$c_development_branch_config_key' git config key, or via origin/HEAD.
 
 The configfile is required; its format is composed of multiple lines in the format '<repo_dirname>:<branches_regexp>'.
@@ -105,7 +107,7 @@ function delete_empty_branches {
   # If no protected branches are specified, use a phony pattern (will match empty branch names, which are not possible).
   protected_branches_pattern=${v_protected_branches[$repo_dirname]:-^$}
 
-  for branch in $(git branch | cut -c 3- | grep -v "^$v_dev_branch\$" | grep -vP "$protected_branches_pattern" ); do
+  for branch in $(git branch | cut -c 3- | grep -v "^$v_dev_branch\$" | grep -vP "$protected_branches_pattern"); do
     if ! git cherry "$v_dev_branch" "$branch" | grep -q '^+'; then
       git branch -D "$branch"
       echo
