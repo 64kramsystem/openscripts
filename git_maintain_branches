@@ -12,7 +12,7 @@ Can be run from any branch, but requires a clean tree.
 
 Before performing the purge, the remotes are synced, and the dev branch is rebased on origin and upstream, and pushed.
 
-A branch is never deleted if it's the dev branch, or if it's included in the configfile ($c_configuration_file)
+A branch is never pushed/deleted if it's included in the configfile ($c_configuration_file); the dev branch is never deleted.
 The development branch is either configured via '$c_development_branch_config_key' git config key, or via origin/HEAD.
 
 The configfile is required; its format is composed of multiple lines in the format '<repo_dirname>:<branches_regexp>'.
@@ -88,7 +88,14 @@ function sync_dev_branch_with_remotes {
     echo
   fi
 
-  git push
+  local repo_dirname protected_branches_pattern
+
+  repo_dirname=$(basename "$(readlink -f .)")
+  protected_branches_pattern=${v_protected_branches[$repo_dirname]:-^$}
+
+  if ! echo "$v_dev_branch" | grep -qP "$protected_branches_pattern"; then
+    git push
+  fi
 }
 
 function delete_empty_branches {
