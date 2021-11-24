@@ -10,8 +10,10 @@ c_help="Usage: $(basename "$0") [-h|--help] <filename>
 
 Creates a Bash script template, and sets the permissions."
 
+# The shebang is compatible with Mac (which ships by default an ancient Bash version).
+#
 # shellcheck disable=2016 # single quote no expansion
-c_template='#!/bin/bash
+c_template='#!/usr/bin/env bash
 
 set -o pipefail
 set -o errexit
