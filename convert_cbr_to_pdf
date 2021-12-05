@@ -6,8 +6,10 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-h|--help] <input.cbr>"
+c_help="Usage: $(basename "$0") [-h|--help] <input1.cbr, input2.cbr...>"
 
+v_input_files=()
+# The below are set on every cycle of the main for loop
 v_input_file=
 v_output_file=
 v_temp_dir=
@@ -29,19 +31,23 @@ function decode_cmdline_args {
     esac
   done
 
-  if [[ $# -ne 1 ]]; then
+  if [[ $# -lt 1 ]]; then
     echo "$c_help"
     exit 1
   fi
 
-  v_input_file=$(readlink -f "$1")
+  for file in "${@:1}"; do
+    v_input_files+=("$(readlink -f "$file")")
+  done
 }
 
-function check_input_file {
-  if [[ $v_input_file != *.cbr ]]; then
-    >&2 echo "Only cbr files currently supported"
+function check_input_files {
+  for file in "${v_input_files[@]}"; do
+    if [[ $file != *.cbr ]]; then
+    >&2 echo "Only cbr files currently supported (input: $file)"
     exit 1
   fi
+  done
 }
 
 function prepare_output_file {
@@ -103,12 +109,15 @@ function delete_temp_dir {
 
 decode_cmdline_args "$@"
 
-check_input_file
-prepare_output_file
-create_temp_dir
-decompress_file
-enter_temp_dir
-handle_subdirs
-check_file_extensions
-create_pdf
-delete_temp_dir
+check_input_files
+
+for v_input_file in "${v_input_files[@]}"; do
+  prepare_output_file
+  create_temp_dir
+  decompress_file
+  enter_temp_dir
+  handle_subdirs
+  check_file_extensions
+  create_pdf
+  delete_temp_dir
+done
