@@ -17,6 +17,7 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `unpack_gem`: unpacks a gem, with additional operations like directory creation, gemspec extraction (when not present), etc.
 - "real-world"
   - `bedtime`: sets two (systemd) timers, one to suspend the computer, and the other to shut it down
+  - `convert_cbr_to_pdf`: convert .CBR files to .PDF
   - `control_music_player`: performs actions on a music player running in the background (supports Clementine, MPV, GMusicBrowser...)
   - `encode_to_m4a`: encodes and normalizes input files to m4a, using ffmpeg/libsdk_aac
   - `fill_labels`: prepares an OpenDocument with addresses, to be printed on a standard A4 page with 96x50.8mm labels
