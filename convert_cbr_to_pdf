@@ -50,7 +50,7 @@ function check_input_files {
   done
 }
 
-function prepare_output_file {
+function prepare_output_filename {
   v_output_file=${v_input_file%.cbr}.pdf
 }
 
@@ -112,7 +112,7 @@ decode_cmdline_args "$@"
 check_input_files
 
 for v_input_file in "${v_input_files[@]}"; do
-  prepare_output_file
+  prepare_output_filename
   create_temp_dir
   decompress_file
   enter_temp_dir
