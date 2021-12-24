@@ -45,7 +45,6 @@ function decode_cmdline_args {
 # to terminate early.
 #
 function check_input_files {
-set -x
   for file in "${v_input_files[@]}"; do
     if [[ ! $file =~ \.(cbr|cbz|zip)$ ]]; then
       >&2 echo "Unsupported file format: $file"
