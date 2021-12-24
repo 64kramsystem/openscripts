@@ -41,12 +41,16 @@ function decode_cmdline_args {
   done
 }
 
+# The check itself is redundant (`decompress_file()` fails on unexpected formats), but it's convenient
+# to terminate early.
+#
 function check_input_files {
+set -x
   for file in "${v_input_files[@]}"; do
-    if [[ $file != *.cbr ]]; then
-    >&2 echo "Only cbr files currently supported (input: $file)"
-    exit 1
-  fi
+    if [[ ! $file =~ \.(cbr|cbz|zip)$ ]]; then
+      >&2 echo "Unsupported file format: $file"
+      exit 1
+    fi
   done
 }
 
@@ -59,7 +63,17 @@ function create_temp_dir {
 }
 
 function decompress_file {
-  unrar x "$v_input_file" "$v_temp_dir"
+  case $v_input_file in
+  *.cbr)
+    unrar x "$v_input_file" "$v_temp_dir"
+    ;;
+  *.cbz|*.zip)
+    unzip "$v_input_file" -d "$v_temp_dir"
+    ;;
+  *)
+    >&2 echo "Unsupported file format: ${v_input_file//*./}"
+    exit 1
+  esac
 }
 
 function enter_temp_dir {
