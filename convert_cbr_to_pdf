@@ -89,12 +89,12 @@ function delete_unnecessary_files {
   rm -f -- *.xml *.txt
 }
 
-function check_file_extensions {
-  local non_jpg_extensions
-  non_jpg_extensions=$(find . -type f -not -name "*.jpg")
+function check_filenames {
+  local unexpected_filenames
+  unexpected_filenames=$(find . -type f -regextype egrep -not -regex "^\./[[:digit:]]+\.jpg$")
 
-  if [[ -n $non_jpg_extensions ]]; then
-    >&2 echo "Non jpg extensions found: $non_jpg_extensions"
+  if [[ -n $unexpected_filenames ]]; then
+    >&2 echo "Non jpg extensions found: $unexpected_filenames"
     exit 1
   fi
 }
@@ -122,7 +122,7 @@ for v_input_file in "${v_input_files[@]}"; do
   enter_temp_dir
   handle_subdirs
   delete_unnecessary_files
-  check_file_extensions
+  check_filenames
   create_pdf
   delete_temp_dir
 done
