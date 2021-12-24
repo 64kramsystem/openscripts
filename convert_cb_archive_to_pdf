@@ -6,9 +6,10 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-h|--help] <input1.cbr, input2.cbr...>"
+c_help="Usage: $(basename "$0") [-h|--help] [-d|--delete-source-file] <input1.cbr input2.cbz...>"
 
 v_input_files=()
+v_delete_source_file= # boolean; false=blank, true=anything else
 # The below are set on every cycle of the main for loop
 v_input_file=
 v_output_file=
@@ -16,7 +17,7 @@ v_temp_dir=
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hd --long help,delete-source-file --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -25,6 +26,9 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
+      -d|--delete-source-file)
+        v_delete_source_file=1
+        shift ;;
       --)
         shift
         break ;;
@@ -130,6 +134,10 @@ function delete_temp_dir {
   rm -r "$v_temp_dir"
 }
 
+function delete_source_file {
+  rm "$v_input_file"
+}
+
 decode_cmdline_args "$@"
 
 check_input_files
@@ -145,4 +153,7 @@ for v_input_file in "${v_input_files[@]}"; do
   pad_filenames
   create_pdf
   delete_temp_dir
+  if [[ -n $v_delete_source_file ]]; then
+    delete_source_file
+  fi
 done
