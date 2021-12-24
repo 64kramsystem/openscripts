@@ -99,6 +99,12 @@ function check_filenames {
   fi
 }
 
+function pad_filenames {
+  # For the lulz!
+  #
+  rename 's/(\d+)/"0" x (4 - length($1)) . $1/e' -- *.jpg
+}
+
 function create_pdf {
   # For unclear reasons, v6.9.10-23, when the source files are not in the current directory, sometimes
   # hangs.
@@ -123,6 +129,7 @@ for v_input_file in "${v_input_files[@]}"; do
   handle_subdirs
   delete_unnecessary_files
   check_filenames
+  pad_filenames
   create_pdf
   delete_temp_dir
 done
