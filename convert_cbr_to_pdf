@@ -87,7 +87,7 @@ function handle_subdirs {
 
 function check_file_extensions {
   local non_jpg_extensions
-  non_jpg_extensions=$(find . -type f -not -name "*.jpg" | grep -v '.xml$' || true)
+  non_jpg_extensions=$(find . -type f -not -name "*.jpg" | grep -vP '\.(xml|txt)$' || true)
 
   if [[ -n $non_jpg_extensions ]]; then
     >&2 echo "Non jpg extensions found: $non_jpg_extensions"
