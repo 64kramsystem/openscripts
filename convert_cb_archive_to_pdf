@@ -41,12 +41,15 @@ function decode_cmdline_args {
   done
 }
 
+# The check itself is redundant (`decompress_file()` fails on unexpected formats), but it's convenient
+# to terminate early.
+#
 function check_input_files {
   for file in "${v_input_files[@]}"; do
-    if [[ $file != *.cbr ]]; then
-    >&2 echo "Only cbr files currently supported (input: $file)"
-    exit 1
-  fi
+    if [[ ! $file =~ \.(cbr|cbz|zip)$ ]]; then
+      >&2 echo "Unsupported file format: $file"
+      exit 1
+    fi
   done
 }
 
@@ -59,7 +62,17 @@ function create_temp_dir {
 }
 
 function decompress_file {
-  unrar x "$v_input_file" "$v_temp_dir"
+  case $v_input_file in
+  *.cbr)
+    unrar x "$v_input_file" "$v_temp_dir"
+    ;;
+  *.cbz|*.zip)
+    unzip "$v_input_file" -d "$v_temp_dir"
+    ;;
+  *)
+    >&2 echo "Unsupported file format: ${v_input_file//*./}"
+    exit 1
+  esac
 }
 
 function enter_temp_dir {
@@ -85,14 +98,24 @@ function handle_subdirs {
   esac
 }
 
-function check_file_extensions {
-  local non_jpg_extensions
-  non_jpg_extensions=$(find . -type f -not -name "*.jpg" | grep -v '.xml$' || true)
+function delete_unnecessary_files {
+  rm -f -- *.xml *.txt
+}
 
-  if [[ -n $non_jpg_extensions ]]; then
-    >&2 echo "Non jpg extensions found: $non_jpg_extensions"
+function check_filenames {
+  local unexpected_filenames
+  unexpected_filenames=$(find . -type f -regextype egrep -not -regex "^\./[[:digit:]]+\.jpg$")
+
+  if [[ -n $unexpected_filenames ]]; then
+    >&2 echo "Non jpg extensions found: $unexpected_filenames"
     exit 1
   fi
+}
+
+function pad_filenames {
+  # For the lulz!
+  #
+  rename 's/(\d+)/"0" x (4 - length($1)) . $1/e' -- *.jpg
 }
 
 function create_pdf {
@@ -117,7 +140,9 @@ for v_input_file in "${v_input_files[@]}"; do
   decompress_file
   enter_temp_dir
   handle_subdirs
-  check_file_extensions
+  delete_unnecessary_files
+  check_filenames
+  pad_filenames
   create_pdf
   delete_temp_dir
 done
