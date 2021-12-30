@@ -6,7 +6,9 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-h|--help] [-d|--delete-source-file] <input1.cbr input2.cbz...>"
+c_help="Usage: $(basename "$0") [-h|--help] [-d|--delete-source-file] <input1.cbr input2.cbz...>
+
+On deletion, if 'trash' is in the path, it will be used; otherwise, 'rm' will be."
 
 v_input_files=()
 v_delete_source_file= # boolean; false=blank, true=anything else
@@ -135,7 +137,11 @@ function delete_temp_dir {
 }
 
 function delete_source_file {
-  rm "$v_input_file"
+  if [[ -x $(command -v trash) ]]; then
+    trash "$v_input_file"
+  else
+    rm "$v_input_file"
+  fi
 }
 
 decode_cmdline_args "$@"
