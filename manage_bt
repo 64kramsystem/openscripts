@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help]
+
+- Enables the first BT device, if found and disabled
+- Runs the BT manager
+- After exiting the BT manager, disables the BT device (if it was found)
+"
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+# For simplicity, just find the first unblocked.
+#
+# Returns successfully even if no devices are found.
+#
+# Sample output:
+#
+#   ID TYPE      DEVICE      SOFT      HARD
+#    1 wlan      phy0   unblocked unblocked
+#    5 bluetooth hci0     blocked unblocked
+#
+function find_bt_device_id {
+  rfkill | awk '$2 == "bluetooth" && $4 == "blocked" { print $1 }' | head -n 1 || true
+}
+
+function enable_bt_device {
+  local device_id=$1
+
+  rfkill unblock "$device_id"
+}
+
+function run_bt_manager {
+  /usr/bin/blueman-manager
+}
+
+function disable_bt_device {
+  local device_id=$1
+
+  rfkill block "$device_id"
+}
+
+function main {
+  local bt_device_id
+
+  bt_device_id=$(find_bt_device_id)
+
+  if [[ -n $bt_device_id ]]; then
+    enable_bt_device "$bt_device_id"
+  fi
+
+  run_bt_manager
+
+  if [[ -n $bt_device_id ]]; then
+    disable_bt_device "$bt_device_id"
+  fi
+}
+
+decode_cmdline_args "$@"
+main
