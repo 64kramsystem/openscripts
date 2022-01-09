@@ -29,6 +29,7 @@ OpenScripts is a collection of some of my scripts for personal use:
 - system (user facing)
   - `connect_bt_device`: connects a BT device, working around the complete garbage that is Bluetooth, Bluez, and the BT Ubuntu support
   - `ejectdisk`: unmounts and powers off a device, or all the connected USB storage devices
+  - `manage_bt`: enable a BT device if present, opens the BT manager, then disables the device
   - `ownsync`: command line sync script for Owncloud/Nextcloud, with conflicts handling
 - system (sysadmin)
   - `clean_kernel_packages`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
