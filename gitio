@@ -3,6 +3,8 @@
 set -o pipefail
 set -o errexit
 set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
 
 help="\
 Usage: $(basename "$0") [-h|--help] <url>
@@ -17,7 +19,10 @@ Vanity URLs are not supported, since it seems they've been discontinued.
 v_source_url=
 
 function decode_cmdline_arguments {
-  eval set -- "$(getopt --options h --long help -- "$@")"
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
 
   while true; do
     case "$1" in
@@ -39,7 +44,8 @@ function decode_cmdline_arguments {
 }
 
 function generate_url {
-  local response=$(curl -si https://git.io -F "url=$v_source_url")
+  local response=
+  response=$(curl -si https://git.io -F "url=$v_source_url")
 
   if [[ $response =~ 422 ]]; then
     echo "$response" | grep '^Status: '
