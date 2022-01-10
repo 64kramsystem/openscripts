@@ -3,27 +3,38 @@
 set -o pipefail
 set -o errexit
 set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
 
 help="\
-Usage: $(basename "$0") [-h|--help] <url> [<custom_name>]
+Usage: $(basename "$0") [-h|--help] [-s|--short] <url>
 
 Generates a git.io URL, and copies it to the clipboard (with the protocol stripped).
 
+If --short is specified, the 'https://' protocol is not added to the generated link.
+
 Requires xsel.
 
-Vanity URLs are not supported, since it seems they've been discontinued (the parameter is ignored).
+Vanity URLs are not supported, since it seems they've been discontinued.
 "
 
 v_source_url=
+v_strip_protocol=    # bool; false=blank, true=anything else
 
 function decode_cmdline_arguments {
-  eval set -- "$(getopt --options h --long help -- "$@")"
+  local params
+  params=$(getopt --options hs --long help,short --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
 
   while true; do
     case "$1" in
       -h|--help)
         echo "$help"
         exit 0 ;;
+      -s|--short)
+        v_strip_protocol=1
+        shift ;;
       --)
         shift
         break ;;
@@ -39,12 +50,22 @@ function decode_cmdline_arguments {
 }
 
 function generate_url {
-  local response=$(curl -si https://git.io -F "url=$v_source_url")
+  local response=
+  response=$(curl -si https://git.io -F "url=$v_source_url")
 
   if [[ $response =~ 422 ]]; then
     echo "$response" | grep '^Status: '
   else
-    echo "${response/https:\/\//}" | perl -ne '/^Location: (\S+)/ && print $1' | tee >(xsel -ib)
+    local result
+    result=$(echo "$response" | perl -ne '/^Location: (\S+)/ && print $1')
+
+    if [[ -n $v_strip_protocol ]]; then
+      # For simplicity, it doesn't consider the non-realworld case where the URL includes 'https://' outside the protocol.
+      #
+      result=${result/https:\/\//}
+    fi
+
+    echo "$result" | tee >(xsel -ib)
   fi
 }
 
