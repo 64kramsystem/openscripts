@@ -5,13 +5,13 @@ set -o errexit
 set -o nounset
 
 help="\
-Usage: $(basename "$0") [-h|--help] <url> [<custom_name>]
+Usage: $(basename "$0") [-h|--help] <url>
 
 Generates a git.io URL, and copies it to the clipboard (with the protocol stripped).
 
 Requires xsel.
 
-Vanity URLs are not supported, since it seems they've been discontinued (the parameter is ignored).
+Vanity URLs are not supported, since it seems they've been discontinued.
 "
 
 v_source_url=
