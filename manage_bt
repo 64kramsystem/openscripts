@@ -8,9 +8,9 @@ shopt -s inherit_errexit
 
 c_help="Usage: $(basename "$0") [-h|--help]
 
-- Enables the first BT device, if found and disabled
+- Enables the first disabled BT device, if found
 - Runs the BT manager
-- After exiting the BT manager, disables the BT device (if it was found)
+- Disables the first enabled BT device, if found
 "
 
 function decode_cmdline_args {
@@ -47,13 +47,19 @@ function decode_cmdline_args {
 #    5 bluetooth hci0     blocked unblocked
 #
 function find_bt_device_id {
-  rfkill | awk '$2 == "bluetooth" && $4 == "blocked" { print $1 }' | head -n 1 || true
+  local status=$1
+  export status
+
+  rfkill | awk '$2 == "bluetooth" && $4 == ENVIRON["status"] { print $1 }' | head -n 1 || true
 }
 
 function enable_bt_device {
-  local device_id=$1
+  local device_id
+  device_id=$(find_bt_device_id "blocked")
 
-  rfkill unblock "$device_id"
+  if [[ -n $device_id ]]; then
+    rfkill unblock "$device_id"
+  fi
 }
 
 function run_bt_manager {
@@ -61,25 +67,18 @@ function run_bt_manager {
 }
 
 function disable_bt_device {
-  local device_id=$1
+  local device_id
+  device_id=$(find_bt_device_id "unblocked")
 
-  rfkill block "$device_id"
+  if [[ -n $device_id ]]; then
+    rfkill block "$device_id"
+  fi
 }
 
 function main {
-  local bt_device_id
-
-  bt_device_id=$(find_bt_device_id)
-
-  if [[ -n $bt_device_id ]]; then
-    enable_bt_device "$bt_device_id"
-  fi
-
+  enable_bt_device
   run_bt_manager
-
-  if [[ -n $bt_device_id ]]; then
-    disable_bt_device "$bt_device_id"
-  fi
+  disable_bt_device
 }
 
 decode_cmdline_args "$@"
