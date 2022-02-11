@@ -22,6 +22,7 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `plot_diagram`: plots a diagram from a text file, via GNU Plot (and Ruby),  with better support for batch processing than `plot_2y_diagram`
   - `record_desktop`: records a video of the desktop, using FFmpeg
   - `spell`: spell a phrase, with customizable alphabets
+  - `split_cue_audio_file`: splits an audio file based on the provided cue file
   - `texerak`: convenient wrapper around Tesseract, to OCR images/documents
 - git
   - `git_maintain_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in the main branch; also syncs with upstream
