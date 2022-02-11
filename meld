@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# If meld is opened without params, it opens with the user dialog; since opening two blank panels is
+# a common use case, this wrapper starts this way by default.
+
+if [[ $# -eq 0 ]]; then
+  /usr/bin/meld /dev/null /dev/null
+else
+  /usr/bin/meld "$@"
+fi

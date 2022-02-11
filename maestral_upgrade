@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help]
+
+Upgrades and restarts Maestral."
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function do_upgrade {
+  pip3 install --upgrade maestral[gui]
+}
+
+function restart_all {
+  maestral stop # stops all
+  maestral gui & # also starts the service
+}
+
+decode_cmdline_args "$@"
+do_upgrade
+restart_all
