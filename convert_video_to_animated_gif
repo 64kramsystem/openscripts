@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] <input>
+
+Convert a video to a animated GIF, via FFmpeg.
+
+The output file name is <input.gif>, with the previous extension stripped."
+
+v_input_filename=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_input_filename=$1
+}
+
+function main {
+  # See:
+  #
+  # - https://superuser.com/a/556031
+  # - https://askubuntu.com/a/837574
+  #
+  local fps=4
+  local loop_type=0 # infinite loop; use '-1' for no loop
+  local scale=      # set the width in pixels to scale (height is scaled accordingly - see option)
+
+  ffmpeg -i "$v_input_filename" -vf "fps=${fps}${scale:+,scale=${scale}:-1:flags=lanczos},split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop "$loop_type" "${v_input_filename%.*}.gif"
+}
+
+decode_cmdline_args "$@"
+main
