@@ -1,0 +1,120 @@
+#!/usr/bin/env ruby
+
+require 'simple_scripting/configuration'
+require 'simple_scripting/argv'
+require_relative 'sapis/system_helper'
+
+require 'zip'
+require 'cgi'
+
+TEMPLATE_FILENAME = File.expand_path('../dhl_packet_slip_template/dhl_packet_slip_template.odt', __FILE__)
+OUTPUT_FILENAME = '/tmp/filled_dhl_slip.odt'
+
+class DhlPacketSlip
+  # Samples:
+  #
+  #   {{city}}
+  #   {{city <text:s text:c="7"/>}}
+  #
+  # Note that another possibility is:
+  #
+  #   {{city }}
+  #
+  # which, for simplicity, is not matched.
+  #
+  PLACEHOLDERS_REGEX = %r|(\{\{(\w+)(?: <text:s text:c="(\d+)"/>)?\}\})|
+
+  def initialize(template_filename, source_field_values)
+    @template_filename   = template_filename
+    @source_field_values = source_field_values
+  end
+
+  def fill(output_filename, options={})
+    destination = options[:destination]
+
+    File.delete(output_filename ) if File.exists?( output_filename)
+
+    Zip::File.open(@template_filename) do | input_zip_file |
+      Zip::File.open(output_filename, Zip::File::CREATE) do | output_zip_file |
+        input_zip_file.each do | input_entry |
+          if input_entry.file?
+            file_content = input_entry.get_input_stream.read
+
+            replace_placeholders!(file_content, destination, options) if input_entry.name == 'content.xml'
+
+            output_zip_file.get_output_stream(input_entry.name) do | output_entry_stream |
+              output_entry_stream.write file_content
+            end
+          end
+        end
+      end
+    end
+  end
+
+  private
+
+  def replace_placeholders!(file_content, destination, options)
+    field_values = decode_address(destination, options) || {}
+
+    field_values.merge!(@source_field_values)
+
+    placeholders_found = file_content.scan(PLACEHOLDERS_REGEX)
+
+    placeholders_found.each do | placeholder_string, field, compressed_spaces |
+      allowed_chars = 2 + field.size + (compressed_spaces.nil? ? 0 : compressed_spaces.to_i + 1) + 2
+
+      user_value = field_values[field.to_sym] || ask_entry(field, allowed_chars)
+
+      escaped_value = CGI.escapeHTML(user_value)
+      file_content.sub!(placeholder_string, escaped_value)
+    end
+
+  end
+
+  def decode_address(address, options)
+    return nil if address.nil?
+
+    lines = address.strip.split("\n" ).map( &:strip)
+
+    unless options[:'no-check']
+      raise "Wrong number of lines (3 or 4 expected)" if lines.size < 3 or lines.size > 4
+      raise 'Unexpected postcode/city format ("<nnnnnn> <city>" expected)' if lines[2] !~ /^\d{4,5} /
+    end
+
+    {
+      name:    lines[0][0,  36],
+      name2:   lines[0][36, 17] || '',
+      phone:   '',
+      address: lines[1][0, 36],
+      post_c:  lines[2][0 ... lines[2].index(' ')],
+      city:    lines[2][lines[2].index(' ') + 1 .. -1],
+      country: lines[3] || ''
+    }
+  end
+
+  def ask_entry(field, allowed_chars)
+    while true
+      print "Insert #{ field } (#{allowed_chars}): "
+      user_value = gets.strip
+
+      return user_value if user_value.size <= allowed_chars
+
+      puts "-> #{ user_value.size } inserted!"
+    end
+  end
+end
+
+# This script has been kept as simple as possible - there is only very little checking.
+#
+if __FILE__ == $PROGRAM_NAME
+  execution_options = SimpleScripting::Argv.decode(
+    ['-d', '--destination DESTINATION',  "If specified, the address is decoded from it. Format: three standard lines, or four including the country"],
+    ['-n', '--no-check',  "Don't perform any check on the address (eg. for many foreign addresses)"],
+  ) || exit
+
+  source_field_values = SimpleScripting::Configuration.load.to_h
+
+  DhlPacketSlip.new(TEMPLATE_FILENAME, source_field_values ).fill( OUTPUT_FILENAME, execution_options)
+
+  SystemHelper.open_file(OUTPUT_FILENAME)
+end
