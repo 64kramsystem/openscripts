@@ -1,0 +1,67 @@
+#!/bin/bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_output_filename=$HOME/Desktop/desktop_recording.mp4
+
+# Update the help on update.
+#
+c_output_dimensions=1280x800
+c_fps=10
+c_preset=slower
+c_rate_factor=32
+
+c_help="Usage: $(basename "$0") [-h|--help] <input>
+
+Records a video of the desktop, using FFmpeg. Params:
+
+- output file: $c_output_filename
+- size: $c_output_dimensions
+- fps: $c_fps
+- format: h264
+- preset: $c_preset
+- rate factor: $c_rate_factor
+
+The current defaults yield a rate of ~2 MB/min
+"
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function find_screen_dimensions {
+  xdpyinfo | awk "/dimensions/ {print \$2}"
+}
+
+function record {
+  local screen_dimensions=$1
+
+  ffmpeg -f x11grab -s "$screen_dimensions" -r "$c_fps" -i :0.0 -vf scale="$c_output_dimensions" -c:v libx264 -preset "$c_preset" -crf "$c_rate_factor" "$c_output_filename"
+}
+
+decode_cmdline_args "$@"
+screen_dimensions=$(find_screen_dimensions)
+record "$screen_dimensions"

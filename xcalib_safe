@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] <xcalib_params>
+
+xcalib has improper error signaling; on error, it exits with success exit code, and prints to stdout; this scripts wrap it, and exits with error if common error cases are detected.
+
+The params are forwarded to xcalib (except the help, which is intercepted).
+"
+
+function intercept_help {
+  # Keep it st00pid simple.
+  #
+  # shellcheck disable=2116
+  if [[ $* =~ $(echo '(^|\b)(-h|--help)\b') ]]; then
+    echo "$c_help"
+    echo "====="
+    echo
+
+    # Even the help flag is noncompliant.
+    #
+    xcalib -help
+    exit 0
+  fi
+}
+
+function display_error {
+  zenity --info --no-markup --text 'Failed monitor calibration!'
+  exit 1
+}
+
+function main {
+  local xcalib_output
+
+  xcalib_output=$(xcalib "$@" || display_error "$@")
+
+  if [[ $xcalib_output == "Warning"* ]]; then
+    display_error "$@"
+  else
+    echo "$xcalib_output"
+  fi
+}
+
+intercept_help "$@"
+main "$@"

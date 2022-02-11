@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] <search> <replace> [start_commit]
+
+Rename all the commits from <start_commit> (default: master) to HEAD, using the old (filter-branch) git method."
+
+v_search_pattern=
+v_replace_pattern=
+v_start_commit=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -lt 2 ]] || [[ $# -gt 3 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_search_pattern=${1//\//\\/}
+  v_replace_pattern=${2//\//\\/}
+  v_start_commit=${3:-master}
+}
+
+function main {
+  # It would be best to have Perl use $ENV, however, even if `export`ed, the variables are not inherited
+  # in the git perl subshell.
+  #
+  FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force --msg-filter "perl -pe 's/$v_search_pattern/$v_replace_pattern/'" -- "$v_start_commit"..HEAD
+}
+
+decode_cmdline_args "$@"
+main
