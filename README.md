@@ -45,6 +45,7 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `inhibit_mate_screensaver`: inhibit the MATE screensaver, which prevents sending the screen to sleep
   - `install_btrfs_checker`: monthly scrubs the BTRFS partitions and notifies the user on logon
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
+  - `maestral_upgrade`: upgrades and restarts Maestral
   - `mylast`: runs the last executed MySQL query, and copies the result to the clipboard
   - `mysql_collect_stats`: collects MySQL server statistics over a session (global status values), in a convenient structure for processing
   - `mysql_plot_diagrams`: plots diagrams (via GNU Plot), with the stats collected via `mysql_collect_stats`
