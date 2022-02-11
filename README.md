@@ -41,6 +41,7 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `download_ubuntu_packages`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
   - `ft(_function)`: very handy script for extracting a token/line from the output of a command
   - `gitio`: generate a short GitHub URL, and copy it to the clipboard
+  - `inhibit_mate_screensaver`: inhibit the MATE screensaver, which prevents sending the screen to sleep
   - `install_btrfs_checker`: monthly scrubs the BTRFS partitions and notifies the user on logon
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
   - `mylast`: runs the last executed MySQL query, and copies the result to the clipboard

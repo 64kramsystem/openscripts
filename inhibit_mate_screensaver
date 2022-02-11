@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help]
+
+See code for comments."
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function main {
+  # NOTE: As of Feb/2022, this may not be needed anymore.
+  #
+  # Complete madness:
+  #
+  # - if the screensaver is inactive, but running, it still affects the screen sleep
+  # - it's not clear why it's required `pgrep mate-screensave` to match the process
+  # - on some systems, after the process is executed, it takes some time for it to actually run
+  # - one can't just kill the screensaver entirely, because it also handles the screen locking; there
+  #   is some internal split between the two functions, as `--exit` disable the screen saving
+  #   functionality, but not the locking.
+  # - even after `--exit`, the screensaver is reexecuted after a while
+
+  # Simplest solution: if the screensaver is not running yet, just sleep and retry.
+  #
+  while true; do
+    mate-screensaver-command -i 2> /dev/null
+    sleep 1
+  done
+}
+
+decode_cmdline_args "$@"
+main
