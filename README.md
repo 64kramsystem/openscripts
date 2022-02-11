@@ -10,6 +10,7 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
 - git
   - `git_maintain_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in the main branch; also syncs with upstream
+  - `git_rename_commits`: rename git commits, using the old git (`filter-branch`) method
 - programming
   - `meld`: wrapper around meld, that opens two blank panels, if no files are passed
   - `prettify`: prettifies files; supports XML and JSON
