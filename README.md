@@ -50,5 +50,6 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `script_template`: create a Bash script template, and sets the permissions
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
+  - `xcalib_safe`: wrapper around xcalib, which detects error states, and warns the user (and exits with error code)
 
 I keep adding new content/update old one.
