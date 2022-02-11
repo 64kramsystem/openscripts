@@ -11,6 +11,7 @@ OpenScripts is a collection of some of my scripts for personal use:
 - git
   - `git_maintain_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in the main branch; also syncs with upstream
 - programming
+  - `meld`: wrapper around meld, that opens two blank panels, if no files are passed
   - `prettify`: prettifies files; supports XML and JSON
   - `rename_variables`: rename variables/constants with composite names
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
