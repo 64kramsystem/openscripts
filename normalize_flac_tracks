@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] [-f|--file-mode]
+
+HAndles the tags of the flac files in the current directory. Has two modes:
+
+Normal mode:
+
+- renames '. ' to ' - '
+- removes the tags
+- adds the replay gain to files as album
+
+File mode:
+
+- removes the tags
+- adds the replay gain to each file individually
+"
+
+v_file_mode= # boolean; true:blank, false:anything else
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hf --long help,file-mode --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -f|--file-mode)
+        v_file_mode=1
+        shift ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function run_in_regular_mode {
+  rename 's/\. / - /' ./*.flac
+
+  metaflac --remove-all-tags ./*.flac
+
+  metaflac --add-replay-gain ./*.flac
+}
+
+function run_in_file_mode {
+  metaflac --remove-all-tags ./*.flac
+
+  for f in *.flac; do
+    metaflac --add-replay-gain "$f"
+  done
+}
+
+decode_cmdline_args "$@"
+
+if [[ -z $v_file_mode ]]; then
+  run_in_regular_mode
+else
+  run_in_file_mode
+fi
