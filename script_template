@@ -8,7 +8,7 @@ shopt -s inherit_errexit
 
 c_help="Usage: $(basename "$0") [-h|--help] <filename>
 
-Creates a Bash script template, and sets the permissions."
+Creates a Bash script template, sets the permissions, and opens it in VSC."
 
 # The shebang is compatible with Mac (which ships by default an ancient Bash version).
 #
@@ -95,6 +95,7 @@ function decode_cmdline_args {
 function main {
   echo "$c_template" > "$v_filename"
   chmod +x "$v_filename"
+  code "$v_filename"
 }
 
 decode_cmdline_args "$@"
