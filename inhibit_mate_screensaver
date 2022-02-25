@@ -8,7 +8,11 @@ shopt -s inherit_errexit
 
 c_help="Usage: $(basename "$0") [-h|--help]
 
-See code for comments."
+Inhibits the screensaver, which prevents the screen to monitor to suspend.
+
+Needed as of Feb/2022; tested on all the major graphic card producers.
+
+See code for implementation details."
 
 function decode_cmdline_args {
   local params
@@ -34,8 +38,6 @@ function decode_cmdline_args {
 }
 
 function main {
-  # NOTE: As of Feb/2022, this may not be needed anymore.
-  #
   # Complete madness:
   #
   # - if the screensaver is inactive, but running, it still affects the screen sleep
@@ -49,6 +51,9 @@ function main {
   # Simplest solution: if the screensaver is not running yet, just sleep and retry.
   #
   while true; do
+    # Blocks once executes successfully; given this, it's not worth making the script smart (e.g. by
+    # backgrounding it), since Bash takes a negligible amount of resources.
+    #
     mate-screensaver-command -i 2> /dev/null
     sleep 1
   done
