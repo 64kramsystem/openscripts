@@ -57,8 +57,9 @@ function set_devices {
 
 function find_usb_storage_devices {
   for device in /sys/block/*; do
-    local usb_storages_info=$(udevadm info --query=property --path=$device)
-    local device_name
+    local usb_storages_info device_name
+
+    usb_storages_info=$(udevadm info --query=property --path="$device")
 
     if echo "$usb_storages_info" | grep -q ^ID_BUS=usb; then
       device_name=$(echo "$usb_storages_info" | perl -ne 'print $1 if /^DEVNAME=(.*)/')
