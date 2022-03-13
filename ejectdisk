@@ -69,7 +69,40 @@ function find_usb_storage_devices {
 }
 
 function unmount_device_partitions() {
+  # LUKS encrypted partitions need a different treatment.
+  #
+  local device_tree
+
+  # Sample output (unprocessed):
+  #
+  #   NAME                                          TYPE  MOUNTPOINT
+  #   sde                                           disk
+  #   └─sde1                                        part
+  #     └─luks-00000000-0000-0000-0000-000000000000 crypt /path/to/mountpoint
+  #
+  device_tree=$(lsblk -n -o NAME,TYPE,MOUNTPOINT "$device" || true)
+
+  # Umount the encrypted partition(s).
+  # The second `\S+` ensures that there is a mountpoint.
+  #
+  for luks_device in $(echo "$device_tree" | perl -ne 'print $1 if /([\w-]+) crypt \S+$/'); do
+    udisksctl unmount -b "/dev/mapper/$luks_device"
+  done
+
+  # Lock the LUKS device.
+  #
+  for luks_device in $(echo "$device_tree" | perl -ne 'print $1 if /(\w+) +part/'); do
+    # It's not clear how to check, without sudo permissions, if a LUKS device is locked, so this is
+    # based on empirical tests: on unlocked, the entry below has a full path, while on locked ones,
+    # it has only the slash.
+
+    if udisksctl info -b "/dev/$luks_device" | grep -qP "CleartextDevice: +'/\S+'"; then
+      udisksctl lock -b "/dev/$luks_device"
+    fi
+  done
+
   # Cheap way of finding the mounted partitions of a given device.
+  #
   for partition in $(mount | grep "^$device" | awk '{print $1}'); do
     udisksctl unmount -b "$partition"
   done
