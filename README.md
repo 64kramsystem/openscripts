@@ -58,4 +58,4 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
   - `xcalib_safe`: wrapper around xcalib, which detects error states, and warns the user (and exits with error code)
 
-I keep adding new content/update old one.
+I keep adding new content/update old ones.
