@@ -1,7 +1,9 @@
 # OpenScripts
 
-OpenScripts is a collection of some of my scripts for personal use:
+OpenScripts is a collection of some of my scripts/generic programs for personal use:
 
+- algorithms
+  - `ll_node.rb`: a simple implementation of a (singly-)linked list, that I sometimes used when exercising
 - concurrency
   - `interruptible_job_scheduler.rb`: a scheduler for interruptible process-based job(s)
 - documents
@@ -58,4 +60,4 @@ OpenScripts is a collection of some of my scripts for personal use:
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
   - `xcalib_safe`: wrapper around xcalib, which detects error states, and warns the user (and exits with error code)
 
-I keep adding new content/update old one.
+I keep adding new content/update old ones.
