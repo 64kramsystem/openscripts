@@ -1,7 +1,9 @@
 # OpenScripts
 
-OpenScripts is a collection of some of my scripts for personal use:
+OpenScripts is a collection of some of my scripts/generic programs for personal use:
 
+- algorithms
+  - `ll_node.rb`: a simple implementation of a (singly-)linked list, that I sometimes used when exercising
 - concurrency
   - `interruptible_job_scheduler.rb`: a scheduler for interruptible process-based job(s)
 - documents
