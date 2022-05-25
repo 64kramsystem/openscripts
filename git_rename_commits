@@ -8,7 +8,9 @@ shopt -s inherit_errexit
 
 c_help="Usage: $(basename "$0") [-h|--help] <search> <replace> [start_commit]
 
-Rename all the commits from <start_commit> (default: master) to HEAD, using the old (filter-branch) git method."
+Rename all the commits from <start_commit> (default: master) to HEAD, using the old (filter-branch) git method.
+
+The replace is executed via Perl, in 0777 mode, without flags (therefore, '^' matches the title line only)."
 
 v_search_pattern=
 v_replace_pattern=
@@ -45,7 +47,7 @@ function main {
   # It would be best to have Perl use $ENV, however, even if `export`ed, the variables are not inherited
   # in the git perl subshell.
   #
-  FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force --msg-filter "perl -pe 's/$v_search_pattern/$v_replace_pattern/'" -- "$v_start_commit"..HEAD
+  FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force --msg-filter "perl -0777 -pe 's/$v_search_pattern/$v_replace_pattern/'" -- "$v_start_commit"..HEAD
 }
 
 decode_cmdline_args "$@"
