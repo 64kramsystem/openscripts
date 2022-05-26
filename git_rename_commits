@@ -44,6 +44,10 @@ function decode_cmdline_args {
 }
 
 function main {
+  # filter-branch requires running from the project top level.
+  #
+  cd "$(git rev-parse --show-toplevel)"
+
   # It would be best to have Perl use $ENV, however, even if `export`ed, the variables are not inherited
   # in the git perl subshell.
   #
