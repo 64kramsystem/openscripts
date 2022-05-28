@@ -14,7 +14,7 @@ help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] 
 
 Encodes to m4a and applies gain; by default, outputs to the current directory.
 
-The "'`input`'" values can be either files or directories:
+The 'input' values can be either files or directories:
 
 - if they're files: track gain is applied (individually)
 - if they're directories:
@@ -32,8 +32,8 @@ Please note that not all the input/quality combinations work (see https://hydrog
 "
 
 input_files=
-destination="."
-quality="3"
+destination=.
+quality=3
 remove_file=
 
 function decode_commandline_params {
@@ -75,7 +75,10 @@ function activate_debug {
 
 function check_prerequisites {
   if ! [[ -x "$(command -v parallel)" ]]; then
-    >&2 echo 'The `parallel` binary is not in $PATH.'
+    >&2 echo "The 'parallel' binary is not in \$PATH."
+    exit 1
+  elif [[ ! -d "$destination" ]]; then
+    >&2 echo "The specified destination doesn't exist."
     exit 1
   elif [[ ! -d "$destination" ]]; then
     >&2 echo "The specified destination doesn't exist."
