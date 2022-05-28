@@ -77,6 +77,9 @@ function check_prerequisites {
   if ! [[ -x "$(command -v parallel)" ]]; then
     >&2 echo 'The `parallel` binary is not in $PATH.'
     exit 1
+  elif [[ ! -d "$destination" ]]; then
+    >&2 echo "The specified destination doesn't exist."
+    exit 1
   fi
 }
 
