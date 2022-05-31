@@ -44,7 +44,6 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `ejectdisk`: unmounts and powers off a device, or all the connected USB storage devices
   - `ft(_function)`: very handy script for extracting a token/line from the output of a command
   - `gitio`: generate a short GitHub URL, and copy it to the clipboard
-  - `inhibit_mate_screensaver`: inhibit the MATE screensaver, which prevents sending the screen to sleep
   - `install_btrfs_checker`: monthly scrubs the BTRFS partitions and notifies the user on logon
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
   - `maestral_upgrade`: upgrades and restarts Maestral
@@ -56,6 +55,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `ownsync`: command line sync script for Owncloud/Nextcloud, with conflicts handling
   - `purge_trash`: purge the trash files trashed before a certain threashold
   - `script_template`: create a Bash script template, and sets the permissions
+  - `set_display_sleep_time.sh`: implements the only reliable strategy I've found to send the display to sleep
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
   - `xcalib_safe`: wrapper around xcalib, which detects error states, and warns the user (and exits with error code)
