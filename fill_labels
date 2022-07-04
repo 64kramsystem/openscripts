@@ -2,11 +2,12 @@
 
 require 'cgi'
 require 'pathname'
-require 'shellwords'
 require 'tmpdir'
 require 'zip'
 require 'simple_scripting/argv'
 require 'simple_scripting/configuration'
+
+require_relative 'helpers/system_helper'
 
 class ConfigurationPreparer
   LONG_HELP = <<~HELP
@@ -73,14 +74,6 @@ class ConfigurationPreparer
     end
   end
 end # ConfigurationPreparer
-
-module SystemHelper
-  class << self
-    def open_file(filename)
-      `xdg-open #{filename.shellescape}`
-    end
-  end
-end # module SystemHelper
 
 class FillLabels
   TEMPLATE_DIR  = File.join(__dir__, 'fill_labels_template')
