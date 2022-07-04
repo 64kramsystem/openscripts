@@ -2,10 +2,11 @@
 
 require 'simple_scripting/configuration'
 require 'simple_scripting/argv'
-require_relative 'sapis/system_helper'
 
 require 'zip'
 require 'cgi'
+
+require_relative 'helpers/system_helper'
 
 TEMPLATE_FILENAME = File.expand_path('../dhl_packet_slip_template/dhl_packet_slip_template.odt', __FILE__)
 OUTPUT_FILENAME = '/tmp/filled_dhl_slip.odt'
