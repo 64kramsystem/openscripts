@@ -29,10 +29,11 @@ class InvoiceGenerator
 
   # Returns the output filename
   #
-  def generate(service_days, expenses: nil, previous_month: false, before_previous_month: false, output_file: nil)
+  def generate(service_days, expenses: nil, previous_month: false, before_previous_month: false, output_file: nil, open_xml: false)
     service_month = compute_service_month(previous_month: previous_month, before_previous_month: before_previous_month)
 
     outfile = output_file || generate_output_file(service_month) || raise("Missing :output_directory configuration (and no :output_file provided)")
+
     source_template = IO.read(TEMPLATE_FILE)
 
     template_values = add_computed_fields_to_data(service_days, service_month, expenses)
@@ -44,6 +45,10 @@ class InvoiceGenerator
     File.delete(outfile) if File.exist?(outfile)
 
     compress_directory(TEMPLATE_DIR, outfile, ignore: [TEMPLATE_FILE], rename: { TEMPLATE_BAK => TEMPLATE_FILE })
+
+    if !open_xml
+      convert_to_pdf(outfile)
+    end
 
     outfile
   ensure
@@ -152,11 +157,36 @@ class InvoiceGenerator
       raise "Unrecognized expenses expression!"
     end
   end
+
+  def convert_to_pdf(target_filename)
+    # Rename the document to "make space" for the new one.
+    #
+    temp_filename = target_filename + '.tmp'
+
+    File.rename(target_filename, temp_filename)
+
+    # Convert it to PDF.
+
+    dest_file_dir = File.dirname(target_filename)
+
+    command = "lowriter --convert-to pdf #{temp_filename.shellescape} --outdir #{dest_file_dir.shellescape}"
+    system(command, exception: true)
+
+    # Delete the source document
+
+    File.delete(temp_filename)
+
+    # Rename the converted PDF to the original filename.
+
+    created_filename = temp_filename.sub(/tmp$/, 'pdf')
+
+    File.rename(created_filename, target_filename)
+  end
 end
 
 if __FILE__ == $PROGRAM_NAME
   long_help = <<~HELP
-    Prepares a generic (software engineering) invoice in Office Open XML format, using a template, and the data provided in the configuration file.
+    Prepares a generic (software engineering) invoice in PDF/Office Open XML format, using a template, and the data provided in the configuration file.
 
     Required configuration file keys:
 
@@ -165,6 +195,8 @@ if __FILE__ == $PROGRAM_NAME
     Optionally, the \`output_directory\` makes the script output the file with name \`%y%m%d_invoice_%B.docx\` in the specified directory.
     If both \`output_directory\` and \`output_file\` are specified, the latter prevails.
 
+    Libreoffice is required, unless the Open XML output is selected.
+
     At the end of the script, the filename is printed, and the file is opened via the system-configured application.
   HELP
 
@@ -172,6 +204,7 @@ if __FILE__ == $PROGRAM_NAME
       [ '-e', '--expenses EXPENSES_EXPRESSION', 'Include expenses; allows a simple expression (additions/subtractions)' ],
       [ '-p', '--previous-month',               'Bill the previous month'                                               ],
       [ '-b', '--before-previous-month',        'Bill the before-previous month (overrides -p)'                         ],
+      [ '-o', '--open-xml',                     'Create the invoice in Open XML format, rather than PDF'                ],
       'service_days',
       '[output_file]',
       long_help: long_help
