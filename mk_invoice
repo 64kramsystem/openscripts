@@ -29,13 +29,13 @@ class InvoiceGenerator
 
   # Returns the output filename
   #
-  def generate(service_days, options = {})
-    service_month = compute_service_month(options)
+  def generate(service_days, expenses: nil, previous_month: false, before_previous_month: false, output_file: nil)
+    service_month = compute_service_month(previous_month: previous_month, before_previous_month: before_previous_month)
 
-    outfile = options[:output_file] || generate_output_file(service_month) || raise("Missing :output_directory configuration (and no :output_file provided)")
+    outfile = output_file || generate_output_file(service_month) || raise("Missing :output_directory configuration (and no :output_file provided)")
     source_template = IO.read(TEMPLATE_FILE)
 
-    template_values = add_computed_fields_to_data(service_days, service_month, options[:expenses])
+    template_values = add_computed_fields_to_data(service_days, service_month, expenses)
 
     compiled_template = compile_template(source_template, template_values)
 
@@ -128,10 +128,10 @@ class InvoiceGenerator
     Dir.glob(File.join(directory, '**/*'), File::FNM_DOTMATCH).select { |file| File.basename(file) != '.' }
   end
 
-  def compute_service_month(options)
-    if options[:before_previous_month]
+  def compute_service_month(before_previous_month:, previous_month:)
+    if before_previous_month
       Date.today.prev_month.prev_month
-    elsif options[:previous_month]
+    elsif previous_month
       Date.today.prev_month
     else
       Date.today
