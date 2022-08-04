@@ -85,13 +85,13 @@ function unmount_device_partitions() {
   # Umount the encrypted partition(s).
   # The second `\S+` ensures that there is a mountpoint.
   #
-  for luks_device in $(echo "$device_tree" | perl -ne 'print $1 if /([\w-]+) crypt \S+$/'); do
+  for luks_device in $(echo "$device_tree" | perl -lne 'print $1 if /([\w-]+) crypt \S+$/'); do
     udisksctl unmount -b "/dev/mapper/$luks_device"
   done
 
   # Lock the LUKS device.
   #
-  for luks_device in $(echo "$device_tree" | perl -ne 'print $1 if /(\w+) +part/'); do
+  for luks_device in $(echo "$device_tree" | perl -lne 'print $1 if /(\w+) +part/'); do
     # It's not clear how to check, without sudo permissions, if a LUKS device is locked, so this is
     # based on empirical tests: on unlocked, the entry below has a full path, while on locked ones,
     # it has only the slash.
