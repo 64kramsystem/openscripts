@@ -60,7 +60,9 @@ function main {
     sleep_time=0
   fi
 
-  notify-send "Setting the display sleep time to $sleep_time..."
+  local message="Setting the display sleep time to $sleep_time..."
+  notify-send "$message"
+  echo "$message"
 
   dconf write "$c_ac_setting_key"      "$sleep_time"
   dconf write "$c_battery_setting_key" "$sleep_time"
