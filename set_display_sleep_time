@@ -16,9 +16,9 @@ c_ac_setting_key=/org/mate/power-manager/sleep-display-ac
 c_battery_setting_key=/org/mate/power-manager/sleep-display-battery
 c_sleep_time=60 # seconds; minimum 60, otherwise, it has no effect
 
-c_help="Usage: $(basename "$0") [-h|--help]
+c_help="Usage: $(basename "$0") [-h|--help] [<time>]
 
-Executing this script alternates between enabling the display sleep (with $c_sleep_time\" delay) and disabling it.
+If the time is specified, the value will be set, otherwise, the script alternates between enabling the display sleep (with $c_sleep_time\" delay) and disabling it.
 
 Typically assigned to a key binding, to run when sending the display to sleep, and when resuming from
 the sleep.
@@ -26,6 +26,8 @@ the sleep.
 The script uses the A/C setting for reading the sleep time value, but sets both A/C and battery modes.
 
 Only the MATE desktop environment is supported."
+
+v_sleep_time=
 
 function decode_cmdline_args {
   local params
@@ -44,20 +46,26 @@ function decode_cmdline_args {
     esac
   done
 
-  if [[ $# -ne 0 ]]; then
+  if [[ $# -eq 1 ]]; then
+    v_sleep_time=$1
+  elif [[ $# -gt 1 ]]; then
     echo "$c_help"
     exit 1
   fi
 }
 
 function main {
-  local current_sleep_value sleep_time
-  current_sleep_value=$(dconf read "$c_ac_setting_key")
-
-  if [[ $current_sleep_value -eq 0 ]]; then
-    sleep_time=$c_sleep_time
+  if [[ -n $v_sleep_time ]]; then
+    sleep_time=$v_sleep_time
   else
-    sleep_time=0
+    local current_sleep_value sleep_time
+    current_sleep_value=$(dconf read "$c_ac_setting_key")
+
+    if [[ $current_sleep_value -eq 0 ]]; then
+      sleep_time=$c_sleep_time
+    else
+      sleep_time=0
+    fi
   fi
 
   local message="Setting the display sleep time to $sleep_time..."
