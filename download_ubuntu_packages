@@ -125,6 +125,5 @@ If a package is found in the destination path, it's not downloaded.
   packages = params[:packages].split(',')
   options = params.select { |k, _| k == :download_to}
 
-  DownloadUbuntuPackages.new.execute(codename, packages, options)
-
+  DownloadUbuntuPackages.new.execute(codename, packages, **options)
 end
