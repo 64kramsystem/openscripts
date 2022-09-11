@@ -110,16 +110,15 @@ The architecture of the packages is `amd64`; the mirror is http://mirrors.kernel
 If a package is found in the destination path, it's not downloaded.
 "
 
-  params = SimpleScripting::Argv.decode(
+  options = SimpleScripting::Argv.decode(
     ['-d', '--download-to DIRECTORY', "Download directory; defaults to current path."],
     'codename',
     'packages',
     long_help: long_help
   ) || exit
 
-  codename = params[:codename]
-  packages = params[:packages].split(',')
-  options = params.select { |k, _| k == :download_to}
+  codename = options.delete(:codename)
+  packages = options.delete(:packages).split(',')
 
   DownloadUbuntuPackages.new.execute(codename, packages, **options)
 end
