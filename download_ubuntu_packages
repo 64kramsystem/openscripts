@@ -7,7 +7,6 @@ require 'uri'
 require 'simple_scripting/argv'
 
 class DownloadWithProgress
-
   def execute(address, destination_file)
     uri = URI(address)
 
@@ -29,11 +28,9 @@ class DownloadWithProgress
       progress_bar.finish
     end
   end
-
 end
 
 class DownloadUbuntuPackages
-
   INDEX_SERVER_ADDRESS = "http://packages.ubuntu.com"
   PACKAGE_SERVER_ADDRESS = "http://de.archive.ubuntu.com"
   ALTERNATE_PACKAGE_SERVER_ADDRESS = "http://security.ubuntu.com"
@@ -99,7 +96,6 @@ class DownloadUbuntuPackages
     file_basename = File.basename(package_address)
     File.join(destination_directory, file_basename)
   end
-
 end
 
 # The server, architecture, and kernel type, all have a default.
