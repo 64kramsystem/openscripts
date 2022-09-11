@@ -3,6 +3,7 @@
 require 'open-uri'
 require 'ruby-progressbar'
 require 'uri'
+require 'net/http'
 
 require 'simple_scripting/argv'
 
@@ -36,9 +37,9 @@ class DownloadUbuntuPackages
   ALTERNATE_PACKAGE_SERVER_ADDRESS = "http://security.ubuntu.com"
   DEFAULT_ARCHITECTURE = "amd64"
 
-  def execute(codename, packages, download_to: Dir.pwd)
+  def execute(codename, packages, download_to: Dir.pwd, skip_ssl_verification: false)
     packages.each do |package|
-      package_download_page = find_and_open_package_download_page(codename, package)
+      package_download_page = find_and_open_package_download_page(codename, package, skip_ssl_verification)
       package_address = find_package_address(package_download_page, package)
       destination_file = compose_destination_file(package_address, download_to)
 
@@ -54,12 +55,14 @@ class DownloadUbuntuPackages
 
   # Tries the default architecture first; if not found, tries the `all`.
   #
-  def find_and_open_package_download_page(codename, package)
+  def find_and_open_package_download_page(codename, package, skip_ssl_verification)
+    ssl_verify_mode = skip_ssl_verification ? OpenSSL::SSL::VERIFY_NONE : OpenSSL::SSL::VERIFY_PEER
+
     # If the package has "all" architecture, using the specific architecture address
     # will lead to a page which still has the "all" architecture links.
     #
     package_download_address = download_address(codename, DEFAULT_ARCHITECTURE, package)
-    package_download_page = URI.open(package_download_address).read
+    package_download_page = URI.open(package_download_address, ssl_verify_mode: ssl_verify_mode).read
 
     # Must find a better identifier than `You can download the requested file`.
     #
@@ -108,10 +111,13 @@ if __FILE__ == $PROGRAM_NAME
 The architecture of the packages is `amd64`; the mirror is http://mirrors.kernel.org.
 
 If a package is found in the destination path, it's not downloaded.
+
+The '--no-ssl-verification' is required for a current, unclear issue on Jammy, where opening a package download page (e.g. 'http://packages.ubuntu.com/kinetic/amd64/linux-firmware/download' raises an SSL certificate error).
 "
 
   options = SimpleScripting::Argv.decode(
     ['-d', '--download-to DIRECTORY', "Download directory; defaults to current path."],
+    ['-s', '--skip-ssl-verification',   "Disable SSL verification; see help"],
     'codename',
     'packages',
     long_help: long_help
