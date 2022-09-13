@@ -119,12 +119,12 @@ The '--no-ssl-verification' is required for a current, unclear issue on Jammy, w
     ['-d', '--download-to DIRECTORY', "Download directory; defaults to current path."],
     ['-s', '--skip-ssl-verification',   "Disable SSL verification; see help"],
     'codename',
-    'packages',
+    '*packages',
     long_help: long_help
   ) || exit
 
   codename = options.delete(:codename)
-  packages = options.delete(:packages).split(',')
+  packages = options.delete(:packages)
 
   DownloadUbuntuPackages.new.execute(codename, packages, **options)
 end
