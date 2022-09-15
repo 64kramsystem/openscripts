@@ -5,10 +5,11 @@ require 'open-uri'
 require 'open_uri_redirections'
 require 'simple_scripting/argv'
 require 'shellwords'
+require 'tempfile'
 
 class Downer
   def execute(page_address, file_link_pattern, options = {})
-    file_link = find_file_link(page_address, file_link_pattern, relative_path: options[:relative_path])
+    file_link = find_file_link(page_address, file_link_pattern, relative_path: options[:relative_path], wget: options[:wget])
     package_file = download_file(file_link)
     install(package_file, application: options[:application])
     File.delete(package_file) if package_file
@@ -16,14 +17,22 @@ class Downer
 
   private
 
-  def download_page(address)
+  def download_page(address, use_wget)
     puts "Address: #{address}"
 
-    URI.open(address, allow_redirections: :all).read
+    if use_wget
+      file = Tempfile.new("downer")
+
+      system("wget #{address.shellescape} -O #{file.path}", exception: true)
+
+      IO.read(file)
+    else
+      URI.open(address, allow_redirections: :all).read
+    end
   end
 
-  def find_file_link(page_address, file_link_pattern, relative_path:)
-    page_content = download_page(page_address)
+  def find_file_link(page_address, file_link_pattern, relative_path:, wget:)
+    page_content = download_page(page_address, wget)
 
     file_link = page_content[file_link_pattern] || (puts page_content; raise('File link not Found!'))
 
@@ -120,6 +129,7 @@ if __FILE__ == $0
   options = SimpleScripting::Argv.decode(
     ['-a', '--application APPLICATION', 'Use the given application'],
     ['-r', '--relative-path',           'Assume that the URL path is relative'],
+    ['-w', '--wget',                    'Use wget to download the page'],
     'page_address',
     'file_link_pattern',
     long_help: "This script is meant to be used only internally; it doesn't employ any form of protection against malicious attacks."
