@@ -14,6 +14,8 @@ class DownloadWithProgress
     Net::HTTP.start(uri.host) do |http|
       response = http.request_head(address)
 
+      raise "File not found!" if response.code.to_i == 404
+
       file_basename = File.basename(destination_file)
       file_size = response['content-length'].to_i
 
