@@ -6,6 +6,8 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
+c_jpg_files_matcher='.*/\w*[[:digit:]]{2,}\.jpg' # ^/$ are implicit
+c_unnecessary_files=(*.xml *.txt Thumbs.db *.mp3)
 c_help="Usage: $(basename "$0") [-h|--help] [-d|--delete-source-file] <input1.cbr input2.cbz...>
 
 On deletion, if 'trash' is in the path, it will be used; otherwise, 'rm' will be."
@@ -105,12 +107,12 @@ function handle_subdirs {
 }
 
 function delete_unnecessary_files {
-  rm -f -- *.xml *.txt
+  rm -f -- "${c_unnecessary_files[@]}"
 }
 
 function check_filenames {
   local unexpected_filenames
-  unexpected_filenames=$(find . -type f -regextype egrep -not -regex "^\./[[:digit:]]+\.jpg$")
+  unexpected_filenames=$(find . -type f -regextype egrep -not -regex "$c_jpg_files_matcher")
 
   if [[ -n $unexpected_filenames ]]; then
     >&2 echo "Non jpg extensions found: $unexpected_filenames"
