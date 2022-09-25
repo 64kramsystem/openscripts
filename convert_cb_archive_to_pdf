@@ -110,7 +110,7 @@ function delete_unnecessary_files {
 
 function check_filenames {
   local unexpected_filenames
-  unexpected_filenames=$(find . -type f -regextype egrep -not -regex "\./[[:digit:]]+\.jpg")
+  unexpected_filenames=$(find . -type f -regextype egrep -not -regex '.*/\w*[[:digit:]]{2,}\.jpg')
 
   if [[ -n $unexpected_filenames ]]; then
     >&2 echo "Non jpg extensions found: $unexpected_filenames"
