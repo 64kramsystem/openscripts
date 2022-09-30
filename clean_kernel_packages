@@ -2,6 +2,7 @@
 
 require_relative 'kernel_packages_maintenance/kernel_version'
 
+require 'English'
 require 'fileutils'
 require 'shellwords'
 require 'simple_scripting/argv'
@@ -19,7 +20,7 @@ class CleanKernelPackages
 
     puts "Current kernel version: #{current_version}", ""
 
-    installed_versions = find_installed_versions(current_version, include_versions: include_versions)
+    installed_versions = checked_find_installed_versions(current_version, include_versions: include_versions)
 
     puts "Currently installed package versions:", *installed_versions.map { |version| "- #{version}" }, ""
 
@@ -40,19 +41,34 @@ class CleanKernelPackages
 
   private
 
-  def find_installed_versions(current_version, include_versions: [])
-    raw_packages_list = find_installed_packages("^linux-(headers|image|image-extra)-#{current_version.major}\\.#{current_version.minor}\\.")
+  # Makes sure that a given version doesn't have multiple installed packages, as that would be
+  # complicate the script. Not sure if this is a real-world case, but it may happen, for example,
+  # if there is two packages with/out `-unsigned` are installed for the same version.
+  #
+  def checked_find_installed_versions(current_version, include_versions: [])
+    raw_packages_list = find_installed_packages("^linux-(image|image-unsigned)-")
 
-    package_versions = raw_packages_list.map do |package_name|
-      raw_version = package_name[/linux-\w+(-\w+)?-(\d+\.\d+\.\d+-\w+)/, 2] || raise("Version not identified: #{package_name}")
-      KernelVersion.parse_version(raw_version)
+    # version => package name
+    #
+    package_versions = {}
+
+    raw_packages_list.each do |package_name|
+      if package_name =~ /^linux-image(-unsigned)?-(#{current_version.major}\.#{current_version.minor}\.\d+-\w+)/
+        version = KernelVersion.parse_version($LAST_MATCH_INFO[2])
+
+        if package_versions.key?(version)
+          raise "Duplicates found for version #{version}: #{package_name} <> #{package_versions[version]}"
+        else
+          package_versions[version] = package_name
+        end
+      end
     end
+
+    package_versions = package_versions.keys
 
     package_versions += include_versions
 
-    # We catch both the linux-header and the linux-headers-generic, so we uniq them.
-    #
-    package_versions.uniq
+    package_versions.to_a
   end
 
   def find_installed_packages(pattern)
