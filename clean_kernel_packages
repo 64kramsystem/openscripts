@@ -10,17 +10,14 @@ require 'simple_scripting/argv'
 class CleanKernelPackages
   MODULES_DIRECTORY = '/lib/modules'
 
-  # include_versions: (Array of KernelVersion) act like the versions passed are installed; it's
-  #                   legal, but dangerous, to use this in a regular (non-dry) run.
-  #
-  def execute(simulate: false, keep_previous: false, delete_current: false, include_versions: [])
+  def execute(simulate: false, keep_previous: false, delete_current: false)
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
 
     current_version = KernelVersion.find_current
 
     puts "Current kernel version: #{current_version}", ""
 
-    installed_versions = checked_find_installed_versions(current_version, include_versions: include_versions)
+    installed_versions = checked_find_installed_versions(current_version)
 
     puts "Currently installed package versions:", *installed_versions.map { |version| "- #{version}" }, ""
 
@@ -45,7 +42,7 @@ class CleanKernelPackages
   # complicate the script. Not sure if this is a real-world case, but it may happen, for example,
   # if there is two packages with/out `-unsigned` are installed for the same version.
   #
-  def checked_find_installed_versions(current_version, include_versions: [])
+  def checked_find_installed_versions(current_version)
     raw_packages_list = find_installed_packages("^linux-(image|image-unsigned)-")
 
     # version => package name
@@ -64,11 +61,7 @@ class CleanKernelPackages
       end
     end
 
-    package_versions = package_versions.keys
-
-    package_versions += include_versions
-
-    package_versions.to_a
+    package_versions.keys
   end
 
   def find_installed_packages(pattern)
