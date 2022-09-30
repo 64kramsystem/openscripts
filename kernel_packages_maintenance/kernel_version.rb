@@ -5,19 +5,21 @@
 # - 4.11.7-041107
 # - 4.12.0-041200rc7   # mainline, RC
 # - 4.12.0-041200rc6
+# - 6.0.0-rc7          # custom, RC
 #
 # For the reasons above, the `release` attribute can refer either to the ongoing release or to the
 # release candidate.
 #
 class KernelVersion
-
+  attr_accessor :raw        # Unparsed string form
   attr_accessor :major
   attr_accessor :minor
   attr_accessor :patch
   attr_accessor :rc
   attr_accessor :ongoing
 
-  def initialize(major, minor, patch, rc: nil, ongoing: nil)
+  def initialize(raw, major, minor, patch, rc: nil, ongoing: nil)
+    @raw = raw
     @major = major.to_i
     @minor = minor.to_i
     @patch = patch.to_i
@@ -55,7 +57,7 @@ class KernelVersion
   end
 
   def eql?(other)
-    self <=> other
+    (self <=> other) == 0
   end
 
   def hash
@@ -74,7 +76,7 @@ class KernelVersion
   def self.find_current
     # See class comment for the version numbering.
     #
-    raw_kernel_version = `uname -r`
+    raw_kernel_version = `uname -r`.rstrip
     parse_version(raw_kernel_version)
   end
 
@@ -84,17 +86,16 @@ class KernelVersion
     major, minor, patch, raw_release = version_str.match(/(\d)\.(\d+)\.(\d+)-([0-9rc]+)/).captures
 
     case raw_release
-    when /\d{6}rc(\d{1,2})/
+    when /^\d{6}rc(\d)$/, /^rc(\d)$/
       rc = $1
-    when /\d{6}/
+    when /^\d{6}$/
       # ignore
-    when /\d{2}/
+    when /^\d{2}$/
       ongoing = raw_release
     else
       raise "Release version not identified!: #{raw_release.inspect}"
     end
 
-    new(major, minor, patch, ongoing: ongoing, rc: rc)
+    new(version_str, major, minor, patch, ongoing: ongoing, rc: rc)
   end
-
 end
