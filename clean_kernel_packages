@@ -134,5 +134,5 @@ if __FILE__ == $PROGRAM_NAME
     ['-n', '--simulate',       "Simulate; don't remove any package"],
   ) || exit
 
-  CleanKernelPackages.new.execute(options)
+  CleanKernelPackages.new.execute(**options)
 end
