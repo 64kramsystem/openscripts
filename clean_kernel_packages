@@ -99,7 +99,10 @@ class CleanKernelPackages
 
     versions_to_delete += future_versions.sort[0..-2] # Keep the latest future
 
-    raise "No versions remaining after cleaning!" if versions_to_delete.size == installed_versions.size
+    if versions_to_delete.size == installed_versions.size
+      message = "No versions remaining after cleaning!"
+      options[:simulate] ? puts(message) : raise(message)
+    end
 
     versions_to_delete
   end
