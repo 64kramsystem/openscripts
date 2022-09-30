@@ -38,10 +38,15 @@ class DownloadUbuntuPackages
   PACKAGE_SERVER_ADDRESS = "http://de.archive.ubuntu.com"
   ALTERNATE_PACKAGE_SERVER_ADDRESS = "http://security.ubuntu.com"
   DEFAULT_ARCHITECTURE = "amd64"
+  RELEASES_ADDRESS = "https://releases.ubuntu.com"
 
-  def execute(codename, packages, download_to: Dir.pwd, skip_ssl_verification: false)
+  def execute(packages, download_to: Dir.pwd, skip_ssl_verification: false, release: nil)
+    ssl_verify_mode = skip_ssl_verification ? OpenSSL::SSL::VERIFY_NONE : OpenSSL::SSL::VERIFY_PEER
+
+    release ||= find_latest_release(ssl_verify_mode)
+
     packages.each do |package|
-      package_download_page = find_and_open_package_download_page(codename, package, skip_ssl_verification)
+      package_download_page = find_and_open_package_download_page(release, package, ssl_verify_mode)
       package_address = find_package_address(package_download_page, package)
       destination_file = compose_destination_file(package_address, download_to)
 
@@ -55,15 +60,30 @@ class DownloadUbuntuPackages
 
   private
 
+  def find_latest_release(ssl_verify_mode)
+    releases_page = URI.open(RELEASES_ADDRESS, ssl_verify_mode: ssl_verify_mode).read
+
+    # Sample:
+    #
+    #   <img src="/icons/folder.gif" alt="[DIR]"> <a href="kinetic/">kinetic/</a>                2022-09-30 00:01    -   Ubuntu 22.10 (Kinetic Kudu)
+    #
+    # Not checked what "streams" is.
+    #
+    releases_page
+      .scan(%r{alt="\[DIR\]".+"([a-z]+)/".+(\d+{4}-\d\d-\d\d)})
+      .delete_if { |name, _| name == "streams" }
+      .sort_by { |name, date| date }
+      .last
+      .first || raise("Release not found!")
+  end
+
   # Tries the default architecture first; if not found, tries the `all`.
   #
-  def find_and_open_package_download_page(codename, package, skip_ssl_verification)
-    ssl_verify_mode = skip_ssl_verification ? OpenSSL::SSL::VERIFY_NONE : OpenSSL::SSL::VERIFY_PEER
-
+  def find_and_open_package_download_page(release, package, ssl_verify_mode)
     # If the package has "all" architecture, using the specific architecture address
     # will lead to a page which still has the "all" architecture links.
     #
-    package_download_address = download_address(codename, DEFAULT_ARCHITECTURE, package)
+    package_download_address = download_address(release, DEFAULT_ARCHITECTURE, package)
     package_download_page = URI.open(package_download_address, ssl_verify_mode: ssl_verify_mode).read
 
     # Must find a better identifier than `You can download the requested file`.
@@ -73,8 +93,8 @@ class DownloadUbuntuPackages
     package_download_page
   end
 
-  def download_address(codename, architecture, package)
-    "#{INDEX_SERVER_ADDRESS}/#{codename}/#{architecture}/#{package}/download"
+  def download_address(release, architecture, package)
+    "#{INDEX_SERVER_ADDRESS}/#{release}/#{architecture}/#{package}/download"
   end
 
   # Sample:
@@ -108,7 +128,7 @@ end
 if __FILE__ == $PROGRAM_NAME
   long_help = "\
 [packages] is in comma-separated form.
-[codename] is the Ubuntu codename (xenial, zesty, artful...).
+[release]  is the Ubuntu release (xenial, zesty...).
 
 The architecture of the packages is `amd64`; the mirror is http://mirrors.kernel.org.
 
@@ -119,14 +139,13 @@ The '--no-ssl-verification' is required for a current, unclear issue on Jammy, w
 
   options = SimpleScripting::Argv.decode(
     ['-d', '--download-to DIRECTORY', "Download directory; defaults to current path."],
-    ['-s', '--skip-ssl-verification',   "Disable SSL verification; see help"],
-    'codename',
+    ['-s', '--skip-ssl-verification', "Disable SSL verification; see help"],
+    ['-r', '--release RELEASE',       "Download for the given Ubuntu release; if not specified, the latest version is set"],
     '*packages',
     long_help: long_help
   ) || exit
 
-  codename = options.delete(:codename)
   packages = options.delete(:packages)
 
-  DownloadUbuntuPackages.new.execute(codename, packages, **options)
+  DownloadUbuntuPackages.new.execute(packages, **options)
 end
