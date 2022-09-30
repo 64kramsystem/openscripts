@@ -36,6 +36,8 @@ class CleanKernelPackages
   #                   legal, but dangerous, to use this in a regular (non-dry) run.
   #
   def execute(no_exec: false, keep_previous: false, delete_current: false, include_versions: [])
+    options = {simulate: no_exec, keep_previous: keep_previous, delete_current: delete_current}
+
     current_version = KernelVersion.find_current
 
     puts "Current kernel version: #{current_version}", ""
@@ -44,7 +46,7 @@ class CleanKernelPackages
 
     puts "Currently installed package versions:", *installed_versions.map { |version| "- #{version}" }, ""
 
-    versions_to_remove = find_versions_to_remove(current_version, installed_versions, keep_previous: keep_previous, delete_current: delete_current)
+    versions_to_remove = find_versions_to_remove(current_version, installed_versions, **options)
 
     if versions_to_remove.size > 0
       packages_to_remove = find_packages_to_remove(versions_to_remove)
