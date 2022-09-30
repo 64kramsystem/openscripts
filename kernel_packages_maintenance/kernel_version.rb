@@ -11,13 +11,15 @@
 # release candidate.
 #
 class KernelVersion
+  attr_accessor :raw        # Unparsed string form
   attr_accessor :major
   attr_accessor :minor
   attr_accessor :patch
   attr_accessor :rc
   attr_accessor :ongoing
 
-  def initialize(major, minor, patch, rc: nil, ongoing: nil)
+  def initialize(raw, major, minor, patch, rc: nil, ongoing: nil)
+    @raw = raw
     @major = major.to_i
     @minor = minor.to_i
     @patch = patch.to_i
@@ -74,7 +76,7 @@ class KernelVersion
   def self.find_current
     # See class comment for the version numbering.
     #
-    raw_kernel_version = `uname -r`
+    raw_kernel_version = `uname -r`.rstrip
     parse_version(raw_kernel_version)
   end
 
@@ -94,6 +96,6 @@ class KernelVersion
       raise "Release version not identified!: #{raw_release.inspect}"
     end
 
-    new(major, minor, patch, ongoing: ongoing, rc: rc)
+    new(version_str, major, minor, patch, ongoing: ongoing, rc: rc)
   end
 end
