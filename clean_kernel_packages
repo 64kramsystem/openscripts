@@ -114,7 +114,7 @@ class CleanKernelPackages
 
   def remove_packages(packages, simulate:)
     simulate_option = "-s" if simulate
-    system("sudo aptitude purge -y #{simulate_option} #{packages.join(' ')}")
+    system("aptitude purge -y #{simulate_option} #{packages.join(' ')}")
   end
 
   def remove_module_directories(module_directories_to_remove, simulate:)
