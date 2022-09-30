@@ -2,15 +2,12 @@
 
 require_relative 'kernel_packages_maintenance/kernel_version'
 
-require 'simple_scripting/argv'
-
 require 'fileutils'
 require 'shellwords'
+require 'simple_scripting/argv'
 
 module KernelVersionPackageMatcher
-
   refine KernelVersion do
-
     def package_matcher
       version_pattern = "#{major}\\.#{minor}\\.#{patch}"
 
@@ -27,13 +24,10 @@ module KernelVersionPackageMatcher
         version_pattern + "-[0-9]{6}\\b"
       end
     end
-
   end
-
 end
 
 class CleanKernelPackages
-
   MODULES_DIRECTORY = '/lib/modules'
 
   using KernelVersionPackageMatcher
@@ -148,11 +142,9 @@ class CleanKernelPackages
       end
     end
   end
-
 end
 
 if __FILE__ == $PROGRAM_NAME
-
   options = SimpleScripting::Argv.decode(
     ['-k', '--keep-previous',  "Keep one previous version (the latest)"],
     ['-d', '--delete-current', "Delete current; requires at least another version to be present"],
@@ -160,5 +152,4 @@ if __FILE__ == $PROGRAM_NAME
   ) || exit
 
   CleanKernelPackages.new.execute(options)
-
 end
