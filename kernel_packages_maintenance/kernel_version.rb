@@ -54,7 +54,7 @@ class KernelVersion
   end
 
   def eql?(other)
-    self <=> other
+    (self <=> other) == 0
   end
 
   def hash
