@@ -35,8 +35,8 @@ class CleanKernelPackages
   # include_versions: (Array of KernelVersion) act like the versions passed are installed; it's
   #                   legal, but dangerous, to use this in a regular (non-dry) run.
   #
-  def execute(no_exec: false, keep_previous: false, delete_current: false, include_versions: [])
-    options = {simulate: no_exec, keep_previous: keep_previous, delete_current: delete_current}
+  def execute(simulate: false, keep_previous: false, delete_current: false, include_versions: [])
+    options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
 
     current_version = KernelVersion.find_current
 
@@ -54,8 +54,8 @@ class CleanKernelPackages
 
       puts "Removing packages:", *packages_to_remove.map { |package| "- #{package}"}, ""
 
-      remove_packages(packages_to_remove, simulate: no_exec)
-      remove_module_directories(module_directories_to_remove, simulate: no_exec)
+      remove_packages(packages_to_remove, simulate: simulate)
+      remove_module_directories(module_directories_to_remove, simulate: simulate)
     else
       puts "Nothing to remove!"
     end
@@ -153,7 +153,7 @@ if __FILE__ == $PROGRAM_NAME
   options = SimpleScripting::Argv.decode(
     ['-k', '--keep-previous',  "Keep one previous version (the latest)"],
     ['-d', '--delete-current', "Delete current; requires at least another version to be present"],
-    ['-n', '--no-exec',        "Dry run; don't remove any package"],
+    ['-n', '--simulate',       "Simulate; don't remove any package"],
   ) || exit
 
   CleanKernelPackages.new.execute(options)
