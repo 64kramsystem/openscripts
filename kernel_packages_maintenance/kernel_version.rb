@@ -83,7 +83,7 @@ class KernelVersion
     major, minor, patch, raw_release = version_str.match(/(\d)\.(\d+)\.(\d+)-([0-9rc]+)/).captures
 
     case raw_release
-    when /\d{6}rc(\d{1,2})/
+    when /\d{6}rc(\d)/
       rc = $1
     when /\d{6}/
       # ignore
