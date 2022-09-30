@@ -5,6 +5,7 @@
 # - 4.11.7-041107
 # - 4.12.0-041200rc7   # mainline, RC
 # - 4.12.0-041200rc6
+# - 6.0.0-rc7          # custom, RC
 #
 # For the reasons above, the `release` attribute can refer either to the ongoing release or to the
 # release candidate.
@@ -83,7 +84,7 @@ class KernelVersion
     major, minor, patch, raw_release = version_str.match(/(\d)\.(\d+)\.(\d+)-([0-9rc]+)/).captures
 
     case raw_release
-    when /^\d{6}rc(\d)$/
+    when /^\d{6}rc(\d)$/, /^rc(\d)$/
       rc = $1
     when /^\d{6}$/
       # ignore
