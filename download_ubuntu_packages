@@ -40,7 +40,7 @@ class DownloadUbuntuPackages
   DEFAULT_ARCHITECTURE = "amd64"
   RELEASES_ADDRESS = "https://releases.ubuntu.com"
 
-  def execute(packages, download_to: Dir.pwd, skip_ssl_verification: false, release: nil)
+  def execute(packages, download_to: Dir.pwd, skip_ssl_verification: false, release: nil, address_only: false)
     ssl_verify_mode = skip_ssl_verification ? OpenSSL::SSL::VERIFY_NONE : OpenSSL::SSL::VERIFY_PEER
 
     release ||= find_latest_release(ssl_verify_mode)
@@ -48,12 +48,17 @@ class DownloadUbuntuPackages
     packages.each do |package|
       package_download_page = find_and_open_package_download_page(release, package, ssl_verify_mode)
       package_address = find_package_address(package_download_page, package)
-      destination_file = compose_destination_file(package_address, download_to)
 
-      if File.exists?(destination_file)
-        puts ">>> File #{destination_file.inspect} existing; not downloading"
+      if address_only
+        print package_address
       else
-        DownloadWithProgress.new.execute(package_address, destination_file)
+        destination_file = compose_destination_file(package_address, download_to)
+
+        if File.exists?(destination_file)
+          puts ">>> File #{destination_file.inspect} existing; not downloading"
+        else
+          DownloadWithProgress.new.execute(package_address, destination_file)
+        end
       end
     end
   end
@@ -141,6 +146,7 @@ The '--no-ssl-verification' is required for a current, unclear issue on Jammy, w
     ['-d', '--download-to DIRECTORY', "Download directory; defaults to current path."],
     ['-s', '--skip-ssl-verification', "Disable SSL verification; see help"],
     ['-r', '--release RELEASE',       "Download for the given Ubuntu release; if not specified, the latest version is set"],
+    ['-a', '--address-only',          "Print the package download address, without actually downloading it"],
     '*packages',
     long_help: long_help
   ) || exit
