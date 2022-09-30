@@ -111,7 +111,12 @@ class CleanKernelPackages
   # Sample of returned directory: `/lib/modules/5.0.2-050002-generic`
   #
   def find_module_directories_to_remove(versions_to_remove)
-    versions_to_remove.map { |v| File.join(MODULES_DIRECTORY, v.raw) }
+    # Since we know that there can't be two duplicate versions, we can append the wildcard, in order
+    # to catch the kernel type suffix (e.g. `-generic`), which is not retained by the KernelVersion.
+    #
+    versions_to_remove
+      .map { |v| File.join(MODULES_DIRECTORY, "#{v.raw}*") }
+      .flat_map { |glob| Dir[glob] }
   end
 
   def remove_packages(packages, simulate:)
