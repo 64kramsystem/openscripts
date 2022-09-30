@@ -10,7 +10,6 @@
 # release candidate.
 #
 class KernelVersion
-
   attr_accessor :major
   attr_accessor :minor
   attr_accessor :patch
@@ -96,5 +95,4 @@ class KernelVersion
 
     new(major, minor, patch, ongoing: ongoing, rc: rc)
   end
-
 end
