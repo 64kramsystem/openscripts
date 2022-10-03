@@ -7,6 +7,10 @@ require 'net/http'
 
 require 'simple_scripting/argv'
 
+# Ubuntu's packages website is disgracefully unstable.
+#
+DOWNLOAD_PAGE_MAX_RETRIES = 3
+
 class DownloadWithProgress
   def execute(address, destination_file)
     uri = URI(address)
@@ -90,7 +94,16 @@ class DownloadUbuntuPackages
     #
     package_download_address = download_address(release, DEFAULT_ARCHITECTURE, package)
 
-    URI.open(package_download_address, ssl_verify_mode: ssl_verify_mode).read
+    retries = 0
+
+    begin
+      URI.open(package_download_address, ssl_verify_mode: ssl_verify_mode).read
+    rescue OpenURI::HTTPError
+      raise if retries >= DOWNLOAD_PAGE_MAX_RETRIES
+      retries += 1
+      $stderr.puts "Error opening package download page, retrying (#{retries})..."
+      retry
+    end
   end
 
   def download_address(release, architecture, package)
