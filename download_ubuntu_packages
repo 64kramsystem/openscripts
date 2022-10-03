@@ -89,13 +89,8 @@ class DownloadUbuntuPackages
     # will lead to a page which still has the "all" architecture links.
     #
     package_download_address = download_address(release, DEFAULT_ARCHITECTURE, package)
-    package_download_page = URI.open(package_download_address, ssl_verify_mode: ssl_verify_mode).read
 
-    # Must find a better identifier than `You can download the requested file`.
-    #
-    # raise if package_download_page !~ DOWNLOAD_PAGE_IDENTIFIER
-
-    package_download_page
+    URI.open(package_download_address, ssl_verify_mode: ssl_verify_mode).read
   end
 
   def download_address(release, architecture, package)
