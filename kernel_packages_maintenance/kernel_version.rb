@@ -83,12 +83,12 @@ class KernelVersion
   # version_str format: see class comment
   #
   def self.parse_version(version_str)
-    major, minor, patch, raw_release = version_str.match(/(\d)\.(\d+)\.(\d+)-([0-9rc]+)/).captures
+    major, minor, patch, _, raw_release = version_str.match(/(\d)\.(\d+)\.(\d+)(-([0-9rc]+))?/).captures
 
     case raw_release
     when /^\d{6}rc(\d)$/, /^rc(\d)$/
       rc = $1
-    when /^\d{6}$/
+    when /^\d{6}$/, nil
       # ignore
     when /^\d{2}$/
       ongoing = raw_release
