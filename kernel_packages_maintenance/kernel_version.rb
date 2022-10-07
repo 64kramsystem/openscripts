@@ -2,10 +2,9 @@
 #
 # - 4.10.0-14          # official; `14` = "ongoing release")
 # - 4.11.6-041106      # mainline, stable; the release version is not needed
-# - 4.11.7-041107
 # - 4.12.0-041200rc7   # mainline, RC
-# - 4.12.0-041200rc6
-# - 6.0.0-rc7          # custom, RC
+# - 6.0.0-rc7-micpatch # custom, RC
+# - 6.0.0-micpatch     # custom, no RC
 #
 # For the reasons above, the `release` attribute can refer either to the ongoing release or to the
 # release candidate.
