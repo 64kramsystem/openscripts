@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_remote=origin
+c_help="Usage: $(basename "$0") [-h|--help]
+
+Finds the default branch; if 'origin/HEAD' is not set, it also sets it.
+
+Assumes that the remote is named '$c_remote'."
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hpP: --long help,param1,param2: --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function main {
+  if ! git branch --remotes | grep -qP "^\s+$c_remote/HEAD "; then
+    git remote set-head "$c_remote" -a
+  fi
+
+  git rev-parse --abbrev-ref "$c_remote/HEAD" | perl -ne "print /$c_remote\/(\w+)/" | tee >(xsel -ib)
+}
+
+decode_cmdline_args "$@"
+main
