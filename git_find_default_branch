@@ -41,7 +41,7 @@ function main {
     git remote set-head "$c_remote" -a
   fi
 
-  git rev-parse --abbrev-ref "$c_remote/HEAD" | perl -ne "print /$c_remote\/(\w+)/" | tee >(xsel -ib)
+  git rev-parse --abbrev-ref "$c_remote/HEAD" | perl -ne "print /$c_remote\/(\w+)/"
 }
 
 decode_cmdline_args "$@"
