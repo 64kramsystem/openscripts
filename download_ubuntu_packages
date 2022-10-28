@@ -79,7 +79,7 @@ class DownloadUbuntuPackages
     # Not checked what "streams" is.
     #
     releases_page
-      .scan(%r{alt="\[DIR\]".+"([a-z]+)/".+(\d+{4}-\d\d-\d\d)})
+      .scan(%r{alt="\[DIR\]".+"([a-z]+)/".+(\d{4}-\d\d-\d\d)})
       .delete_if { |name, _| name == "streams" }
       .sort_by { |name, date| date }
       .last
