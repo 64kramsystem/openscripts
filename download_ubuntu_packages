@@ -74,16 +74,17 @@ class DownloadUbuntuPackages
 
     # Sample:
     #
-    #   <img src="/icons/folder.gif" alt="[DIR]"> <a href="kinetic/">kinetic/</a>                2022-09-30 00:01    -   Ubuntu 22.10 (Kinetic Kudu)
+    #   <img src="/icons/folder.gif" alt="[DIR]"> <a href="22.04.1/">22.04.1/</a>                2022-08-11 11:16    -   Ubuntu 22.04.1 LTS (Jammy Jellyfish)
+    #   <img src="/icons/folder.gif" alt="[DIR]"> <a href="22.10/">22.10/</a>                  2022-10-20 17:11    -   Ubuntu 22.10 (Kinetic Kudu)
     #
-    # Not checked what "streams" is.
+    # The timestamp can't be used, because an older release may be uploaded after a newer one.
     #
     releases_page
-      .scan(%r{alt="\[DIR\]".+"([a-z]+)/".+(\d{4}-\d\d-\d\d)})
-      .delete_if { |name, _| name == "streams" }
-      .sort_by { |name, date| date }
+      .scan(/alt="\[DIR\]"> <a href="(\d\d\.\d\d).+\((\w+) \w+\)$/)
+      .sort_by { |numeric_version, codename| numeric_version }
       .last
-      .first || raise("Release not found!")
+      &.last
+      &.downcase || raise("Release not found!")
   end
 
   # Tries the default architecture first; if not found, tries the `all`.
