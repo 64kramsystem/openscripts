@@ -27,13 +27,13 @@ class CleanKernelPackages
       packages_to_remove = find_packages_to_remove(versions_to_remove)
       puts "Removing packages:", *packages_to_remove.map { |package| "- #{package}"}, ""
       remove_packages(packages_to_remove, simulate: simulate)
-
-      module_directories_to_remove = find_module_directories_to_remove(versions_to_remove)
-      puts "Removing module directories..."
-      remove_module_directories(module_directories_to_remove, simulate: simulate)
     else
-      puts "Nothing to remove!"
+      puts "No packages to remove!"
     end
+
+    module_directories_to_remove = find_module_directories_to_remove(delete_current)
+    puts "Removing module directories..."
+    remove_module_directories(module_directories_to_remove, simulate: simulate)
   end
 
   private
@@ -103,13 +103,18 @@ class CleanKernelPackages
 
   # Sample of returned directory: `/lib/modules/5.0.2-050002-generic`
   #
-  def find_module_directories_to_remove(versions_to_remove)
-    # Since we know that there can't be two duplicate versions, we can append the wildcard, in order
-    # to catch the kernel type suffix (e.g. `-generic`), which is not retained by the KernelVersion.
-    #
-    versions_to_remove
-      .map { |v| File.join(MODULES_DIRECTORY, "#{v.raw}*") }
-      .flat_map { |glob| Dir[glob] }
+  def find_module_directories_to_remove(delete_current)
+    all_module_dirnames = Dir[File.join(MODULES_DIRECTORY, '*')]
+
+    if !delete_current
+      all_module_dirnames -= [File.join(MODULES_DIRECTORY, `uname -r`.rstrip)]
+    end
+
+    installed_module_dirnames = `aptitude search ~ilinux-image-`
+      .lines
+      .map { |line| File.expand_path(line[/linux-image(-unsigned)?-(\S+)/, 2], MODULES_DIRECTORY) }
+
+    all_module_dirnames - installed_module_dirnames
   end
 
   def remove_packages(packages, simulate:)
