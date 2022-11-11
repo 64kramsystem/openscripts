@@ -55,7 +55,10 @@ class GenerateWikiHomeToc
     file_path = file_path.sub(%r(^\./), "")
 
     if file_path.end_with?('.md')
-      description = IO.read(file_path)[/^# (.*)/, 1] || File.basename(file_path).chomp('.md')
+      # rstrip() is for cross-platform, as Linux will match the `\r`, if present.
+      #
+      description = IO.read(file_path)[/^# (.*)/, 1]&.rstrip || File.basename(file_path).chomp('.md')
+
       file_path = File.basename(file_path).chomp('.md')
 
       # GitHub issue: colons in wiki links cause the <a> tag not to be generated.
