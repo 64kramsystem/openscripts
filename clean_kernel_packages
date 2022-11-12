@@ -63,6 +63,8 @@ class CleanKernelPackages
         else
           package_versions[version] = package_name
         end
+      else
+        raise "Unexpected package name: #{package_name}"
       end
     end
 
