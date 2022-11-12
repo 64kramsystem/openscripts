@@ -17,6 +17,8 @@ class KernelVersion
   attr_accessor :rc
   attr_accessor :ongoing
 
+  ONGOING_MAX_CHARS = 6
+
   def initialize(raw, major, minor, patch, rc: nil, ongoing: nil)
     @raw = raw
     @major = major.to_i
@@ -32,7 +34,7 @@ class KernelVersion
   # release candidates, or 129 ongoing releases.
   #
   def to_i
-    value = major * 2**24 + minor * 2**16 + patch * 2**8
+    value = (major * 2**24 + minor * 2**16 + patch * 2**8) * 10**ONGOING_MAX_CHARS
 
     # Make ongoing releases higher than all the RC versions, eg 4.10.0 > 4.10.0-rc8.
     #
