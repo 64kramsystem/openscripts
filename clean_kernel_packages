@@ -4,6 +4,7 @@ require_relative 'kernel_packages_maintenance/kernel_version'
 
 require 'English'
 require 'fileutils'
+require 'set'
 require 'shellwords'
 require 'simple_scripting/argv'
 
@@ -34,7 +35,12 @@ class CleanKernelPackages
       puts "No packages to remove!"
     end
 
-    module_directories_to_remove = find_module_directories_to_remove(delete_current)
+    # WATCH OUT! Converting to set is very important, since Array#include? doesn't use the Hash equality
+    # properties!
+    #
+    kept_image_versions = (installed_image_versions - image_versions_to_remove).to_set
+
+    module_directories_to_remove = find_module_directories_to_remove(kept_image_versions)
     puts "Removing module directories..."
     remove_module_directories(module_directories_to_remove, simulate: simulate)
   end
@@ -112,18 +118,14 @@ class CleanKernelPackages
 
   # Sample of returned directory: `/lib/modules/5.0.2-050002-generic`
   #
-  def find_module_directories_to_remove(delete_current)
+  def find_module_directories_to_remove(kept_image_versions)
     all_module_dirnames = Dir[File.join(MODULES_DIRECTORY, '*')]
+    image_version_strings = kept_image_versions.map(&:to_s).to_set
 
-    if !delete_current
-      all_module_dirnames -= [File.join(MODULES_DIRECTORY, `uname -r`.rstrip)]
+    all_module_dirnames.select do |full_module_dirname|
+      base_module_dirname = File.basename(full_module_dirname)
+      !image_version_strings.include?(base_module_dirname)
     end
-
-    installed_module_dirnames = `aptitude search ~ilinux-image-`
-      .lines
-      .map { |line| File.expand_path(line[/linux-image(-unsigned)?-(\S+)/, 2], MODULES_DIRECTORY) }
-
-    all_module_dirnames - installed_module_dirnames
   end
 
   def remove_packages(packages, simulate:)
