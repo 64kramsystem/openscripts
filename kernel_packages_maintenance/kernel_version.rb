@@ -1,29 +1,43 @@
 # Kernel versions can have different formats:
 #
-# - 4.10.0-14          # official; `14` = "ongoing release")
-# - 4.11.6-041106      # mainline, stable; the release version is not needed
-# - 4.12.0-041200rc7   # mainline, RC
-# - 6.0.0-rc7-micpatch # custom, RC
-# - 6.0.0-micpatch     # custom, no RC
+# - 4.10.0-14-generic        # official; `14` = "ongoing release")
+# - 4.12.0-1019-azure-fde    # official, two-token type
+# - 4.11.6-041106-generic    # mainline, stable; the release version is not needed
+# - 4.12.0-041200rc7-generic # mainline, RC
+# - 4.12.0-rc4-sav           # built from sources
 #
-# For the reasons above, the `release` attribute can refer either to the ongoing release or to the
-# release candidate.
+# The type is technically optional, but this class considers that case invalid.
 #
 class KernelVersion
   attr_accessor :raw        # Unparsed string form
   attr_accessor :major
   attr_accessor :minor
   attr_accessor :patch
+  attr_accessor :ongoing    # Doesn't include the RC; WATCH OUT! This is a string.
   attr_accessor :rc
-  attr_accessor :ongoing
+  attr_accessor :type       # Not "version", but useful
 
-  def initialize(raw, major, minor, patch, rc: nil, ongoing: nil)
+  ONGOING_MAX_CHARS = 6
+  VERSION_REGEX = /
+    ^
+    (\d)\.(\d+)\.(\d+)
+    (
+      -
+      (\d+?)?(rc\d+)?
+    )?
+    -
+    ([-a-z]+)
+    $
+  /x
+
+  def initialize(raw, major, minor, patch, type, ongoing: nil, rc: nil)
     @raw = raw
-    @major = major.to_i
-    @minor = minor.to_i
-    @patch = patch.to_i
-    @rc = rc.to_i if rc
-    @ongoing = ongoing.to_i if ongoing
+    @major = major
+    @minor = minor
+    @patch = patch
+    @ongoing = ongoing if ongoing
+    @rc = rc
+    @type = type
   end
 
   # Note that this is not meant to (hypothetically) compare official against mainline packages.
@@ -32,7 +46,7 @@ class KernelVersion
   # release candidates, or 129 ongoing releases.
   #
   def to_i
-    value = major * 2**24 + minor * 2**16 + patch * 2**8
+    value = (major * 2**24 + minor * 2**16 + patch * 2**8) * 10**ONGOING_MAX_CHARS
 
     # Make ongoing releases higher than all the RC versions, eg 4.10.0 > 4.10.0-rc8.
     #
@@ -64,12 +78,7 @@ class KernelVersion
   end
 
   def to_s
-    buffer = "#{major}.#{minor}.#{patch}"
-
-    buffer << "-#{ongoing}" if ongoing
-    buffer << "-rc#{rc}" if rc
-
-    buffer
+    raw
   end
 
   def self.find_current
@@ -80,21 +89,19 @@ class KernelVersion
   end
 
   # version_str format: see class comment
+  # raise_error:        (true) if true, on unidentified version, raise error, otherwise, return nil
   #
-  def self.parse_version(version_str)
-    major, minor, patch, _, raw_release = version_str.match(/(\d)\.(\d+)\.(\d+)(-([0-9rc]+))?/).captures
+  def self.parse_version(version_str, raise_error: true)
+    version_match = version_str.match(VERSION_REGEX)
 
-    case raw_release
-    when /^\d{6}rc(\d)$/, /^rc(\d)$/
-      rc = $1
-    when /^\d{6}$/, nil
-      # ignore
-    when /^\d{2}$/
-      ongoing = raw_release
-    else
-      raise "Release version not identified!: #{raw_release.inspect}"
+    if version_match.nil?
+      raise_error ? raise("Unidentified version: #{version_str}") : return
     end
 
-    new(version_str, major, minor, patch, ongoing: ongoing, rc: rc)
+    major, minor, patch, _, ongoing, raw_rc, type = version_match.captures
+
+    rc = raw_rc[/\d+/] if raw_rc
+
+    new(version_str, major.to_i, minor.to_i, patch.to_i, type, ongoing: ongoing, rc: rc&.to_i)
   end
 end
