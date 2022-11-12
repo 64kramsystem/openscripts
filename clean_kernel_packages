@@ -9,6 +9,7 @@ require 'simple_scripting/argv'
 
 class CleanKernelPackages
   MODULES_DIRECTORY = '/lib/modules'
+  IMAGE_PACKAGE_PREFIX_REGEX = "^linux-(image|image-unsigned)-"
 
   def execute(simulate: false, keep_previous: false, delete_current: false)
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
@@ -43,14 +44,14 @@ class CleanKernelPackages
   # if there is two packages with/out `-unsigned` are installed for the same version.
   #
   def checked_find_installed_image_versions(current_version)
-    raw_packages_list = find_installed_packages("^linux-(image|image-unsigned)-")
+    raw_packages_list = find_installed_packages(IMAGE_PACKAGE_PREFIX_REGEX)
 
     # version => package name
     #
     package_versions = {}
 
     raw_packages_list.each do |package_name|
-      if package_name =~ /^linux-image(-unsigned)?-(#{current_version.major}\.#{current_version.minor}\.\d+-\w+)/
+      if package_name =~ /#{IMAGE_PACKAGE_PREFIX_REGEX}(#{current_version.major}\.#{current_version.minor}\.\d+-\w+)/
         version = KernelVersion.parse_version($LAST_MATCH_INFO[2])
 
         if package_versions.key?(version)
@@ -65,6 +66,8 @@ class CleanKernelPackages
   end
 
   def find_installed_packages(pattern)
+    # Aptitude doesn't support the `?` metacharacter.
+    #
     `aptitude search -w 120 ~i#{pattern.shellescape} | cut -c 5- | awk '{print $1}'`.split("\n")
   end
 
