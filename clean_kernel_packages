@@ -4,11 +4,16 @@ require_relative 'kernel_packages_maintenance/kernel_version'
 
 require 'English'
 require 'fileutils'
+require 'set'
 require 'shellwords'
 require 'simple_scripting/argv'
 
 class CleanKernelPackages
   MODULES_DIRECTORY = '/lib/modules'
+  # Must capture the longer string first, otherwise, `-unsigned` is interpreted as part of the version.
+  #
+  IMAGE_PACKAGE_PREFIX_REGEX = "^linux-(image-unsigned|image)-"
+  HEADER_PACKAGE_PREFIX_REGEX = "^linux-headers-"
 
   def execute(simulate: false, keep_previous: false, delete_current: false)
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
@@ -17,23 +22,40 @@ class CleanKernelPackages
 
     puts "Current kernel version: #{current_version}", ""
 
-    installed_versions = checked_find_installed_versions(current_version)
+    installed_image_versions = checked_find_installed_image_versions(current_version)
 
-    puts "Currently installed package versions:", *installed_versions.map { |version| "- #{version}" }, ""
+    puts "Currently installed image package versions:", *installed_image_versions.map { |version| "- #{version}" }, ""
 
-    versions_to_remove = find_versions_to_remove(current_version, installed_versions, **options)
+    image_versions_to_remove = find_image_versions_to_remove(current_version, installed_image_versions, **options)
 
-    if versions_to_remove.size > 0
-      packages_to_remove = find_packages_to_remove(versions_to_remove)
-      puts "Removing packages:", *packages_to_remove.map { |package| "- #{package}"}, ""
-      remove_packages(packages_to_remove, simulate: simulate)
+    if image_versions_to_remove.size > 0
+      kernel_packages_to_remove = find_all_kernel_packages_for_versions(image_versions_to_remove)
+      puts "Removing packages:", *kernel_packages_to_remove.map { |package| "- #{package}"}, ""
+      remove_packages(kernel_packages_to_remove, simulate: simulate)
     else
       puts "No packages to remove!"
     end
 
-    module_directories_to_remove = find_module_directories_to_remove(delete_current)
-    puts "Removing module directories..."
-    remove_module_directories(module_directories_to_remove, simulate: simulate)
+    # WATCH OUT! Converting to set is very important, since Array#include? doesn't use the Hash equality
+    # properties!
+    #
+    kept_image_versions = (installed_image_versions - image_versions_to_remove).to_set
+
+    orphan_header_packages = find_orphan_header_packages(kept_image_versions)
+
+    if orphan_header_packages.size > 0
+      puts "Removing orphan header packages..."
+      remove_packages(orphan_header_packages, simulate: simulate)
+    end
+
+    module_directories_to_remove = find_module_directories_to_remove(kept_image_versions)
+
+    if module_directories_to_remove.size > 0
+      puts "Removing module directories..."
+      remove_module_directories(module_directories_to_remove, simulate: simulate)
+    else
+      puts "No module directories to remove!"
+    end
   end
 
   private
@@ -42,15 +64,17 @@ class CleanKernelPackages
   # complicate the script. Not sure if this is a real-world case, but it may happen, for example,
   # if there is two packages with/out `-unsigned` are installed for the same version.
   #
-  def checked_find_installed_versions(current_version)
-    raw_packages_list = find_installed_packages("^linux-(image|image-unsigned)-")
+  def checked_find_installed_image_versions(current_version)
+    raw_packages_list = find_installed_packages(IMAGE_PACKAGE_PREFIX_REGEX)
 
     # version => package name
     #
     package_versions = {}
 
     raw_packages_list.each do |package_name|
-      if package_name =~ /^linux-image(-unsigned)?-(#{current_version.major}\.#{current_version.minor}\.\d+-\w+)/
+      if package_name =~ /#{IMAGE_PACKAGE_PREFIX_REGEX}(.+)$/
+        # The prefix regex captures one group, so we need to skip it.
+        #
         version = KernelVersion.parse_version($LAST_MATCH_INFO[2])
 
         if package_versions.key?(version)
@@ -58,6 +82,8 @@ class CleanKernelPackages
         else
           package_versions[version] = package_name
         end
+      else
+        raise "Unexpected package name: #{package_name}"
       end
     end
 
@@ -65,15 +91,17 @@ class CleanKernelPackages
   end
 
   def find_installed_packages(pattern)
+    # Aptitude doesn't support the `?` metacharacter.
+    #
     `aptitude search -w 120 ~i#{pattern.shellescape} | cut -c 5- | awk '{print $1}'`.split("\n")
   end
 
-  def find_versions_to_remove(current_version, installed_versions, options = {})
-    future_versions = installed_versions.select do |version|
+  def find_image_versions_to_remove(current_version, installed_image_versions, options = {})
+    future_versions = installed_image_versions.select do |version|
       version > current_version
     end
 
-    previous_versions = installed_versions.select do |version|
+    previous_versions = installed_image_versions.select do |version|
       version < current_version
     end
 
@@ -85,7 +113,7 @@ class CleanKernelPackages
 
     versions_to_delete += future_versions.sort[0..-2] # Keep the latest future
 
-    if versions_to_delete.size == installed_versions.size
+    if versions_to_delete.size == installed_image_versions.size
       message = "No versions remaining after cleaning!"
       options[:simulate] ? puts(message) : raise(message)
     end
@@ -93,7 +121,7 @@ class CleanKernelPackages
     versions_to_delete
   end
 
-  def find_packages_to_remove(versions)
+  def find_all_kernel_packages_for_versions(versions)
     package_matchers = versions.map do |version|
       "~i^linux-(headers|image|image-unsigned|image-extra|modules|modules-extra)-#{version.raw}\\b".shellescape
     end.join(' ')
@@ -101,20 +129,34 @@ class CleanKernelPackages
     `aptitude search -w 120 #{package_matchers} | cut -c 5- | awk '{print $1}'`.split("\n")
   end
 
+  def find_orphan_header_packages(kept_image_versions)
+    # A bit tricky, because headers of multiple type have one parent header without the type.
+    # Parent headers are uninstalled automatically when the children are uninstalled, so we don't
+    # need to (directly) take care of them.
+    #
+    all_header_packages = find_installed_packages(HEADER_PACKAGE_PREFIX_REGEX)
+
+    all_header_packages.each_with_object([]) do |package_name, orphan_header_packages|
+      if package_name =~ /#{HEADER_PACKAGE_PREFIX_REGEX}(.+)$/
+        header_version = KernelVersion.parse_version($LAST_MATCH_INFO[1], raise_error: false)
+
+        if header_version && !kept_image_versions.include?(header_version)
+          orphan_header_packages << package_name
+        end
+      end
+    end
+  end
+
   # Sample of returned directory: `/lib/modules/5.0.2-050002-generic`
   #
-  def find_module_directories_to_remove(delete_current)
+  def find_module_directories_to_remove(kept_image_versions)
     all_module_dirnames = Dir[File.join(MODULES_DIRECTORY, '*')]
+    image_version_strings = kept_image_versions.map(&:to_s).to_set
 
-    if !delete_current
-      all_module_dirnames -= [File.join(MODULES_DIRECTORY, `uname -r`.rstrip)]
+    all_module_dirnames.select do |full_module_dirname|
+      base_module_dirname = File.basename(full_module_dirname)
+      !image_version_strings.include?(base_module_dirname)
     end
-
-    installed_module_dirnames = `aptitude search ~ilinux-image-`
-      .lines
-      .map { |line| File.expand_path(line[/linux-image(-unsigned)?-(\S+)/, 2], MODULES_DIRECTORY) }
-
-    all_module_dirnames - installed_module_dirnames
   end
 
   def remove_packages(packages, simulate:)
