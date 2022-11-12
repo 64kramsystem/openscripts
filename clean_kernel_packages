@@ -13,6 +13,7 @@ class CleanKernelPackages
   # Must capture the longer string first, otherwise, `-unsigned` is interpreted as part of the version.
   #
   IMAGE_PACKAGE_PREFIX_REGEX = "^linux-(image-unsigned|image)-"
+  HEADER_PACKAGE_PREFIX_REGEX = "^linux-headers-"
 
   def execute(simulate: false, keep_previous: false, delete_current: false)
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
@@ -39,6 +40,13 @@ class CleanKernelPackages
     # properties!
     #
     kept_image_versions = (installed_image_versions - image_versions_to_remove).to_set
+
+    orphan_header_packages = find_orphan_header_packages(kept_image_versions)
+
+    if orphan_header_packages.size > 0
+      puts "Removing orphan header packages..."
+      remove_packages(orphan_header_packages, simulate: simulate)
+    end
 
     module_directories_to_remove = find_module_directories_to_remove(kept_image_versions)
 
@@ -119,6 +127,24 @@ class CleanKernelPackages
     end.join(' ')
 
     `aptitude search -w 120 #{package_matchers} | cut -c 5- | awk '{print $1}'`.split("\n")
+  end
+
+  def find_orphan_header_packages(kept_image_versions)
+    # A bit tricky, because headers of multiple type have one parent header without the type.
+    # Parent headers are uninstalled automatically when the children are uninstalled, so we don't
+    # need to (directly) take care of them.
+    #
+    all_header_packages = find_installed_packages(HEADER_PACKAGE_PREFIX_REGEX)
+
+    all_header_packages.each_with_object([]) do |package_name, orphan_header_packages|
+      if package_name =~ /#{HEADER_PACKAGE_PREFIX_REGEX}(.+)$/
+        header_version = KernelVersion.parse_version($LAST_MATCH_INFO[1], raise_error: false)
+
+        if header_version && !kept_image_versions.include?(header_version)
+          orphan_header_packages << package_name
+        end
+      end
+    end
   end
 
   # Sample of returned directory: `/lib/modules/5.0.2-050002-generic`
