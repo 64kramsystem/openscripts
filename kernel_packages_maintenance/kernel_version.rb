@@ -89,9 +89,14 @@ class KernelVersion
   end
 
   # version_str format: see class comment
+  # raise_error:        (true) if true, on unidentified version, raise error, otherwise, return nil
   #
-  def self.parse_version(version_str)
-    version_match = version_str.match(VERSION_REGEX) || raise("Unidentified version: #{version_str}")
+  def self.parse_version(version_str, raise_error: true)
+    version_match = version_str.match(VERSION_REGEX)
+
+    if version_match.nil?
+      raise_error ? raise("Unidentified version: #{version_str}") : return
+    end
 
     major, minor, patch, _, ongoing, raw_rc, type = version_match.captures
 
