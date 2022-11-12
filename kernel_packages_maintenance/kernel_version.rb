@@ -78,14 +78,7 @@ class KernelVersion
   end
 
   def to_s
-    buffer = "#{major}.#{minor}.#{patch}"
-
-    buffer << "-#{ongoing}" if ongoing
-    buffer << "rc#{rc}" if rc
-
-    buffer << "-#{type}"
-
-    buffer
+    raw
   end
 
   def self.find_current
