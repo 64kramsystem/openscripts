@@ -9,7 +9,9 @@ require 'simple_scripting/argv'
 
 class CleanKernelPackages
   MODULES_DIRECTORY = '/lib/modules'
-  IMAGE_PACKAGE_PREFIX_REGEX = "^linux-(image|image-unsigned)-"
+  # Must capture the longer string first, otherwise, `-unsigned` is interpreted as part of the version.
+  #
+  IMAGE_PACKAGE_PREFIX_REGEX = "^linux-(image-unsigned|image)-"
 
   def execute(simulate: false, keep_previous: false, delete_current: false)
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
@@ -51,7 +53,9 @@ class CleanKernelPackages
     package_versions = {}
 
     raw_packages_list.each do |package_name|
-      if package_name =~ /#{IMAGE_PACKAGE_PREFIX_REGEX}(#{current_version.major}\.#{current_version.minor}\.\d+-\w+)/
+      if package_name =~ /#{IMAGE_PACKAGE_PREFIX_REGEX}(.+)$/
+        # The prefix regex captures one group, so we need to skip it.
+        #
         version = KernelVersion.parse_version($LAST_MATCH_INFO[2])
 
         if package_versions.key?(version)
