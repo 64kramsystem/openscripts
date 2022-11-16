@@ -15,6 +15,8 @@ class CleanKernelPackages
   IMAGE_PACKAGE_PREFIX_REGEX = "^linux-(image-unsigned|image)-"
   HEADER_PACKAGE_PREFIX_REGEX = "^linux-headers-"
 
+  NOTHING_TO_REMOVE_MESSAGE = "Nothing to remove!"
+
   def execute(simulate: false, keep_previous: false, delete_current: false)
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
 
@@ -46,6 +48,8 @@ class CleanKernelPackages
     if orphan_header_packages.size > 0
       puts "Removing orphan header packages..."
       remove_packages(orphan_header_packages, simulate: simulate)
+    else
+      puts "No orphan headers to remove!"
     end
 
     module_directories_to_remove = find_module_directories_to_remove(kept_image_versions)
@@ -55,6 +59,10 @@ class CleanKernelPackages
       remove_module_directories(module_directories_to_remove, simulate: simulate)
     else
       puts "No module directories to remove!"
+    end
+
+    if simulate && (image_versions_to_remove + orphan_header_packages + module_directories_to_remove).empty?
+      $stderr.puts NOTHING_TO_REMOVE_MESSAGE
     end
   end
 
@@ -179,6 +187,9 @@ if __FILE__ == $PROGRAM_NAME
     ['-k', '--keep-previous',  "Keep one previous version (the latest)"],
     ['-d', '--delete-current', "Delete current; requires at least another version to be present"],
     ['-n', '--simulate',       "Simulate; don't remove any package"],
+    long_help: <<~TXT
+      When --simulate is used, if there is nothing to remove, the text '#{CleanKernelPackages::NOTHING_TO_REMOVE_MESSAGE}' is printed to stderr.
+    TXT
   ) || exit
 
   CleanKernelPackages.new.execute(**options)
