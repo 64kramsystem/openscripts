@@ -46,6 +46,8 @@ class CleanKernelPackages
     if orphan_header_packages.size > 0
       puts "Removing orphan header packages..."
       remove_packages(orphan_header_packages, simulate: simulate)
+    else
+      puts "No orphan headers to remove!"
     end
 
     module_directories_to_remove = find_module_directories_to_remove(kept_image_versions)
