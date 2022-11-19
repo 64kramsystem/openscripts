@@ -57,7 +57,6 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `purge_trash`: purge the trash files trashed before a certain threashold
   - `script_template`: create a Bash script template, and sets the permissions
   - `send_display_to_sleep`: send the display to sleep, working around GNOME's screensaver interference
-  - `set_display_sleep_time.sh`: implements the only reliable strategy I've found to send the display to sleep
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
   - `xcalib_safe`: wrapper around xcalib, which detects error states, and warns the user (and exits with error code)
