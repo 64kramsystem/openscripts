@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+v_screensaver_command_pid=
+c_help="Usage: $(basename "$0") [-h|--help]
+
+Sends the screen to sleep.
+
+Internally, this inhibits the gnome screensaver, then invokes the display sleep; on wakeup, it restores the screensaver.
+
+The screensaver needs to workaround because it interferes with the display sleep, randomly waking it up."
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function wait_past_keypress {
+  # Make sure that the keypress doesn't wake the screen up.
+  #
+  sleep 0.5
+}
+
+function inhibit_screen_saver {
+  # The screensaver messes with `xset dpms force off`, so we disable it temporarily.
+  #
+  mate-screensaver-command -i &
+
+  v_screensaver_command_pid=$!
+}
+
+function put_screen_in_standby {
+  xset dpms force off
+}
+
+function wait_for_monitor_on {
+  while ! xset -q | grep -q "Monitor is On"; do
+    sleep 1
+  done
+}
+
+function kill_screen_saver_inhibitor {
+  kill "$v_screensaver_command_pid"
+}
+
+# This is less robust than using the built-in power saving, however, that one has a minimum 60" delay,
+# and with the screensaver inhibited, this seems to work fine.
+#
+function main {
+  wait_past_keypress
+  inhibit_screen_saver
+  put_screen_in_standby
+  wait_for_monitor_on
+  kill_screen_saver_inhibitor
+}
+
+decode_cmdline_args "$@"
+main
