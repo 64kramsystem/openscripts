@@ -39,7 +39,8 @@ class GenerateWikiHomeToc
     else
       output = format_directory_entry(path)
 
-      directory_content = find_and_sort_directory_content(path)
+      directory_content = find_directory_content(path)
+      directory_content = sort_directory_content(directory_content)
 
       directory_content.each do |child_path|
         output += print_formatted_directory(child_path)
@@ -87,11 +88,12 @@ class GenerateWikiHomeToc
     end
   end
 
-  def find_and_sort_directory_content(dir_path)
-    dir_content = Dir["#{dir_path}/*"]
+  def find_directory_content(dir_path)
+    Dir["#{dir_path}/*"]
+      .select { |entry| !(File.file?(entry) && entry == File.join('.', HOME_FILE)) }
+  end
 
-    dir_content.select! { |entry| !(File.file?(entry) && entry == File.join('.', HOME_FILE)) }
-
+  def sort_directory_content(dir_content)
     dir_content.sort do |path_1, path_2|
       if File.file?(path_1) && File.directory?(path_2)
         -1
