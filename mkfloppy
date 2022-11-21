@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_mountpoint=/mnt
+c_help="Usage: $(basename "$0") [-h|--help] <name.img> <files...>
+
+Uses '$c_mountpoint' as mountpoint."
+
+v_imagename=
+v_included_files=
+v_is_image_mounted=   # boolean; false:blank, true:anything else
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -lt 2 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_imagename=$1
+  v_included_files=("${@:2}")
+}
+
+function create_image {
+  mkfs.vfat -C "$v_imagename" 1440
+}
+
+function mount_image {
+  sudo mount -o uid=$UID "$v_imagename" "$c_mountpoint"
+  v_is_image_mounted=1
+}
+
+function register_umount_image_hook {
+  function _unmount_image_hook {
+    # The copy is fast enough that we don't need to care about sudo caching.
+    #
+    if [[ -n $v_is_image_mounted ]]; then
+      sudo umount "$c_mountpoint"
+    fi
+  }
+  trap _unmount_image_hook EXIT
+}
+
+function copy_files {
+  cp -vR "${v_included_files[@]}" "$c_mountpoint"/
+}
+
+function main {
+  create_image
+  mount_image
+  register_umount_image_hook
+  copy_files
+}
+# set -x
+decode_cmdline_args "$@"
+main
