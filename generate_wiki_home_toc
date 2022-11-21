@@ -5,7 +5,7 @@ require 'simple_scripting/argv'
 class GenerateWikiHomeToc
   DEFAULT_DIRECTORY = '.'
   HOME_HEADER = "# Home"
-  ROOT_DIRECTORY_HEADER = "## Root"
+  ROOT_DIRECTORY_HEADER = "Root"
   HOME_FILE = 'Home.md'
 
   LONG_HELP = <<~STR
@@ -21,9 +21,11 @@ class GenerateWikiHomeToc
   STR
 
   def execute(directory: DEFAULT_DIRECTORY)
+    # This allows using '.' as root dir, which avoids storing the root directory itself.
+    #
     Dir.chdir(directory)
 
-    output = "#{HOME_HEADER}\n\n#{ROOT_DIRECTORY_HEADER}\n\n"
+    output = "#{HOME_HEADER}\n"
     output += print_formatted_directory('.')
 
     IO.write(HOME_FILE, output)
@@ -33,15 +35,13 @@ class GenerateWikiHomeToc
 
   def print_formatted_directory(path)
     if File.file?(path)
-      if path == "./#{HOME_FILE}"
-        ""
-      else
-        format_file_entry(path)
-      end
+      format_file_entry(path)
     else
-      output = format_directory_entry(path)
+      directory_content = find_directory_content(path)
 
-      directory_content = find_and_sort_directory_content(path)
+      output = format_directory_entry(path, directory_content)
+
+      directory_content = sort_directory_content(directory_content)
 
       directory_content.each do |child_path|
         output += print_formatted_directory(child_path)
@@ -72,25 +72,41 @@ class GenerateWikiHomeToc
     "- " + "[#{description}](#{file_path})" + "\n"
   end
 
-  def format_directory_entry(dir_path)
-    parents_count = dir_path.split('/').size
-
-    # Exclude the [wiki] root directory.
+  def format_directory_entry(dir_path, dir_content)
+    # If there are no files, we don't print the Root entry.
+    # Note that `dir_content` never includes the root HOME_FILE.
     #
-    if parents_count == 1
-      ""
+    if dir_path == '.' && !dir_content.any? { |entry| File.file?(entry) }
+      return ""
+    end
+
+    parents_count, prettified_dirname = if dir_path == '.'
+      # The choice of using a depth of 2 is arbitrary. 1 is not appropriate; the alternative is not
+      # to print the root header at all.
+      #
+      [2, ROOT_DIRECTORY_HEADER]
     else
+      parents_count = dir_path.split('/').size
       prettified_dirname = File
         .basename(dir_path)
         .capitalize
         .tr('-_', ' ')
 
-      "\n" + ('#' * parents_count) + " " + prettified_dirname + "\n\n"
+      [parents_count, prettified_dirname]
     end
+
+    "\n" + ('#' * parents_count) + " " + prettified_dirname + "\n\n"
   end
 
-  def find_and_sort_directory_content(dir_path)
-    Dir["#{dir_path}/*"].sort do |path_1, path_2|
+  # Note that this never includes the root HOME_FILE.
+  #
+  def find_directory_content(dir_path)
+    Dir["#{dir_path}/*"]
+      .select { |entry| !(File.file?(entry) && entry == File.join('.', HOME_FILE)) }
+  end
+
+  def sort_directory_content(dir_content)
+    dir_content.sort do |path_1, path_2|
       if File.file?(path_1) && File.directory?(path_2)
         -1
       elsif File.directory?(path_1) && File.file?(path_2)
