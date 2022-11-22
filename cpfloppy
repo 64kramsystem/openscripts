@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_mountpoint=/mnt
+c_help="Usage: $(basename "$0") [-h|--help] <files.img...> <destdir>
+
+Extracts the content of the floppy images to <destdir>; if a file exists, a prompt is displayed.
+Interrupting on the prompt will unmount the last mounted disk.
+
+Uses '$c_mountpoint' as mountpoint."
+
+v_destdir=
+v_image_files=
+v_last_mounted_file=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -lt 2 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  # WATCH OUT! There's a lot of Bash insanity here.
+  #
+  v_image_files=("${@:1: ${#@}-1 }") # copy from the 1st param to the beforelast, both included
+  v_destdir=${*:${#@}}               # copy the last param
+}
+
+function register_umount_image_hook {
+  function _unmount_image_hook {
+    # The copy is fast enough that we don't need to care about sudo caching.
+    #
+    if [[ -n $v_last_mounted_file ]]; then
+      sudo umount "$c_mountpoint"
+    fi
+  }
+  trap _unmount_image_hook EXIT
+}
+
+function create_destdir {
+  mkdir -p "$v_destdir"
+}
+
+function mount_image {
+  local image=$1
+  sudo mount -o uid=$UID "$image" "$c_mountpoint"
+  v_last_mounted_file=$image
+}
+
+function unmount_image {
+  sudo umount "$c_mountpoint"
+  v_last_mounted_file=
+}
+
+function copy_files {
+  # -i: ask if file exists
+  # -T: copy also hidden files, but don't create the subfolder (see https://superuser.com/a/970185).
+  #
+  cp -ivrT "$c_mountpoint" "$v_destdir"
+}
+
+function main {
+  register_umount_image_hook
+  create_destdir
+  for image in "${v_image_files[@]}"; do
+    echo "# Copying $image..."
+    mount_image "$image"
+    copy_files
+    unmount_image
+  done
+}
+
+decode_cmdline_args "$@"
+main
