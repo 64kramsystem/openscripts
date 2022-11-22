@@ -42,6 +42,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `connect_bt_device`: connects a BT device, working around the complete garbage that is Bluetooth, Bluez, and the BT Ubuntu support
   - `downer`: download and automatically install packages/images from web pages
   - `download_ubuntu_packages`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
+  - `cpfloppy`: copy the content of multiple floppy images (IMG) to a specified dir
   - `ejectdisk`: unmounts and powers off a device, or all the connected USB storage devices
   - `ft(_function)`: very handy script for extracting a token/line from the output of a command
   - `gitio`: generate a short GitHub URL, and copy it to the clipboard
