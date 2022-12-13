@@ -58,7 +58,7 @@ class Downer
 
   def install(package_file, application: nil)
     if application
-      `#{application} #{package_file}`
+      system("#{application} #{package_file}", exception: true)
     else
       # This script is for internal usages only, so we don't need to perform whitelisting. This is
       # clarified in the help.
@@ -79,7 +79,7 @@ class Downer
   def install_deb_package(package_file)
     puts "- installing #{package_file}..."
 
-    `sudo gdebi --non-interactive #{package_file.shellescape}`
+    system("sudo gdebi --non-interactive #{package_file.shellescape}", exception: true)
   end
 
   # Not really a package.
@@ -88,7 +88,7 @@ class Downer
     puts "- installing #{package_file}..."
 
     FileUtils.chmod '+x', package_file
-    `sudo #{package_file.shellescape}`
+    system("sudo #{package_file.shellescape}", exception: true)
   end
 
   # This is not straightforward. Currently, we support only the most common case of dmg+pkg.
@@ -98,7 +98,7 @@ class Downer
   def install_dmg_package(package_file)
     puts "- attaching #{package_file}..."
 
-    attachment_output = `sudo hdiutil attach #{package_file.shellescape}`
+    attachment_output = system("sudo hdiutil attach #{package_file.shellescape}", exception: true)
 
     # Got encoding problem on Mac VM. This is the simplest way to make sure that the output string
     # encoding is correct.
@@ -115,13 +115,13 @@ class Downer
 
     install_pkg_package(installation_pkg_file)
   ensure
-    volumes_attached.to_a.each { |volume| `sudo hdiutil detach #{volume.shellescape}` }
+    volumes_attached.to_a.each { |volume| system("sudo hdiutil detach #{volume.shellescape}", exception: true) }
   end
 
   def install_pkg_package(package_file)
     puts "- installing #{package_file}..."
 
-    `sudo installer -package #{package_file.shellescape} -target /`
+    system("sudo installer -package #{package_file.shellescape} -target /", exception: true)
   end
 end
 
