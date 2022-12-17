@@ -37,7 +37,13 @@ function decode_cmdline_args {
 }
 
 function main {
-  if ! git branch --remotes | grep -qP "^\s+$c_remote/HEAD "; then
+  # If we send the output directly to `grep -q`, instead of through a variable, grep exits with error
+  # (!!).
+  #
+  local remote_branches
+  remote_branches=$(git branch --remotes)
+
+  if ! echo "$remote_branches" | grep -q "^  $c_remote/HEAD "; then
     git remote set-head "$c_remote" -a > /dev/null # ignore noise
   fi
 
