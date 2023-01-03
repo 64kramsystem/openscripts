@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_default_local_version=custom
+c_help="Usage: $(basename "$0") [-h|--help] [-n|--new-kernel-version <version>] [-i|--install] [-r|--repo-path <path>] [-l|--local-version <name>] [packages_destination]
+
+Builds a kernel from the source code:
+
+- fetches the repository and finds the latest patch version (for the current branch version)
+  - if --new-kernel-version is specified, it's used as current version
+- copies the corresponding confiuration from the <packages_destination>
+- updates the configuration
+  - if --new-kernel-version is specified, assume it's Ubuntu-based, and patches to make it compile
+- copies the configuration to <packages_destination>
+- compiles and moves the packagtes to <packages_destination>
+- if --install is specified, it installs the packages
+
+Params:
+
+- '--repo-path' defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
+- '--local-version' is the kernel local version (name suffix), it defaults to (\$BUILD_KERNEL_LOCAL_VERSION or '$c_default_local_version'); the minus is automatically added
+- 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable."
+
+
+v_new_kernel_version=
+v_install=              # boolean; false=blank; true=anything else
+v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
+v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
+v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hn:ir:l: --long help,new-kernel-version:,install,repo-path:,local-version: --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -n|--new-kernel-version)
+        v_new_kernel_version=$2
+        shift 2 ;;
+      -i|--install)
+        v_install=1
+        shift ;;
+      -r|--repo-path)
+        v_repo_path=$2
+        shift 2 ;;
+      -l|--local-version)
+        v_local_version=$2
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -gt 1 ]]; then
+    echo "$c_help"
+    exit 1
+  elif [[ $# -eq 1 ]]; then
+    v_packages_destination=$1
+  else
+    if [[ -z $v_packages_destination ]]; then
+      >&2 echo "Missing packages destination!"
+      exit 1
+    fi
+  fi
+}
+
+function cache_sudo {
+  sudo -v
+
+  while true; do
+    sleep 60
+    kill -0 "$$" || exit
+    sudo -nv
+  done 2>/dev/null &
+}
+
+# Return format: M.m.p
+#
+function checked_find_current_version {
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD | perl -pe "chomp if eof")
+
+  if [[ ! $current_branch =~ ^bv[[:digit:]]\. ]]; then
+    >&2 echo "Unexpected current branch!"
+    exit 1
+  fi
+
+  echo -n "${current_branch#bv}"
+}
+
+function fetch_repo {
+  git fetch
+}
+
+function find_latest_version {
+  local full_version=$1
+  local short_version=${full_version%.*}
+  local escaped_short_version=${short_version//./\\.}
+
+  local rc_versions
+  # There has been one case of double-digit RC! Better safe than sorry regardless.
+  rc_versions=$(git tag | grep -P "^v$escaped_short_version.+rc\d+$")
+
+  local release_versions
+  release_versions=$(git tag | grep -P "^v$escaped_short_version" | grep -v rc || true)
+
+  (
+    echo -n "$rc_versions" | sort -V
+    echo -n "$release_versions" | sort -V
+  ) | tail -n 1 | perl -pe 's/^v//'
+}
+
+function create_and_switch_branch {
+  local latest_version=$1
+
+  git checkout -b {b,}v"$latest_version"
+}
+
+function import_config {
+  local version=$1
+
+  local config_backup=$v_packages_destination/config-$version
+
+  cp "$config_backup" .config
+}
+
+function patch_config {
+  scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
+  scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
+
+  scripts/config --undefine DEBUG_INFO
+  scripts/config --undefine DEBUG_INFO_COMPRESSED
+  scripts/config --undefine DEBUG_INFO_REDUCED
+  scripts/config --undefine DEBUG_INFO_SPLIT
+  scripts/config --undefine GDB_SCRIPTS
+  scripts/config --set-val DEBUG_INFO_DWARF5 n
+  scripts/config --set-val DEBUG_INFO_NONE y
+}
+
+function update_config {
+  make olddefconfig
+}
+
+function check_config_diff {
+  local version=$1
+
+  local config_backup=$v_packages_destination/config-$version
+
+  # Assume that the error status 2 (real error) can't happen, because the file exists.
+  #
+  if ! diff "$config_backup" .config > /dev/null; then
+    meld "$config_backup" .config
+  fi
+}
+
+function export_config {
+  local version=$1
+
+  local config_backup=$v_packages_destination/config-$version
+
+  cp .config "$config_backup"
+}
+
+function compile_kernel {
+  make -j "$(nproc)" bindeb-pkg LOCALVERSION=-"$v_local_version"
+}
+
+function move_packages_and_cleanup {
+  mv ../*.deb "$v_packages_destination"/
+  rm ../*.{changes,buildinfo}
+}
+
+function install_kernel_packages {
+  local latest_version=$1
+
+  sudo dpkg -i "$v_packages_destination"/linux-*-"$latest_version"-*.deb
+}
+
+function main {
+  if [[ -n $v_install ]]; then
+    cache_sudo
+  fi
+
+  if [[ -n $v_repo_path ]]; then
+    cd "$v_repo_path"
+  fi
+
+  local current_version latest_version
+  if [[ -n $v_new_kernel_version ]]; then
+    current_version=$v_new_kernel_version
+    latest_version=$v_new_kernel_version
+    fetch_repo
+  else
+    latest_version=$(find_latest_version "$current_version")
+    fetch_repo
+    current_version=$(checked_find_current_version)
+
+    if [[ $current_version == "$latest_version" ]]; then
+      echo "No new version! Current:$current_version, latest:$latest_version"
+      exit 0
+    fi
+  fi
+
+  create_and_switch_branch "$latest_version"
+
+  import_config "$current_version"
+
+  if [[ -n $v_new_kernel_version ]]; then
+    patch_config
+  else
+    update_config
+    check_config_diff "$current_version"
+  fi
+
+  export_config "$latest_version"
+
+  compile_kernel
+
+  move_packages_and_cleanup
+
+  if [[ -n $v_install ]]; then
+    install_kernel_packages "$latest_version"
+  fi
+}
+
+decode_cmdline_args "$@"
+main
