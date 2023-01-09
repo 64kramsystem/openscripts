@@ -202,9 +202,9 @@ function main {
     latest_version=$v_new_kernel_version
     fetch_repo
   else
-    latest_version=$(find_latest_version "$current_version")
-    fetch_repo
     current_version=$(checked_find_current_version)
+    fetch_repo
+    latest_version=$(find_latest_version "$current_version")
 
     if [[ $current_version == "$latest_version" ]]; then
       echo "No new version! Current:$current_version, latest:$latest_version"
