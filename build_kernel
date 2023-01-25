@@ -176,6 +176,12 @@ function compile_kernel {
   make -j "$(nproc)" bindeb-pkg LOCALVERSION=-"$v_local_version"
 }
 
+function remove_destination_old_version_files {
+  local version=$1
+
+  rm "$v_packages_destination"/{config-"$version",linux-*-"$version"-*.deb}
+}
+
 function move_packages_and_cleanup {
   mv ../*.deb "$v_packages_destination"/
   rm ../*.{changes,buildinfo}
@@ -226,6 +232,10 @@ function main {
   export_config "$latest_version"
 
   compile_kernel
+
+  if [[ -z $v_new_kernel_version ]]; then
+    remove_destination_old_version_files "$current_version"
+  fi
 
   move_packages_and_cleanup
 
