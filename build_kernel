@@ -164,16 +164,22 @@ function check_config_diff {
   fi
 }
 
+function compile_kernel {
+  make -j "$(nproc)" bindeb-pkg LOCALVERSION=-"$v_local_version"
+}
+
+function remove_destination_old_version_files {
+  local version=$1
+
+  rm "$v_packages_destination"/{config-"$version",linux-*-"$version"-*.deb}
+}
+
 function export_config {
   local version=$1
 
   local config_backup=$v_packages_destination/config-$version
 
   cp .config "$config_backup"
-}
-
-function compile_kernel {
-  make -j "$(nproc)" bindeb-pkg LOCALVERSION=-"$v_local_version"
 }
 
 function move_packages_and_cleanup {
@@ -223,9 +229,13 @@ function main {
     check_config_diff "$current_version"
   fi
 
-  export_config "$latest_version"
-
   compile_kernel
+
+  if [[ -z $v_new_kernel_version ]]; then
+    remove_destination_old_version_files "$current_version"
+  fi
+
+  export_config "$latest_version"
 
   move_packages_and_cleanup
 
