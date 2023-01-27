@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_snap_binary=${DESNAPPED_SNAP_BINARY:-$(which snp)}
+c_help="Usage: $(basename "$0") [-h|--help] [-u|--invoking_user] snap_name
+
+- Start the snap services
+- Start specified snasp
+- Stop the snap services
+
+It's possible to specify the snap binary via \$DESNAPPED_SNAP_BINARY, for systems where it's overwritten.
+
+The parameter --invoking-user should not be manually passed (it's used when switching to sudo)."
+
+v_invoking_user=
+v_snap_name=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hu: --long help,user: --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -u|--user)
+        v_invoking_user=$2
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_snap_name=$1
+}
+
+function ensure_sudo {
+  if [[ $(id -u) -ne 0 ]]; then
+    pkexec env DISPLAY="$DISPLAY" XAUTHORITY="$XAUTHORITY" "$0" -u "$(whoami)" "$@"
+    exit $?
+  fi
+}
+
+function start_snapd_units {
+  systemctl start snapd
+}
+
+function start_snap {
+  sudo -u "$v_invoking_user" "$c_snap_binary" run "$v_snap_name"
+}
+
+function stop_snapd_units {
+  systemctl stop snapd{,.socket,.seeded,.snap-repair.timer}
+}
+
+decode_cmdline_args "$@"
+ensure_sudo "$@"
+start_snapd_units
+start_snap
+stop_snapd_units
