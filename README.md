@@ -41,6 +41,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `clean_kernel_packages`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
   - `clean_recents`: clean the recent used file entries whose basename matches the specified patterns
   - `connect_bt_device`: connects a BT device, working around the complete garbage that is Bluetooth, Bluez, and the BT Ubuntu support
+  - `desnapped`: starts the snap services, run the specified snap, and stops the snapd services
   - `downer`: download and automatically install packages/images from web pages
   - `download_ubuntu_packages`: downloads Ubuntu packages from the chosen distro; useful for people "manually backporting" packages (eg. `linux-firmware`)
   - `cpfloppy`: copy the content of multiple floppy images (IMG) to a specified dir
