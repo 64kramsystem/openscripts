@@ -29,6 +29,7 @@ class KernelVersion
     ([-a-z]+)
     $
   /x
+  KERNEL_REPOSITORY_ADDR = "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git"
 
   def initialize(raw, major, minor, patch, type, ongoing: nil, rc: nil)
     @raw = raw
@@ -86,6 +87,20 @@ class KernelVersion
     #
     raw_kernel_version = `uname -r`.rstrip
     parse_version(raw_kernel_version)
+  end
+
+  def self.find_latest
+    current_version = find_current.to_s[/^\d+\.\d+/]
+
+    kernel_branches = `git ls-remote --tags --refs #{KERNEL_REPOSITORY_ADDR.shellescape}`
+
+    exit $CHILD_STATUS.exitstatus if !$CHILD_STATUS
+
+    kernel_branches
+      .lines
+      .filter_map { |branch| $1 if branch =~ %r{\trefs/tags/v(#{Regexp.escape(current_version)}.+)} }
+      .sort_by { |version| Gem::Version.new(version) } # handles RCs (which have patch version = 0)!
+      .last
   end
 
   # version_str format: see class comment
