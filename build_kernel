@@ -177,7 +177,9 @@ function remove_destination_old_version_files {
   # - linux-image-6.1.9-sav_6.1.9-sav-4_amd64.deb
   # - linux-libc-dev_6.1.9-sav-4_amd64.deb
   #
-  rm "$v_packages_destination"/{config-"$version",linux-*_"$version"-*.deb}
+  # WATCH OUT! `-f` is required in case the old files have been removed.
+  #
+  rm -f "$v_packages_destination"/{config-"$version",linux-*_"$version"-*.deb}
 }
 
 function export_config {
