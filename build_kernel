@@ -15,7 +15,7 @@ Builds a kernel from the source code:
   - if --new-kernel-version is specified, it's used as current version
 - copies the corresponding confiuration from the <packages_destination>
 - updates the configuration
-  - if --new-kernel-version is specified, assume it's Ubuntu-based, and patches to make it compile
+- patches the configuration to make it compile (assumes it's Ubuntu)
 - copies the configuration to <packages_destination>
 - compiles and moves the packagtes to <packages_destination>
 - if --install is specified, it installs the packages
@@ -230,9 +230,12 @@ function main {
 
   import_config "$current_version"
 
-  if [[ -n $v_new_kernel_version ]]; then
-    patch_config
-  else
+  # Always patch for simplicity, so if we want to replace the config for a version with an existing
+  # configuration, we don't need to manually patch it.
+  #
+  patch_config
+
+  if [[ -z $v_new_kernel_version ]]; then
     update_config
     check_config_diff "$current_version"
   fi
