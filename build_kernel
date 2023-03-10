@@ -13,11 +13,11 @@ Builds a kernel from the source code:
 
 - fetches the repository and finds the latest patch version (for the current branch version)
   - if --new-kernel-version is specified, it's used as current version
-- copies the corresponding confiuration from the <packages_destination>
+- copies the corresponding configuration from the <packages_destination>
 - updates the configuration
   - if --new-kernel-version is specified, assume it's Ubuntu-based, and patches to make it compile
 - copies the configuration to <packages_destination>
-- compiles and moves the packagtes to <packages_destination>
+- compiles and moves the packages to <packages_destination>
 - if --install is specified, it installs the packages
 
 Params:
