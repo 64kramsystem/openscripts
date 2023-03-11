@@ -33,15 +33,27 @@ function decode_cmdline_args {
   fi
 }
 
+function stop_gui {
+  pkill -f 'maestral_(gui|qt)' || true
+}
+
 function do_upgrade {
   pip3 install --upgrade maestral[gui]
 }
 
-function restart_all {
-  maestral stop # stops all
-  maestral gui & # also starts the service
+function start_gui {
+  maestral gui &
 }
 
+# Processes sample:
+#
+#   9324 /usr/bin/python3 -m maestral_qt -c maestral                                                     # started gui
+#   75473 /usr/bin/python3 /home/saverio/.local/bin/maestral gui                                         # alternative started gui
+#   75491 /usr/bin/python3 -c import maestral.daemon; maestral.daemon.start_maestral_daemon("maestral")  # daemon
+
 decode_cmdline_args "$@"
+# Stop only the GUI; the main service needs to be running.
+stop_gui
 do_upgrade
-restart_all
+# The upgrade is confusing; if a GUI is running, another will be started; if it isn't, none will.
+start_gui
