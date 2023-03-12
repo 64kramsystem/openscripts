@@ -23,7 +23,11 @@ Params:
 
 - '--repo-path' defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - '--local-version' is the kernel local version (name suffix), it defaults to (\$BUILD_KERNEL_LOCAL_VERSION or '$c_default_local_version'); the minus is automatically added
-- 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable."
+- 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable.
+
+Notes:
+
+- RC versions are not supported (anymore)"
 
 v_kernel_version=
 v_install=              # boolean; false=blank; true=anything else
@@ -101,7 +105,7 @@ function fetch_repo {
   git fetch
 }
 
-# Return format: `M.m.p` or `M.m-rcNN`.
+# Return format: `M.m.p`.
 #
 function find_latest_kernel_version {
   local full_version=$1
@@ -109,17 +113,11 @@ function find_latest_kernel_version {
   local short_version=${full_version%.*}
   local escaped_short_version=${short_version//./\\.}
 
-  local rc_versions
-  # There has been one case of double-digit RC! Better safe than sorry regardless.
-  rc_versions=$(git tag | grep -P "^v$escaped_short_version.+rc\d+$")
-
-  local release_versions
-  release_versions=$(git tag | grep -P "^v$escaped_short_version" | grep -v rc || true)
-
-  (
-    echo -n "$rc_versions" | sort -V
-    echo -n "$release_versions" | sort -V
-  ) | tail -n 1 | perl -pe 's/^v//'
+  git tag |
+    grep -P "^v$escaped_short_version" |
+    sort -V |
+    tail -n 1 |
+    perl -pe 's/^v//'
 }
 
 function create_and_switch_branch {
@@ -211,7 +209,7 @@ function main {
     cd "$v_repo_path"
   fi
 
-  # Format: `M.m.p`; `latest_kernel_version` can also be `M.m-rcNN`.
+  # Format: `M.m.p`.
   #
   local current_kernel_version latest_kernel_version
 
