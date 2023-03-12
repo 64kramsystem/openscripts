@@ -11,8 +11,7 @@ c_help="Usage: $(basename "$0") [-h|--help] [-n|--new-kernel-version <version>] 
 
 Builds a kernel from the source code:
 
-- fetches the repository and finds the latest patch version (for the current branch version)
-  - if --new-kernel-version is specified, it's used as current version
+- fetches the repository and finds the latest patch version (for the current branch version, or the specified one)
 - copies the corresponding configuration from the <packages_destination>
 - updates the configuration
 - patches the configuration to make it compile (assumes it's Ubuntu)
@@ -25,7 +24,6 @@ Params:
 - '--repo-path' defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - '--local-version' is the kernel local version (name suffix), it defaults to (\$BUILD_KERNEL_LOCAL_VERSION or '$c_default_local_version'); the minus is automatically added
 - 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable."
-
 
 v_new_kernel_version=
 v_install=              # boolean; false=blank; true=anything else
@@ -103,8 +101,11 @@ function fetch_repo {
   git fetch
 }
 
+# Return format: `M.m.p` or `M.m-rcNN`.
+#
 function find_latest_version {
   local full_version=$1
+
   local short_version=${full_version%.*}
   local escaped_short_version=${short_version//./\\.}
 
@@ -210,7 +211,10 @@ function main {
     cd "$v_repo_path"
   fi
 
+  # Format: `M.m.p`; `latest_version` can also be `M.m-rcNN`.
+  #
   local current_version latest_version
+
   if [[ -n $v_new_kernel_version ]]; then
     current_version=$v_new_kernel_version
     latest_version=$v_new_kernel_version
