@@ -7,13 +7,12 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_default_local_version=custom
-c_help="Usage: $(basename "$0") [-h|--help] [-n|--new-kernel-version <version>] [-i|--install] [-r|--repo-path <path>] [-l|--local-version <name>] [packages_destination]
+c_help="Usage: $(basename "$0") [-h|--help] [-v|--kernel-version <version>] [-i|--install] [-r|--repo-path <path>] [-l|--local-version <name>] [packages_destination]
 
 Builds a kernel from the source code:
 
-- fetches the repository and finds the latest patch version (for the current branch version)
-  - if --new-kernel-version is specified, it's used as current version
-- copies the corresponding configuration from the <packages_destination>
+- fetches the repository and finds the latest patch version (for the current branch version, or the specified one)
+- copies the latest version of the configuration for the current kernel, in <packages_destination>
 - updates the configuration
 - patches the configuration to make it compile (assumes it's Ubuntu)
 - copies the configuration to <packages_destination>
@@ -24,10 +23,13 @@ Params:
 
 - '--repo-path' defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - '--local-version' is the kernel local version (name suffix), it defaults to (\$BUILD_KERNEL_LOCAL_VERSION or '$c_default_local_version'); the minus is automatically added
-- 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable."
+- 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable.
 
+Notes:
 
-v_new_kernel_version=
+- RC versions are not supported (anymore)"
+
+v_kernel_version=
 v_install=              # boolean; false=blank; true=anything else
 v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
@@ -35,7 +37,7 @@ v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hn:ir:l: --long help,new-kernel-version:,install,repo-path:,local-version: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:ir:l: --long help,kernel-version:,install,repo-path:,local-version: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -44,8 +46,8 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
-      -n|--new-kernel-version)
-        v_new_kernel_version=$2
+      -v|--kernel-version)
+        v_kernel_version=$2
         shift 2 ;;
       -i|--install)
         v_install=1
@@ -87,7 +89,7 @@ function cache_sudo {
 
 # Return format: M.m.p
 #
-function checked_find_current_version {
+function check_find_current_branch_kernel_version {
   local current_branch
   current_branch=$(git rev-parse --abbrev-ref HEAD | perl -pe "chomp if eof")
 
@@ -103,36 +105,77 @@ function fetch_repo {
   git fetch
 }
 
-function find_latest_version {
-  local full_version=$1
-  local short_version=${full_version%.*}
+# Return format: `M.m.p`.
+#
+function find_latest_kernel_version {
+  local raw_version=$1
+
+  # Accepts full/short versions.
+  #
+  local short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
   local escaped_short_version=${short_version//./\\.}
 
-  local rc_versions
-  # There has been one case of double-digit RC! Better safe than sorry regardless.
-  rc_versions=$(git tag | grep -P "^v$escaped_short_version.+rc\d+$")
-
-  local release_versions
-  release_versions=$(git tag | grep -P "^v$escaped_short_version" | grep -v rc || true)
-
-  (
-    echo -n "$rc_versions" | sort -V
-    echo -n "$release_versions" | sort -V
-  ) | tail -n 1 | perl -pe 's/^v//'
+  git tag |
+    grep -P "^v$escaped_short_version" |
+    sort -V |
+    tail -n 1 |
+    perl -pe 's/^v//'
 }
 
-function create_and_switch_branch {
-  local latest_version=$1
+# Assumes that there are no multiple builds for the same version.
+#
+# Return format: `M.m.p`.
+#
+function find_latest_packaged_version {
+  # Accepts full/short versions.
+  #
+  local raw_version=$1
 
-  git checkout -b {b,}v"$latest_version"
+  local short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+
+  # Use the image package for reference.
+  #
+  find "$v_packages_destination" -regextype egrep -regex ".*/linux-image-$short_version.[[:digit:]]+-.+" -printf "%P\n" |
+    sort -V |
+    tail -n 1 |
+    perl -ne 'print /linux-image-(.*?)-/' ||
+    true
 }
 
-function import_config {
-  local version=$1
+function create_if_required_and_switch_branch {
+  local latest_kernel_version=$1
 
-  local config_backup=$v_packages_destination/config-$version
+  local branch_working_copy=bv"$latest_kernel_version"
 
-  cp "$config_backup" .config
+  if git rev-parse --verify "$branch_working_copy" 2> /dev/null; then
+    git checkout "$branch_working_copy"
+  else
+    git checkout -b "$branch_working_copy" v"$latest_kernel_version"
+  fi
+}
+
+function import_latest_config {
+  # Accepts full/short versions.
+  #
+  local raw_version=$1
+
+  local short_version
+  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+
+  # The match need to be precise; ignore other configurations (with suffixes) that may be present.
+
+  local latest_config
+  latest_config_file=$(
+    find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version.[[:digit:]]+" |
+      sort -V |
+      tail -n 1
+  )
+
+  cp "$latest_config_file" .config
+}
+
+function backup_config {
+  cp .config{,.bak}
 }
 
 function patch_config {
@@ -153,14 +196,10 @@ function update_config {
 }
 
 function check_config_diff {
-  local version=$1
-
-  local config_backup=$v_packages_destination/config-$version
-
   # Assume that the error status 2 (real error) can't happen, because the file exists.
   #
-  if ! diff "$config_backup" .config > /dev/null; then
-    meld "$config_backup" .config
+  if ! diff .config{.bak,} > /dev/null; then
+    meld .config{.bak,}
   fi
 }
 
@@ -196,9 +235,9 @@ function move_packages_and_cleanup {
 }
 
 function install_kernel_packages {
-  local latest_version=$1
+  local latest_kernel_version=$1
 
-  sudo dpkg -i "$v_packages_destination"/linux-*-"$latest_version"-*.deb
+  sudo dpkg -i "$v_packages_destination"/linux-*-"$latest_kernel_version"-*.deb
 }
 
 function main {
@@ -210,48 +249,50 @@ function main {
     cd "$v_repo_path"
   fi
 
-  local current_version latest_version
-  if [[ -n $v_new_kernel_version ]]; then
-    current_version=$v_new_kernel_version
-    latest_version=$v_new_kernel_version
-    fetch_repo
-  else
-    current_version=$(checked_find_current_version)
-    fetch_repo
-    latest_version=$(find_latest_version "$current_version")
+  # Format: `M.m` or `M.m.p`.
+  #
+  local current_kernel_version=${v_kernel_version:-"$(checked_find_current_kernel_version)"}
 
-    if [[ $current_version == "$latest_version" ]]; then
-      echo "No new version! Current:$current_version, latest:$latest_version"
-      exit 0
-    fi
+  fetch_repo
+
+  # Format: `M.m.p`.
+  #
+  local latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+
+  # Format: `M.m.p`.
+  #
+  local latest_packaged_version
+  latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
+
+  if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
+    echo "No new version! Latest packaged/available: $latest_kernel_version"
+    exit 0
   fi
 
-  create_and_switch_branch "$latest_version"
+  create_if_required_and_switch_branch "$latest_kernel_version"
 
-  import_config "$current_version"
+  import_latest_config "$current_kernel_version"
+
+  backup_config
 
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
   #
   patch_config
 
-  if [[ -z $v_new_kernel_version ]]; then
-    update_config
-    check_config_diff "$current_version"
-  fi
+  update_config
+  check_config_diff
 
   compile_kernel
 
-  if [[ -z $v_new_kernel_version ]]; then
-    remove_destination_old_version_files "$current_version"
-  fi
+  remove_destination_old_version_files "$current_kernel_version"
 
-  export_config "$latest_version"
+  export_config "$latest_kernel_version"
 
   move_packages_and_cleanup
 
   if [[ -n $v_install ]]; then
-    install_kernel_packages "$latest_version"
+    install_kernel_packages "$latest_kernel_version"
   fi
 }
 
