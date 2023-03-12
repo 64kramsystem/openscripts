@@ -18,6 +18,7 @@ Options:
                                     or '$c_default_local_version'); the minus is automatically added
 - [-i|--install]
 - [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
+- [-d|--display-config-diff]
 
 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable.
 
@@ -40,10 +41,11 @@ v_install=              # boolean; false=blank; true=anything else
 v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
+v_display_config_diff=  # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:ir:l: --long help,kernel-version:,install,repo-path:,local-version: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:ir:l:d --long help,kernel-version:,install,repo-path:,local-version:,display-config-diff --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -64,6 +66,9 @@ function decode_cmdline_args {
       -l|--local-version)
         v_local_version=$2
         shift 2 ;;
+      -d|--display-config-diff)
+        v_display_config_diff=1
+        shift ;;
       --)
         shift
         break ;;
@@ -288,7 +293,9 @@ function main {
 
   update_config
 
-  display_config_diff
+  if [[ -n $v_display_config_diff ]]; then
+    display_config_diff
+  fi
 
   compile_kernel
 
