@@ -201,7 +201,7 @@ function update_config {
   make olddefconfig
 }
 
-function check_config_diff {
+function display_config_diff {
   # Assume that the error status 2 (real error) can't happen, because the file exists.
   #
   if ! diff .config{.bak,} > /dev/null; then
@@ -287,7 +287,8 @@ function main {
   patch_config
 
   update_config
-  check_config_diff
+
+  display_config_diff
 
   compile_kernel
 
