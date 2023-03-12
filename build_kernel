@@ -7,9 +7,22 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_default_local_version=custom
-c_help="Usage: $(basename "$0") [-h|--help] [-v|--kernel-version <version>] [-i|--install] [-r|--repo-path <path>] [-l|--local-version <name>] [packages_destination]
+c_help="Usage: $(basename "$0") [-h|--help] <options...> [packages_destination]
 
-Builds a kernel from the source code:
+Builds a kernel from the source code.
+
+Options:
+
+- [-v|--kernel-version <version>]
+- [-l|--local-version <name>]     : kernel local version (name suffix), defaults to (\$BUILD_KERNEL_LOCAL_VERSION
+                                    or '$c_default_local_version'); the minus is automatically added
+- [-i|--install]
+- [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
+- [-d|--display-config-diff]
+
+'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable.
+
+Workflow:
 
 - fetches the repository and finds the latest patch version (for the current branch version, or the specified one)
 - copies the latest version of the configuration for the current kernel, in <packages_destination>
@@ -18,12 +31,6 @@ Builds a kernel from the source code:
 - copies the configuration to <packages_destination>
 - compiles and moves the packages to <packages_destination>
 - if --install is specified, it installs the packages
-
-Params:
-
-- '--repo-path' defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
-- '--local-version' is the kernel local version (name suffix), it defaults to (\$BUILD_KERNEL_LOCAL_VERSION or '$c_default_local_version'); the minus is automatically added
-- 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable.
 
 Notes:
 
@@ -34,10 +41,11 @@ v_install=              # boolean; false=blank; true=anything else
 v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
+v_display_config_diff=  # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:ir:l: --long help,kernel-version:,install,repo-path:,local-version: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:ir:l:d --long help,kernel-version:,install,repo-path:,local-version:,display-config-diff --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -58,6 +66,9 @@ function decode_cmdline_args {
       -l|--local-version)
         v_local_version=$2
         shift 2 ;;
+      -d|--display-config-diff)
+        v_display_config_diff=1
+        shift ;;
       --)
         shift
         break ;;
@@ -195,7 +206,7 @@ function update_config {
   make olddefconfig
 }
 
-function check_config_diff {
+function display_config_diff {
   # Assume that the error status 2 (real error) can't happen, because the file exists.
   #
   if ! diff .config{.bak,} > /dev/null; then
@@ -281,7 +292,10 @@ function main {
   patch_config
 
   update_config
-  check_config_diff
+
+  if [[ -n $v_display_config_diff ]]; then
+    display_config_diff
+  fi
 
   compile_kernel
 
