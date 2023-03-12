@@ -7,7 +7,7 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_default_local_version=custom
-c_help="Usage: $(basename "$0") [-h|--help] [-n|--new-kernel-version <version>] [-i|--install] [-r|--repo-path <path>] [-l|--local-version <name>] [packages_destination]
+c_help="Usage: $(basename "$0") [-h|--help] [-v|--kernel-version <version>] [-i|--install] [-r|--repo-path <path>] [-l|--local-version <name>] [packages_destination]
 
 Builds a kernel from the source code:
 
@@ -25,7 +25,7 @@ Params:
 - '--local-version' is the kernel local version (name suffix), it defaults to (\$BUILD_KERNEL_LOCAL_VERSION or '$c_default_local_version'); the minus is automatically added
 - 'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable."
 
-v_new_kernel_version=
+v_kernel_version=
 v_install=              # boolean; false=blank; true=anything else
 v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
@@ -33,7 +33,7 @@ v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hn:ir:l: --long help,new-kernel-version:,install,repo-path:,local-version: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:ir:l: --long help,kernel-version:,install,repo-path:,local-version: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -42,8 +42,8 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
-      -n|--new-kernel-version)
-        v_new_kernel_version=$2
+      -v|--kernel-version)
+        v_kernel_version=$2
         shift 2 ;;
       -i|--install)
         v_install=1
@@ -85,7 +85,7 @@ function cache_sudo {
 
 # Return format: M.m.p
 #
-function checked_find_current_version {
+function check_find_current_branch_kernel_version {
   local current_branch
   current_branch=$(git rev-parse --abbrev-ref HEAD | perl -pe "chomp if eof")
 
@@ -103,7 +103,7 @@ function fetch_repo {
 
 # Return format: `M.m.p` or `M.m-rcNN`.
 #
-function find_latest_version {
+function find_latest_kernel_version {
   local full_version=$1
 
   local short_version=${full_version%.*}
@@ -123,9 +123,9 @@ function find_latest_version {
 }
 
 function create_and_switch_branch {
-  local latest_version=$1
+  local latest_kernel_version=$1
 
-  git checkout -b {b,}v"$latest_version"
+  git checkout -b {b,}v"$latest_kernel_version"
 }
 
 function import_config {
@@ -197,9 +197,9 @@ function move_packages_and_cleanup {
 }
 
 function install_kernel_packages {
-  local latest_version=$1
+  local latest_kernel_version=$1
 
-  sudo dpkg -i "$v_packages_destination"/linux-*-"$latest_version"-*.deb
+  sudo dpkg -i "$v_packages_destination"/linux-*-"$latest_kernel_version"-*.deb
 }
 
 function main {
@@ -211,51 +211,51 @@ function main {
     cd "$v_repo_path"
   fi
 
-  # Format: `M.m.p`; `latest_version` can also be `M.m-rcNN`.
+  # Format: `M.m.p`; `latest_kernel_version` can also be `M.m-rcNN`.
   #
-  local current_version latest_version
+  local current_kernel_version latest_kernel_version
 
-  if [[ -n $v_new_kernel_version ]]; then
-    current_version=$v_new_kernel_version
-    latest_version=$v_new_kernel_version
+  if [[ -n $v_kernel_version ]]; then
+    current_kernel_version=$v_kernel_version
+    latest_kernel_version=$v_kernel_version
     fetch_repo
   else
-    current_version=$(checked_find_current_version)
+    current_kernel_version=$(check_find_current_branch_kernel_version)
     fetch_repo
-    latest_version=$(find_latest_version "$current_version")
+    latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
-    if [[ $current_version == "$latest_version" ]]; then
-      echo "No new version! Current:$current_version, latest:$latest_version"
+    if [[ $current_kernel_version == "$latest_kernel_version" ]]; then
+      echo "No new version! Current:$current_kernel_version, latest:$latest_kernel_version"
       exit 0
     fi
   fi
 
-  create_and_switch_branch "$latest_version"
+  create_and_switch_branch "$latest_kernel_version"
 
-  import_config "$current_version"
+  import_config "$current_kernel_version"
 
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
   #
   patch_config
 
-  if [[ -z $v_new_kernel_version ]]; then
+  if [[ -z $v_kernel_version ]]; then
     update_config
-    check_config_diff "$current_version"
+    check_config_diff "$current_kernel_version"
   fi
 
   compile_kernel
 
-  if [[ -z $v_new_kernel_version ]]; then
-    remove_destination_old_version_files "$current_version"
+  if [[ -z $v_kernel_version ]]; then
+    remove_destination_old_version_files "$current_kernel_version"
   fi
 
-  export_config "$latest_version"
+  export_config "$latest_kernel_version"
 
   move_packages_and_cleanup
 
   if [[ -n $v_install ]]; then
-    install_kernel_packages "$latest_version"
+    install_kernel_packages "$latest_kernel_version"
   fi
 }
 
