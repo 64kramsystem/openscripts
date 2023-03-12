@@ -120,6 +120,26 @@ function find_latest_kernel_version {
     perl -pe 's/^v//'
 }
 
+# Assumes that there are no multiple builds for the same version.
+#
+# Return format: `M.m.p`.
+#
+function find_latest_packaged_version {
+  # Accepts full/short versions.
+  #
+  local raw_version=$1
+
+  local short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+
+  # Use the image package for reference.
+  #
+  find "$v_packages_destination" -regextype egrep -regex ".*/linux-image-$short_version.[[:digit:]]+-.+" -printf "%P\n" |
+    sort -V |
+    tail -n 1 |
+    perl -ne 'print /linux-image-(.*?)-/' ||
+    true
+}
+
 function create_and_switch_branch {
   local latest_kernel_version=$1
 
@@ -233,9 +253,11 @@ function main {
     current_kernel_version=$(checked_find_current_branch_kernel_version)
     fetch_repo
     latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+    local latest_packaged_version
+    latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
 
-    if [[ $current_kernel_version == "$latest_kernel_version" ]]; then
-      echo "No new version! Current:$current_kernel_version, latest:$latest_kernel_version"
+    if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
+      echo "No new version! Latest packaged/availble: $latest_kernel_version"
       exit 0
     fi
   fi
