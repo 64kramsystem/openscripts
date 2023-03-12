@@ -12,7 +12,7 @@ c_help="Usage: $(basename "$0") [-h|--help] [-v|--kernel-version <version>] [-i|
 Builds a kernel from the source code:
 
 - fetches the repository and finds the latest patch version (for the current branch version, or the specified one)
-- copies the corresponding configuration from the <packages_destination>
+- copies the latest version of the configuration for the current kernel, in <packages_destination>
 - updates the configuration
 - patches the configuration to make it compile (assumes it's Ubuntu)
 - copies the configuration to <packages_destination>
@@ -126,12 +126,24 @@ function create_and_switch_branch {
   git checkout -b {b,}v"$latest_kernel_version"
 }
 
-function import_config {
-  local version=$1
+function import_latest_config {
+  # Accepts full/short versions.
+  #
+  local raw_version=$1
 
-  local config_backup=$v_packages_destination/config-$version
+  local short_version
+  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
 
-  cp "$config_backup" .config
+  # The match need to be precise; ignore other configurations (with suffixes) that may be present.
+
+  local latest_config
+  latest_config_file=$(
+    find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version.[[:digit:]]+" |
+      sort -V |
+      tail -n 1
+  )
+
+  cp "$latest_config_file" .config
 }
 
 function backup_config {
@@ -230,7 +242,7 @@ function main {
 
   create_and_switch_branch "$latest_kernel_version"
 
-  import_config "$current_kernel_version"
+  import_latest_config "$current_kernel_version"
 
   backup_config
 
