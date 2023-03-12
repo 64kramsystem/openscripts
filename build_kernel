@@ -136,6 +136,10 @@ function import_config {
   cp "$config_backup" .config
 }
 
+function backup_config {
+  cp .config{,.bak}
+}
+
 function patch_config {
   scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
   scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
@@ -154,14 +158,10 @@ function update_config {
 }
 
 function check_config_diff {
-  local version=$1
-
-  local config_backup=$v_packages_destination/config-$version
-
   # Assume that the error status 2 (real error) can't happen, because the file exists.
   #
-  if ! diff "$config_backup" .config > /dev/null; then
-    meld "$config_backup" .config
+  if ! diff .config{.bak,} > /dev/null; then
+    meld .config{.bak,}
   fi
 }
 
@@ -234,6 +234,8 @@ function main {
 
   import_config "$current_kernel_version"
 
+  backup_config
+
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
   #
@@ -241,7 +243,7 @@ function main {
 
   if [[ -z $v_kernel_version ]]; then
     update_config
-    check_config_diff "$current_kernel_version"
+    check_config_diff
   fi
 
   compile_kernel
