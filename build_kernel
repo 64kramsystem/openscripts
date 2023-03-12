@@ -249,25 +249,24 @@ function main {
     cd "$v_repo_path"
   fi
 
+  # Format: `M.m` or `M.m.p`.
+  #
+  local current_kernel_version=${v_kernel_version:-"$(checked_find_current_branch_kernel_version)"}
+
+  fetch_repo
+
   # Format: `M.m.p`.
   #
-  local current_kernel_version latest_kernel_version
+  local latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
-  if [[ -n $v_kernel_version ]]; then
-    current_kernel_version=$v_kernel_version
-    latest_kernel_version=$v_kernel_version
-    fetch_repo
-  else
-    current_kernel_version=$(checked_find_current_branch_kernel_version)
-    fetch_repo
-    latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
-    local latest_packaged_version
-    latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
+  # Format: `M.m.p`.
+  #
+  local latest_packaged_version
+  latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
 
-    if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
-      echo "No new version! Latest packaged/availble: $latest_kernel_version"
-      exit 0
-    fi
+  if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
+    echo "No new version! Latest packaged/available: $latest_kernel_version"
+    exit 0
   fi
 
   create_if_required_and_switch_branch "$latest_kernel_version"
@@ -281,16 +280,12 @@ function main {
   #
   patch_config
 
-  if [[ -z $v_kernel_version ]]; then
-    update_config
-    check_config_diff
-  fi
+  update_config
+  check_config_diff
 
   compile_kernel
 
-  if [[ -z $v_kernel_version ]]; then
-    remove_destination_old_version_files "$current_kernel_version"
-  fi
+  remove_destination_old_version_files "$current_kernel_version"
 
   export_config "$latest_kernel_version"
 
