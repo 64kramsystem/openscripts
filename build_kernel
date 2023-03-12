@@ -140,10 +140,16 @@ function find_latest_packaged_version {
     true
 }
 
-function create_and_switch_branch {
+function create_if_required_and_switch_branch {
   local latest_kernel_version=$1
 
-  git checkout -b {b,}v"$latest_kernel_version"
+  local branch_working_copy=bv"$latest_kernel_version"
+
+  if git rev-parse --verify "$branch_working_copy" 2> /dev/null; then
+    git checkout "$branch_working_copy"
+  else
+    git checkout -b "$branch_working_copy" v"$latest_kernel_version"
+  fi
 }
 
 function import_latest_config {
@@ -262,7 +268,7 @@ function main {
     fi
   fi
 
-  create_and_switch_branch "$latest_kernel_version"
+  create_if_required_and_switch_branch "$latest_kernel_version"
 
   import_latest_config "$current_kernel_version"
 
