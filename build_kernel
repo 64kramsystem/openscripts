@@ -108,9 +108,11 @@ function fetch_repo {
 # Return format: `M.m.p`.
 #
 function find_latest_kernel_version {
-  local full_version=$1
+  local raw_version=$1
 
-  local short_version=${full_version%.*}
+  # Accepts full/short versions.
+  #
+  local short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
   local escaped_short_version=${short_version//./\\.}
 
   git tag |
