@@ -158,10 +158,13 @@ function create_if_required_and_switch_branch {
 
   local branch_working_copy=bv"$latest_kernel_version"
 
+  # When switching across branches for different non-patch versions, some files may be end up changed,
+  # which blocks the checkout; in order to solve this, we do `--force`d checkout.
+  #
   if git rev-parse --verify "$branch_working_copy" 2> /dev/null; then
-    git checkout "$branch_working_copy"
+    git checkout --force "$branch_working_copy"
   else
-    git checkout -b "$branch_working_copy" v"$latest_kernel_version"
+    git checkout -b "$branch_working_copy" --force v"$latest_kernel_version"
   fi
 }
 
@@ -219,7 +222,17 @@ function compile_kernel {
 }
 
 function remove_destination_old_version_files {
-  local version=$1
+  local raw_version=$1
+
+  local short_version
+  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+
+  # Note that at least one configuration is necessarily present, but not the packages.
+
+  # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
+  # e.g. reference/backup.
+  #
+  find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version.[[:digit:]]+" -exec rm {} \;
 
   # The package names are in the format:
   #
@@ -227,9 +240,7 @@ function remove_destination_old_version_files {
   # - linux-image-6.1.9-sav_6.1.9-sav-4_amd64.deb
   # - linux-libc-dev_6.1.9-sav-4_amd64.deb
   #
-  # WATCH OUT! `-f` is required in case the old files have been removed.
-  #
-  rm -f "$v_packages_destination"/{config-"$version",linux-*_"$version"-*.deb}
+  find "$v_packages_destination" -regextype egrep -regex ".*/linux.+[-_]$short_version\..+\.deb" -exec rm {} \;
 }
 
 function export_config {
