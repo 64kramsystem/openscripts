@@ -158,10 +158,13 @@ function create_if_required_and_switch_branch {
 
   local branch_working_copy=bv"$latest_kernel_version"
 
+  # When switching across branches for different non-patch versions, some files may be end up changed,
+  # which blocks the checkout; in order to solve this, we do `--force`d checkout.
+  #
   if git rev-parse --verify "$branch_working_copy" 2> /dev/null; then
-    git checkout "$branch_working_copy"
+    git checkout --force "$branch_working_copy"
   else
-    git checkout -b "$branch_working_copy" v"$latest_kernel_version"
+    git checkout -b "$branch_working_copy" --force v"$latest_kernel_version"
   fi
 }
 
