@@ -123,7 +123,8 @@ function find_latest_kernel_version {
 
   # Accepts full/short versions.
   #
-  local short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+  local short_version
+  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
   local escaped_short_version=${short_version//./\\.}
 
   git tag |
@@ -142,7 +143,8 @@ function find_latest_packaged_version {
   #
   local raw_version=$1
 
-  local short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+  local short_version
+  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
 
   # Use the image package for reference.
   #
@@ -178,7 +180,7 @@ function import_latest_config {
 
   # The match need to be precise; ignore other configurations (with suffixes) that may be present.
 
-  local latest_config
+  local latest_config_file
   latest_config_file=$(
     find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version.[[:digit:]]+" |
       sort -V |
@@ -279,7 +281,8 @@ function main {
 
   # Format: `M.m.p`.
   #
-  local latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+  local latest_kernel_version
+  latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
   # Format: `M.m.p`.
   #
