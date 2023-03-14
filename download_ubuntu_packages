@@ -11,6 +11,10 @@ require 'simple_scripting/argv'
 #
 DOWNLOAD_PAGE_MAX_RETRIES = 3
 
+# Specify this to download the current development version.
+#
+DEV_UBUNTU_VERSION_PARAM = 'devel'
+
 class DownloadWithProgress
   def execute(address, destination_file)
     uri = URI(address)
@@ -42,12 +46,22 @@ class DownloadUbuntuPackages
   PACKAGE_SERVER_ADDRESS = "http://de.archive.ubuntu.com"
   ALTERNATE_PACKAGE_SERVER_ADDRESS = "http://security.ubuntu.com"
   DEFAULT_ARCHITECTURE = "amd64"
+
+  # It seems that there is no programmatic way to find the releases.
+  # The below seem to be reasonably robust; the releases page doesn't include releases under development,
+  # so we gather the name from the daily build.
+  #
   RELEASES_ADDRESS = "https://releases.ubuntu.com"
+  DAILY_BUILD_ADDRESS = "https://cdimage.ubuntu.com/daily-live/current"
 
   def execute(packages, download_to: Dir.pwd, skip_ssl_verification: false, release: nil, address_only: false)
     ssl_verify_mode = skip_ssl_verification ? OpenSSL::SSL::VERIFY_NONE : OpenSSL::SSL::VERIFY_PEER
 
-    release ||= find_latest_release(ssl_verify_mode)
+    if release.nil?
+      release = find_latest_release(ssl_verify_mode)
+    elsif release == DEV_UBUNTU_VERSION_PARAM
+      release = find_latest_dev_release(ssl_verify_mode)
+    end
 
     packages.each do |package|
       package_download_page = find_and_open_package_download_page(release, package, ssl_verify_mode)
@@ -85,6 +99,16 @@ class DownloadUbuntuPackages
       .last
       &.last
       &.downcase || raise("Release not found!")
+  end
+
+  def find_latest_dev_release(ssl_verify_mode)
+    images_page = URI.open(DAILY_BUILD_ADDRESS, ssl_verify_mode: ssl_verify_mode).read
+
+    # Sample:
+    #
+    #   <a href="lunar-desktop-amd64.iso">64-bit PC (AMD64) desktop image</a>
+    #
+    images_page[/"(\w+)-desktop-amd64\.iso"/, 1] || raise("Development release not found!")
   end
 
   # Tries the default architecture first; if not found, tries the `all`.
@@ -154,7 +178,8 @@ The '--no-ssl-verification' is required for a current, unclear issue on Jammy, w
   options = SimpleScripting::Argv.decode(
     ['-d', '--download-to DIRECTORY', "Download directory; defaults to current path."],
     ['-s', '--skip-ssl-verification', "Disable SSL verification; see help"],
-    ['-r', '--release RELEASE',       "Download for the given Ubuntu release; if not specified, the latest version is set"],
+    ['-r', '--release RELEASE',       "Download for the given Ubuntu release; if not specified, the latest release version is set; "\
+                                      "use '#{DEV_UBUNTU_VERSION_PARAM}' to download the development version"],
     ['-a', '--address-only',          "Print the package download address, without actually downloading it"],
     '*packages',
     long_help: long_help
