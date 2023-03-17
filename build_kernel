@@ -100,16 +100,8 @@ function cache_sudo {
 
 # Return format: M.m.p
 #
-function checked_find_current_branch_kernel_version {
-  local current_branch
-  current_branch=$(git rev-parse --abbrev-ref HEAD | perl -pe "chomp if eof")
-
-  if [[ ! $current_branch =~ ^bv[[:digit:]]\. ]]; then
-    >&2 echo "Unexpected current branch!"
-    exit 1
-  fi
-
-  echo -n "${current_branch#bv}"
+function find_running_kernel_version {
+  uname -r | sed -E 's/-.+//'
 }
 
 function fetch_repo {
@@ -275,7 +267,7 @@ function main {
 
   # Format: `M.m` or `M.m.p`.
   #
-  local current_kernel_version=${v_kernel_version:-"$(checked_find_current_branch_kernel_version)"}
+  local current_kernel_version=${v_kernel_version:-"$(find_running_kernel_version)"}
 
   fetch_repo
 
