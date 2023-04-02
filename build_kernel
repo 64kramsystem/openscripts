@@ -16,6 +16,7 @@ Options:
 - [-v|--kernel-version <version>]
 - [-l|--local-version <name>]     : kernel local version (name suffix), defaults to (\$BUILD_KERNEL_LOCAL_VERSION
                                     or '$c_default_local_version'); the minus is automatically added
+- [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits
 - [-i|--install]
 - [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - [-d|--display-config-diff]
@@ -32,6 +33,9 @@ Workflow:
 - compiles and moves the packages to <packages_destination>
 - if --install is specified, it installs the packages
 
+Cherry picks can also be specified via \$BUILD_KERNEL_CHERRY_PICKS, with format 'shortver1:c1a,c1b;shortver2:c2a,c2b'.
+The parameter --cherry-pick takes priority over \$BUILD_KERNEL_CHERRY_PICKS.
+
 Notes:
 
 - RC versions are not supported (anymore)"
@@ -42,10 +46,11 @@ v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
+v_arg_cherry_picks=()   # array; value passed by user as argument
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:ir:l:d --long help,kernel-version:,install,repo-path:,local-version:,display-config-diff --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:ir:l:dc: --long help,kernel-version:,install,repo-path:,local-version:,display-config-diff,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -69,6 +74,9 @@ function decode_cmdline_args {
       -d|--display-config-diff)
         v_display_config_diff=1
         shift ;;
+      -c|cherry-pick)
+        mapfile -td, v_arg_cherry_picks < <(echo -n "$2")
+        shift 2 ;;
       --)
         shift
         break ;;
@@ -211,6 +219,40 @@ function display_config_diff {
   fi
 }
 
+function cherry_pick_commits {
+  local raw_kernel_version=$1
+
+  if [[ ${#v_arg_cherry_picks[@]} -gt 0 ]]; then
+    for commit in "${v_arg_cherry_picks[@]}"; do
+      git cherry-pick "$commit"
+    done
+  else
+    local short_kernel_version
+    short_kernel_version=$(echo "$raw_kernel_version" | perl -ne 'print /(\d+\.\d+)/')
+
+    # Array of <shortver:c1,c2>.
+    #
+    local env_cherry_picks
+    mapfile -d';' env_cherry_picks < <(echo -n "${BUILD_KERNEL_CHERRY_PICKS:-}")
+
+    for cherry_picks_entry in "${env_cherry_picks[@]}"; do
+      local short_version=${cherry_picks_entry%:*}
+
+      if [[ $short_version == "$short_kernel_version" ]]; then
+        local raw_commits=${cherry_picks_entry#*:}
+        local commits
+        mapfile -td, commits < <(echo -n "$raw_commits")
+
+        for commit in "${commits[@]}"; do
+          echo git cherry-pick "$commit"
+        done
+
+        break;
+      fi
+    done
+  fi
+}
+
 function compile_kernel {
   make -j "$(nproc)" bindeb-pkg LOCALVERSION=-"$v_local_version"
 }
@@ -302,6 +344,8 @@ function main {
   if [[ -n $v_display_config_diff ]]; then
     display_config_diff
   fi
+
+  cherry_pick_commits "$current_kernel_version"
 
   compile_kernel
 
