@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_tempdir=$(mktemp -d --suffix=patch_acpi)
+c_patched_override_file=/boot/acpi_override
+c_initrd_hook_file=/etc/initramfs-tools/hooks/acpi_override
+c_help="Usage: $(basename "$0") [-h|--help] <install|uninstall>
+
+Dumps the DSDT tables, patches them, then install an initramfs hook that loads the patched version.
+
+WATCH OUT! Works only on specific laptops, e.g. Lenovo Yoga 7 AMD Gen 7 (14ARB7)."
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function register_exit_hook {
+  function _exit_hook { rm -r "$c_tempdir"; }
+  trap _exit_hook EXIT
+}
+
+function change_dir {
+  cd "$c_tempdir"
+}
+
+function dump_tables {
+  # shellcheck disable=2024
+  sudo cat /sys/firmware/acpi/tables/DSDT > dsdt.dat
+}
+
+function disassemble_tables {
+  iasl -d dsdt.dat
+}
+
+function patch_tables {
+  perl -0777 -i.bak -pe 's/(.+\n){4}(.+_S3_: S3 System State\n(.+\n){6})(.+\n){2}/$2/m' dsdt.dsl
+  perl -i -pe 's/^DefinitionBlock.+\K0x00000001/0x00000002/' dsdt.dsl
+}
+
+function inspect_patch {
+  diff dsdt.dsl{.bak,} || true
+
+  echo -n "Verify that the conditional has been removed, and the version bumped, then press a key..."
+  read -rsn1
+}
+
+function reassemble_tables {
+  iasl -tc dsdt.dsl
+}
+
+function install_initrd_hook {
+  mkdir -p kernel/firmware/acpi
+  cp dsdt.aml kernel/firmware/acpi
+  find kernel | cpio -H newc --create | sudo tee "$c_patched_override_file" > /dev/null
+
+  sudo tee "$c_initrd_hook_file" << SH
+#!/bin/sh
+
+if [ "\$1" = prereqs ]; then
+  echo
+else
+  . /usr/share/initramfs-tools/hook-functions
+  prepend_earlyinitramfs $c_patched_override_file
+fi
+SH
+
+  sudo chown root: "$c_initrd_hook_file"
+  sudo chmod 755 "$c_initrd_hook_file"
+
+  sudo update-initramfs -k all -u
+}
+
+function main {
+  register_exit_hook
+  change_dir
+  dump_tables
+  disassemble_tables
+  patch_tables
+  inspect_patch
+  reassemble_tables
+  install_initrd_hook
+}
+
+decode_cmdline_args "$@"
+main
