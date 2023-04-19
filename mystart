@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# "Expressions don't expand in single quotes"
+# shellcheck disable=2016
+
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -10,7 +13,7 @@ set -o pipefail
 c_mysql_symlink_basename=mysql
 c_help='Usage: '"$(basename "$0")"' [-c|--config <configfile>] [-t|--tmp] [<version>]
 
-Switches MySQL (via symlink) to the selected version, creates the required directories (purging them, if required) and starts it.
+Switches MySQL (via symlink) to the selected version, creates the required directories (purging them, if required) and starts it (with permissions disabled).
 
 Assumes a layout like the following:
 
@@ -120,7 +123,7 @@ function initialize_and_start_mysql {
   # `--default-file` must precede `--initialize-insecure`!!
   #
   mysqld "${config_option[@]}" --initialize-insecure
-  mysqld "${config_option[@]}" "${log_option[@]}" --daemonize
+  mysqld "${config_option[@]}" "${log_option[@]}" --daemonize --skip-grant-tables
 }
 
 function create_and_connect_to_tmp_schema {
