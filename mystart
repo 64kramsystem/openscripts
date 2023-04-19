@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# "Expressions don't expand in single quotes"
+# shellcheck disable=2016
+
 set -o errexit
 set -o nounset
 set -o pipefail
