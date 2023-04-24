@@ -128,7 +128,7 @@ function find_latest_kernel_version {
   local escaped_short_version=${short_version//./\\.}
 
   git tag |
-    grep -P "^v$escaped_short_version" |
+    grep -P "^v$escaped_short_version"'(?!-rc)' |
     sort -V |
     tail -n 1 |
     perl -pe 's/^v//'
@@ -155,22 +155,7 @@ function find_latest_packaged_version {
     true
 }
 
-function create_if_required_and_switch_branch {
-  local latest_kernel_version=$1
-
-  local branch_working_copy=bv"$latest_kernel_version"
-
-  # When switching across branches for different non-patch versions, some files may be end up changed,
-  # which blocks the checkout; in order to solve this, we do `--force`d checkout.
-  #
-  if git rev-parse --verify "$branch_working_copy" 2> /dev/null; then
-    git checkout --force "$branch_working_copy"
-  else
-    git checkout -b "$branch_working_copy" --force v"$latest_kernel_version"
-  fi
-}
-
-function import_latest_config {
+function find_latest_config_file {
   # Accepts full/short versions.
   #
   local raw_version=$1
@@ -187,7 +172,31 @@ function import_latest_config {
       tail -n 1
   )
 
-  cp "$latest_config_file" .config
+  if [[ -z $latest_config_file ]]; then
+    >&2 echo "Config file not found (for version $short_version)"
+    exit 1
+  fi
+
+  echo -n "$latest_config_file"
+}
+
+function create_if_required_and_switch_branch {
+  local latest_kernel_version=$1
+
+  local branch_working_copy=bv"$latest_kernel_version"
+
+  # When switching across branches for different non-patch versions, some files may be end up changed,
+  # which blocks the checkout; in order to solve this, we do `--force`d checkout.
+  #
+  if git rev-parse --verify "$branch_working_copy" 2> /dev/null; then
+    git checkout --force "$branch_working_copy"
+  else
+    git checkout -b "$branch_working_copy" --force v"$latest_kernel_version"
+  fi
+}
+
+function import_config_file {
+  cp "$source_config_file" .config
 }
 
 function backup_config {
@@ -328,9 +337,12 @@ function main {
     exit 0
   fi
 
+  local source_config_file
+  source_config_file=$(find_latest_config_file "$latest_kernel_version")
+
   create_if_required_and_switch_branch "$latest_kernel_version"
 
-  import_latest_config "$current_kernel_version"
+  import_config_file "$source_config_file"
 
   backup_config
 
