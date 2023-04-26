@@ -96,9 +96,11 @@ class KernelVersion
 
     exit $CHILD_STATUS.exitstatus if !$CHILD_STATUS
 
+    # Branch examples: v6.2-rc1, v6.2, v6.2.1
+    #
     kernel_branches
       .lines
-      .filter_map { |branch| $1 if branch =~ %r{\trefs/tags/v(#{Regexp.escape(current_version)}.+)} }
+      .filter_map { |branch| $1 if branch =~ %r{\trefs/tags/v(#{Regexp.escape(current_version)}($|\.|-).*)} }
       .sort_by { |version| Gem::Version.new(version) } # handles RCs (which have patch version = 0)!
       .last
   end
