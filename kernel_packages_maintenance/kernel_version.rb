@@ -8,6 +8,9 @@
 #
 # The type is technically optional, but this class considers that case invalid.
 #
+# Note that this class refers to modern kernel versions. In the past, there could be subversions
+# and RCs for patch versions (e.g. v2.6.16.10/v2.6.16-rc6).
+#
 class KernelVersion
   attr_accessor :raw        # Unparsed string form
   attr_accessor :major
