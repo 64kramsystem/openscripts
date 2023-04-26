@@ -8,6 +8,9 @@
 #
 # The type is technically optional, but this class considers that case invalid.
 #
+# Note that this class refers to modern kernel versions. In the past, there could be subversions
+# and RCs for patch versions (e.g. v2.6.16.10/v2.6.16-rc6).
+#
 class KernelVersion
   attr_accessor :raw        # Unparsed string form
   attr_accessor :major
@@ -96,9 +99,11 @@ class KernelVersion
 
     exit $CHILD_STATUS.exitstatus if !$CHILD_STATUS
 
+    # Branch examples: v6.2-rc1, v6.2, v6.2.1
+    #
     kernel_branches
       .lines
-      .filter_map { |branch| $1 if branch =~ %r{\trefs/tags/v(#{Regexp.escape(current_version)}.+)} }
+      .filter_map { |branch| $1 if branch =~ %r{\trefs/tags/v(#{Regexp.escape(current_version)}($|\.|-).*)} }
       .sort_by { |version| Gem::Version.new(version) } # handles RCs (which have patch version = 0)!
       .last
   end
