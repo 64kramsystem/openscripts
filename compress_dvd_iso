@@ -14,7 +14,7 @@ c_video_preset=slower
 c_audio_encoding_options=(-ac 2 -ar "$c_audio_frequency" -c:a libfdk_aac -vbr "$c_audio_vbr_quality")
 c_video_encoding_options=(-c:v libx265 -crf "$c_video_crf" -preset "$c_video_preset")
 
-c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] <file.iso>
+c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] <infile.iso> [outfile]
 
 Compresses a DVD ISO to h264/aac, using ffmpeg.
 
@@ -25,7 +25,8 @@ Interlaced videos are automatically detected and deinterlaced.
 Audio encoding options: ${c_audio_encoding_options[*]}
 Video encoding options: ${c_video_encoding_options[*]}"
 
-v_iso_file=
+v_in_file=
+v_out_file=
 v_chapter_number=1
 v_mountpoint=         # Must be global, as the exit hook function is not able to access local vars.
 v_compress=1          # If blank, compression is not performed.
@@ -53,16 +54,20 @@ function decode_cmdline_args {
     esac
   done
 
-  if [[ $# -ne 1 ]]; then
+  case $# in
+  1|2)
+    v_in_file=$1
+    v_out_file=${2:-${v_in_file%.*}.mkv}
+    ;;
+  *)
     echo "$c_help"
     exit 1
-  fi
-
-  v_iso_file=$1
+    ;;
+  esac
 }
 
 function create_mountpoint {
-  mktemp -d --suffix "-$(basename "${v_iso_file%.*}")"
+  mktemp -d --suffix "-$(basename "${v_in_file%.*}")"
 }
 
 function register_exit_hook {
@@ -78,7 +83,7 @@ function register_exit_hook {
 }
 
 function mount_iso {
-  fuseiso "$v_iso_file" "$v_mountpoint"
+  fuseiso "$v_in_file" "$v_mountpoint"
 }
 
 function check_video_interlaced {
@@ -96,7 +101,7 @@ function print_banner {
   local is_interlaced=$1
 
   echo "################################################################################"
-  echo "# Compressing file $(basename "$v_iso_file")..."
+  echo "# Compressing file $(basename "$v_in_file")..."
 
   if [[ -n $is_interlaced ]]; then
     echo "# - performing deinterlacing"
@@ -110,7 +115,6 @@ function compress {
   local is_interlaced=$1
 
   local vobs_pattern="vts_0${v_chapter_number}_*.vob"
-  local destfile="${v_iso_file%.*}.mkv"
 
   if [[ -n $is_interlaced ]]; then
     local deinterlace_options=(-vf "yadif")
@@ -123,7 +127,7 @@ function compress {
     "${c_audio_encoding_options[@]}" \
     "${deinterlace_options[@]}" \
     "${c_video_encoding_options[@]}" \
-    -y "$destfile"
+    -y "$v_out_file"
 }
 
 function main {
