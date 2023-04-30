@@ -12,6 +12,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
 - generic
   - `bedtime`: sets two (systemd) timers, one to suspend the computer, and the other to shut it down
+  - `compress_dvd_iso`: compresses an unencrypted DVD iso to h264/aac
   - `convert_cb_archive_to_pdf`: convert CBR/CBZ files to PDF
   - `convert_video_to_animated_gif`: convert a video to animated gid (via FFmpeg)
   - `control_music_player`: performs actions on a music player running in the background (supports Clementine, MPV, GMusicBrowser...)
