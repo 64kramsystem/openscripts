@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_audio_frequency=44100
+c_audio_vbr_quality=3
+c_video_crf=25
+c_video_preset=slower
+
+c_audio_encoding_options=(-ac 2 -ar "$c_audio_frequency" -c:a libfdk_aac -vbr "$c_audio_vbr_quality")
+c_video_encoding_options=(-c:v libx265 -crf "$c_video_crf" -preset "$c_video_preset")
+
+c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] <file.iso>
+
+Compresses a DVD ISO to h264/aac, using ffmpeg.
+
+Interlaced videos are automatically detected and deinterlaced.
+
+Audio encoding options: ${c_audio_encoding_options[*]}
+Video encoding options: ${c_video_encoding_options[*]}"
+
+v_iso_file=
+v_chapter_number=1
+v_mountpoint=         # Must be global, as the exit hook function is not able to access local vars.
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hc: --long help,chapter-number: --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -c|--chapter-number)
+        v_chapter_number=$2
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_iso_file=$1
+}
+
+function create_mountpoint {
+  mktemp -d --suffix "-$(basename "${v_iso_file%.*}")"
+}
+
+function register_exit_hook {
+  function _exit_hook {
+    if ! findmnt "$v_mountpoint" > /dev/null || umount "$v_mountpoint"; then
+      rm -rf "$v_mountpoint"
+    else
+      >&2 echo "Couldn't unmount image (mountpoint: $v_mountpoint)"
+    fi
+  }
+
+  trap _exit_hook EXIT
+}
+
+function mount_iso {
+  fuseiso "$v_iso_file" "$v_mountpoint"
+}
+
+function check_video_interlaced {
+  local vob_file="vts_0${v_chapter_number}_1.vob"
+
+  local ffprobe_output
+  ffprobe_output=$(ffprobe -v error -show_entries stream=codec_name,width,height,field_order -of default=noprint_wrappers=1 -select_streams v "$v_mountpoint"/video_ts/"$vob_file")
+
+  if echo "$ffprobe_output" | grep -qP '^field_order=(tt|bb)$'; then
+    echo 1
+  fi
+}
+
+function print_banner {
+  local is_interlaced=$1
+
+  echo "################################################################################"
+  echo "# Compressing file $(basename "$v_iso_file")..."
+
+  if [[ -n $is_interlaced ]]; then
+    echo "# - performing deinterlacing"
+  fi
+
+  echo "# - mountpoint: $v_mountpoint"
+  echo "################################################################################"
+}
+
+function compress {
+  local is_interlaced=$1
+
+  local vobs_pattern="vts_0${v_chapter_number}_*.vob"
+  local destfile="${v_iso_file%.*}.mkv"
+
+  if [[ -n $is_interlaced ]]; then
+    local deinterlace_options=(-vf "yadif")
+  else
+    local deinterlace_options=()
+  fi
+
+  ffmpeg \
+    -i "concat:$(find "$v_mountpoint"/video_ts -name "$vobs_pattern" | sort | tr $'\n' '|')" \
+    "${c_audio_encoding_options[@]}" \
+    "${deinterlace_options[@]}" \
+    "${c_video_encoding_options[@]}" \
+    -y "$destfile"
+}
+
+function main {
+  v_mountpoint=$(create_mountpoint)
+
+  register_exit_hook
+
+  mount_iso
+
+  is_interlaced=$(check_video_interlaced)
+
+  print_banner "$is_interlaced"
+
+  compress "$is_interlaced"
+}
+
+decode_cmdline_args "$@"
+main
