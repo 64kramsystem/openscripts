@@ -14,13 +14,14 @@ c_video_preset=slower
 c_audio_encoding_options=(-ac 2 -ar "$c_audio_frequency" -c:a libfdk_aac -vbr "$c_audio_vbr_quality")
 c_video_encoding_options=(-c:v libx265 -crf "$c_video_crf" -preset "$c_video_preset")
 
-c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] <infile.iso> [outfile]
+c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] [-f|--fastest] <infile.iso> [outfile]
 
 Compresses a DVD ISO to h264/aac, using ffmpeg.
 
 Interlaced videos are automatically detected and deinterlaced.
 
-- '-no-compress': Don't perform compression; useful to get only general information.
+- '--no-compress' : Don't perform compression; useful to get only general information.
+- '--fastest'     : Copies audio, and uses fastest preset; useful for testing.
 
 Audio encoding options: ${c_audio_encoding_options[*]}
 Video encoding options: ${c_video_encoding_options[*]}"
@@ -30,10 +31,11 @@ v_out_file=
 v_chapter_number=1
 v_mountpoint=         # Must be global, as the exit hook function is not able to access local vars.
 v_compress=1          # If blank, compression is not performed.
+v_fastest=            # True if not blank
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hc:n --long help,chapter-number:,no-compress --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hc:nf --long help,chapter-number:,no-compress,fastest --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -47,6 +49,9 @@ function decode_cmdline_args {
         shift 2 ;;
       -n|--no-compress)
         v_compress=
+        shift ;;
+      -f|--fastest)
+        v_fastest=1
         shift ;;
       --)
         shift
@@ -122,11 +127,15 @@ function compress {
     local deinterlace_options=()
   fi
 
+  if [[ -n $v_fastest ]]; then
+    local av_options=(-c:a copy                        "${deinterlace_options[@]}" -c:v libx265 -crf "$c_video_crf" -preset ultrafast)
+  else
+    local av_options=("${c_audio_encoding_options[@]}" "${deinterlace_options[@]}" "${c_video_encoding_options[@]}")
+  fi
+
   ffmpeg \
     -i "concat:$(find "$v_mountpoint"/video_ts -name "$vobs_pattern" | sort | tr $'\n' '|')" \
-    "${c_audio_encoding_options[@]}" \
-    "${deinterlace_options[@]}" \
-    "${c_video_encoding_options[@]}" \
+    "${av_options[@]}" \
     -y "$v_out_file"
 }
 
