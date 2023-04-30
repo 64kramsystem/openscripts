@@ -30,6 +30,7 @@ v_in_file=
 v_out_file=
 v_chapter_number=1
 v_mountpoint=         # Must be global, as the exit hook function is not able to access local vars.
+v_ffmpeg_options=     # Global, in order to print it
 v_compress=1          # If blank, compression is not performed.
 v_fastest=            # True if not blank
 
@@ -107,16 +108,14 @@ function print_banner {
 
   echo "################################################################################"
   echo "# Compressing file $(basename "$v_in_file")..."
-
-  if [[ -n $is_interlaced ]]; then
-    echo "# - performing deinterlacing"
-  fi
-
-  echo "# - mountpoint: $v_mountpoint"
+  echo "#"
+  echo "# FFmpeg opts:"
+  echo "#"
+  echo "# ${v_ffmpeg_options[*]}"
   echo "################################################################################"
 }
 
-function compress {
+function set_ffmpeg_options {
   local is_interlaced=$1
 
   local vobs_pattern="vts_0${v_chapter_number}_*.vob"
@@ -133,10 +132,11 @@ function compress {
     local av_options=("${c_audio_encoding_options[@]}" "${deinterlace_options[@]}" "${c_video_encoding_options[@]}")
   fi
 
-  ffmpeg \
+  v_ffmpeg_options=(
     -i "concat:$(find "$v_mountpoint"/video_ts -name "$vobs_pattern" | sort | tr $'\n' '|')" \
     "${av_options[@]}" \
     -y "$v_out_file"
+  )
 }
 
 function main {
@@ -147,11 +147,12 @@ function main {
   mount_iso
 
   is_interlaced=$(check_video_interlaced)
+  set_ffmpeg_options "$is_interlaced"
 
   print_banner "$is_interlaced"
 
   if [[ -n $v_compress ]]; then
-    compress "$is_interlaced"
+    ffmpeg "${v_ffmpeg_options[@]}"
   fi
 }
 
