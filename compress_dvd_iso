@@ -14,11 +14,13 @@ c_video_preset=slower
 c_audio_encoding_options=(-ac 2 -ar "$c_audio_frequency" -c:a libfdk_aac -vbr "$c_audio_vbr_quality")
 c_video_encoding_options=(-c:v libx265 -crf "$c_video_crf" -preset "$c_video_preset")
 
-c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] <file.iso>
+c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] <file.iso>
 
 Compresses a DVD ISO to h264/aac, using ffmpeg.
 
 Interlaced videos are automatically detected and deinterlaced.
+
+- '-no-compress': Don't perform compression; useful to get only general information.
 
 Audio encoding options: ${c_audio_encoding_options[*]}
 Video encoding options: ${c_video_encoding_options[*]}"
@@ -26,10 +28,11 @@ Video encoding options: ${c_video_encoding_options[*]}"
 v_iso_file=
 v_chapter_number=1
 v_mountpoint=         # Must be global, as the exit hook function is not able to access local vars.
+v_compress=1          # If blank, compression is not performed.
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hc: --long help,chapter-number: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hc:n --long help,chapter-number:,no-compress --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -41,6 +44,9 @@ function decode_cmdline_args {
       -c|--chapter-number)
         v_chapter_number=$2
         shift 2 ;;
+      -n|--no-compress)
+        v_compress=
+        shift ;;
       --)
         shift
         break ;;
@@ -131,7 +137,9 @@ function main {
 
   print_banner "$is_interlaced"
 
-  compress "$is_interlaced"
+  if [[ -n $v_compress ]]; then
+    compress "$is_interlaced"
+  fi
 }
 
 decode_cmdline_args "$@"
