@@ -33,6 +33,14 @@ v_mountpoint=         # Must be global, as the exit hook function is not able to
 v_compress=1          # If blank, compression is not performed.
 v_fastest=            # True if not blank
 
+# They're set here, in order to allow a clean separation between header printing and encoding.
+#
+v_input_options=
+v_audio_encoding_options=("${c_audio_encoding_options[@]}")
+v_deinterlace_options=()
+v_video_encoding_options=("${c_video_encoding_options[@]}")
+v_output_options=
+
 function decode_cmdline_args {
   local params
   params=$(getopt --options hc:nf --long help,chapter-number:,no-compress,fastest --name "$(basename "$0")" -- "$@")
@@ -107,36 +115,44 @@ function print_banner {
 
   echo "################################################################################"
   echo "# Compressing file $(basename "$v_in_file")..."
-
-  if [[ -n $is_interlaced ]]; then
-    echo "# - performing deinterlacing"
-  fi
-
-  echo "# - mountpoint: $v_mountpoint"
+  echo "#"
+  echo "# FFmpeg opts:"
+  echo "#"
+  echo "# ${v_input_options[*]}"
+  echo "# ${v_audio_encoding_options[*]}"
+  echo "# ${v_deinterlace_options[*]}"
+  echo "# ${v_video_encoding_options[*]}"
+  echo "# ${v_output_options[*]}"
   echo "################################################################################"
 }
 
-function compress {
+function set_ffmpeg_options {
   local is_interlaced=$1
 
   local vobs_pattern="vts_0${v_chapter_number}_*.vob"
 
+  v_input_options=(-i "concat:$(find "$v_mountpoint"/video_ts -name "$vobs_pattern" | sort | tr $'\n' '|')")
+
   if [[ -n $is_interlaced ]]; then
-    local deinterlace_options=(-vf "yadif")
-  else
-    local deinterlace_options=()
+    v_deinterlace_options=(-vf "yadif")
   fi
 
   if [[ -n $v_fastest ]]; then
-    local av_options=(-c:a copy                        "${deinterlace_options[@]}" -c:v libx265 -crf "$c_video_crf" -preset ultrafast)
-  else
-    local av_options=("${c_audio_encoding_options[@]}" "${deinterlace_options[@]}" "${c_video_encoding_options[@]}")
+    v_audio_encoding_options=(-c:a copy)
+    v_video_encoding_options=(-c:v libx265 -crf "$c_video_crf" -preset ultrafast)
   fi
 
+  v_output_options=(-y "$v_out_file")
+}
+
+function invoke_ffmpeg {
   ffmpeg \
-    -i "concat:$(find "$v_mountpoint"/video_ts -name "$vobs_pattern" | sort | tr $'\n' '|')" \
-    "${av_options[@]}" \
-    -y "$v_out_file"
+    "${v_input_options[@]}" \
+    "${v_audio_encoding_options[@]}" \
+    "${v_deinterlace_options[@]}" \
+    "${v_video_encoding_options[@]}" \
+    "${v_output_options[@]}"
+
 }
 
 function main {
@@ -147,11 +163,12 @@ function main {
   mount_iso
 
   is_interlaced=$(check_video_interlaced)
+  set_ffmpeg_options "$is_interlaced"
 
   print_banner "$is_interlaced"
 
   if [[ -n $v_compress ]]; then
-    compress "$is_interlaced"
+    invoke_ffmpeg
   fi
 }
 
