@@ -26,6 +26,7 @@ Audio encoding options: ${c_audio_encoding_options[*]}
 Video encoding options: ${c_video_encoding_options[*]}"
 
 v_in_file=
+v_out_file=
 v_chapter_number=1
 v_mountpoint=         # Must be global, as the exit hook function is not able to access local vars.
 v_compress=1          # If blank, compression is not performed.
@@ -53,12 +54,16 @@ function decode_cmdline_args {
     esac
   done
 
-  if [[ $# -ne 1 ]]; then
+  case $# in
+  1|2)
+    v_in_file=$1
+    v_out_file=${2:-${v_in_file%.*}.mkv}
+    ;;
+  *)
     echo "$c_help"
     exit 1
-  fi
-
-  v_in_file=$1
+    ;;
+  esac
 }
 
 function create_mountpoint {
@@ -110,7 +115,6 @@ function compress {
   local is_interlaced=$1
 
   local vobs_pattern="vts_0${v_chapter_number}_*.vob"
-  local destfile="${v_in_file%.*}.mkv"
 
   if [[ -n $is_interlaced ]]; then
     local deinterlace_options=(-vf "yadif")
@@ -123,7 +127,7 @@ function compress {
     "${c_audio_encoding_options[@]}" \
     "${deinterlace_options[@]}" \
     "${c_video_encoding_options[@]}" \
-    -y "$destfile"
+    -y "$v_out_file"
 }
 
 function main {
