@@ -14,7 +14,7 @@ c_video_preset=slower
 c_audio_encoding_options=(-ac 2 -ar "$c_audio_frequency" -c:a libfdk_aac -vbr "$c_audio_vbr_quality")
 c_video_encoding_options=(-c:v libx265 -crf "$c_video_crf" -preset "$c_video_preset")
 
-c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] [-f|--fastest] <infile.iso> [outfile]
+c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] [-f|--fastest] <infile.iso> outfile
 
 Compresses a DVD ISO to h264/aac, using ffmpeg.
 
@@ -68,9 +68,9 @@ function decode_cmdline_args {
   done
 
   case $# in
-  1|2)
+  2)
     v_in_file=$1
-    v_out_file=${2:-${v_in_file%.*}.mkv}
+    v_out_file=$2
     ;;
   *)
     echo "$c_help"
