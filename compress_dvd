@@ -32,6 +32,7 @@ v_input=
 v_out_file=
 v_chapter_number=1
 v_video_ts_dir=              # Must be global, as the exit hook function is not able to access local vars.
+declare -A v_subtitles_meta  # { sid => "lang_short,lang_full" }
 v_compress=1                 # If blank, compression is not performed.
 v_fastest=                   # True if not blank
 
@@ -112,6 +113,50 @@ function mount_iso {
   fi
 }
 
+function find_and_set_subtitles_meta {
+  local lsdvd_output
+  lsdvd_output=$(lsdvd -s "$v_video_ts_dir" 2>&1)
+
+  while IFS= read -r lsdvd_line; do
+    if [[ $lsdvd_line =~ $(echo -n "Subtitle: [[:digit:]]+, Language: ([[:alpha:]]+) - ([[:alpha:]]+), .+, Stream id: ([[:alnum:]]+)") ]]; then
+      if [[ -v v_subtitles_meta[${BASH_REMATCH[3]}] ]]; then
+        >&2 echo "Found two subtitles with the same identifier: ${BASH_REMATCH[3]}"
+      else
+        v_subtitles_meta[${BASH_REMATCH[3]}]=${BASH_REMATCH[1]},${BASH_REMATCH[2]}
+      fi
+    fi
+  done <<< "$lsdvd_output"
+
+  # Double check, for safety, in case the format changes.
+  #
+  if [[ $lsdvd_output == *Subtitle:* && ${#v_subtitles_meta[@]} -eq 0 ]]; then
+    >&2 echo 'lsdvd output included subtitles, but the pattern didn'\''t match any!'
+    exit 1
+  fi
+}
+
+function extract_subtitles {
+  local vob_file
+  vob_file=$(find_reference_vob_file)
+  local out_file_noext=${v_out_file%.*}
+
+  for sid in "${!v_subtitles_meta[@]}"; do
+    local lang_data=${v_subtitles_meta[$sid]}
+    local lang_short=${lang_data%,*} lang_extended=${lang_data#*,}
+
+    # Printing the banner her is a bit inconsistent, but it's a trade-off.
+    #
+    echo "################################################################################"
+    echo "# Extracting subtitle '$lang_short/$lang_extended' ($sid)..."
+    echo "################################################################################"
+
+    if [[ -n $v_compress ]]; then
+      local sub_file=$out_file_noext.$sid.$lang_short.$lang_extended
+      mencoder "$vob_file" -nosound -oac copy -ovc copy -o /dev/null -vobsubout "$sub_file" -sid "$sid"
+    fi
+  done
+}
+
 function check_video_interlaced {
   local vob_file
   vob_file=$(find_reference_vob_file)
@@ -124,7 +169,7 @@ function check_video_interlaced {
   fi
 }
 
-function print_banner {
+function print_compression_banner {
   local is_interlaced=$1
 
   echo "################################################################################"
@@ -200,10 +245,13 @@ function main {
     v_video_ts_dir=$v_input
   fi
 
+  find_and_set_subtitles_meta
+  extract_subtitles
+
   is_interlaced=$(check_video_interlaced)
   set_ffmpeg_options "$is_interlaced"
 
-  print_banner "$is_interlaced"
+  print_compression_banner "$is_interlaced"
 
   if [[ -n $v_compress ]]; then
     invoke_ffmpeg
