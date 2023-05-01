@@ -32,7 +32,7 @@ v_input=
 v_out_file=
 v_chapter_number=1
 v_video_ts_dir=              # Must be global, as the exit hook function is not able to access local vars.
-declare -A v_subtitles_meta  # { sid => "lang_short,lang_full" }
+declare -A v_subtitles_meta  # { lang_code => sid }
 v_compress=1                 # If blank, compression is not performed.
 v_fastest=                   # True if not blank
 
@@ -118,11 +118,11 @@ function find_and_set_subtitles_meta {
   lsdvd_output=$(lsdvd -s "$v_video_ts_dir" 2>&1)
 
   while IFS= read -r lsdvd_line; do
-    if [[ $lsdvd_line =~ $(echo -n "Subtitle: [[:digit:]]+, Language: ([[:alpha:]]+) - ([[:alpha:]]+), .+, Stream id: ([[:alnum:]]+)") ]]; then
-      if [[ -v v_subtitles_meta[${BASH_REMATCH[3]}] ]]; then
-        >&2 echo "Found two subtitles with the same identifier: ${BASH_REMATCH[3]}"
+    if [[ $lsdvd_line =~ $(echo -n "Subtitle: [[:digit:]]+, Language: ([[:alpha:]]+) - .+, Stream id: ([[:alnum:]]+)") ]]; then
+      if [[ -v v_subtitles_meta[${BASH_REMATCH[1]}] ]]; then
+        >&2 echo "Found two subtitles with the same language code: ${BASH_REMATCH[1]}"
       else
-        v_subtitles_meta[${BASH_REMATCH[3]}]=${BASH_REMATCH[1]},${BASH_REMATCH[2]}
+        v_subtitles_meta[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
       fi
     fi
   done <<< "$lsdvd_output"
@@ -140,21 +140,20 @@ function extract_subtitles {
   vob_file=$(find_reference_vob_file)
   local out_file_noext=${v_out_file%.*}
 
-  for sid in "${!v_subtitles_meta[@]}"; do
-    local lang_data=${v_subtitles_meta[$sid]}
-    local lang_short=${lang_data%,*} lang_extended=${lang_data#*,}
+  for lang_code in "${!v_subtitles_meta[@]}"; do
+    local sid=${v_subtitles_meta[$lang_code]}
 
     # Printing the banner her is a bit inconsistent, but it's a trade-off.
     #
     echo "################################################################################"
-    echo "# Extracting subtitle '$lang_short/$lang_extended' ($sid)..."
+    echo "# Extracting subtitle '$lang_code' ($sid)..."
     echo "################################################################################"
 
     if [[ -n $v_compress ]]; then
-      local sub_file=$out_file_noext.$sid.$lang_short.$lang_extended
+      local sub_file=$out_file_noext.$sid.$lang_code
       mencoder "$vob_file" -nosound -oac copy -ovc copy -o /dev/null -vobsubout "$sub_file" -sid "$sid"
       # It's not clear if it's possible to set the language via mencoder; `-slang` doesn't do it.
-      SUB_LANG=$lang_short perl -0777 -i -pe 's/^id: \K\w+/$ENV{SUB_LANG}/m' "$sub_file".idx
+      SUB_LANG=$lang_code perl -0777 -i -pe 's/^id: \K\w+/$ENV{SUB_LANG}/m' "$sub_file".idx
     fi
   done
 }
