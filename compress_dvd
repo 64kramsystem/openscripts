@@ -153,6 +153,8 @@ function extract_subtitles {
     if [[ -n $v_compress ]]; then
       local sub_file=$out_file_noext.$sid.$lang_short.$lang_extended
       mencoder "$vob_file" -nosound -oac copy -ovc copy -o /dev/null -vobsubout "$sub_file" -sid "$sid"
+      # It's not clear if it's possible to set the language via mencoder; `-slang` doesn't do it.
+      SUB_LANG=$lang_short perl -0777 -i.bak -pe 's/^id: \K\w+/$ENV{SUB_LANG}/m' "$sub_file".idx
     fi
   done
 }
