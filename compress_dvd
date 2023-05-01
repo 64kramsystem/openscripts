@@ -43,6 +43,10 @@ v_deinterlace_options=()
 v_video_encoding_options=("${c_video_encoding_options[@]}")
 v_output_options=
 
+####################################################################################################
+# MAIN STEPS
+####################################################################################################
+
 function decode_cmdline_args {
   local params
   params=$(getopt --options hc:nf --long help,chapter-number:,no-compress,fastest --name "$(basename "$0")" -- "$@")
@@ -109,15 +113,8 @@ function mount_iso {
 }
 
 function check_video_interlaced {
-  # fuseiso exposes files as lowercase, so  we need case-insensitive search.
-
   local vob_file
-  vob_file=$(find "$v_video_ts_dir" -iname "vts_0${v_chapter_number}_1.vob")
-
-  if [[ -z $vob_file ]]; then
-    >&2 echo "Couldn't find VOB file"
-    exit 1
-  fi
+  vob_file=$(find_reference_vob_file)
 
   local ffprobe_output
   ffprobe_output=$(ffprobe -v error -show_entries stream=codec_name,width,height,field_order -of default=noprint_wrappers=1 -select_streams v "$vob_file")
@@ -171,6 +168,28 @@ function invoke_ffmpeg {
     "${v_output_options[@]}"
 
 }
+
+####################################################################################################
+# HELPERS
+####################################################################################################
+
+function find_reference_vob_file {
+  # fuseiso exposes files as lowercase, so we need case-insensitive search.
+  #
+  local vob_file
+  vob_file=$(find "$v_video_ts_dir" -iname "vts_0${v_chapter_number}_1.vob")
+
+  if [[ -z $vob_file ]]; then
+    >&2 echo "Couldn't find VOB file"
+    exit 1
+  fi
+
+  echo -n "$vob_file"
+}
+
+####################################################################################################
+# MAIN()
+####################################################################################################
 
 function main {
   if [[ -f $v_input ]]; then
