@@ -85,7 +85,7 @@ function create_mountpoint {
 
 function register_exit_hook {
   function _exit_hook {
-    if ! findmnt "$v_mountpoint" > /dev/null || umount "$v_mountpoint"; then
+    if umount "$v_mountpoint"; then
       rm -rf "$v_mountpoint"
     else
       >&2 echo "Couldn't unmount image (mountpoint: $v_mountpoint)"
@@ -96,7 +96,10 @@ function register_exit_hook {
 }
 
 function mount_iso {
-  fuseiso "$v_in_file" "$v_mountpoint"
+  if ! fuseiso "$v_in_file" "$v_mountpoint"; then
+    >&2 echo "Couldn't mount image"
+    exit 1
+  fi
 }
 
 function check_video_interlaced {
