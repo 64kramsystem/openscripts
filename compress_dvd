@@ -31,9 +31,9 @@ Video encoding options: ${c_video_encoding_options[*]}"
 v_input=
 v_out_file=
 v_chapter_number=1
-v_video_ts_dir=       # Must be global, as the exit hook function is not able to access local vars.
-v_compress=1          # If blank, compression is not performed.
-v_fastest=            # True if not blank
+v_video_ts_dir=              # Must be global, as the exit hook function is not able to access local vars.
+v_compress=1                 # If blank, compression is not performed.
+v_fastest=                   # True if not blank
 
 # They're set here, in order to allow a clean separation between header printing and encoding.
 #
