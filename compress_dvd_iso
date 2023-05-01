@@ -14,9 +14,11 @@ c_video_preset=slower
 c_audio_encoding_options=(-ac 2 -ar "$c_audio_frequency" -c:a libfdk_aac -vbr "$c_audio_vbr_quality")
 c_video_encoding_options=(-c:v libx265 -crf "$c_video_crf" -preset "$c_video_preset")
 
-c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] [-f|--fastest] <infile.iso> outfile
+c_help="Usage: $(basename "$0") [-h|--help] [-c|--chapter-number <num>] [-n|--no-compress] [-f|--fastest] input outfile
 
-Compresses a DVD ISO to h264/aac, using ffmpeg.
+Compresses a DVD to h264/aac, using ffmpeg.
+
+The input must be either an iso file, or a 'video_ts' directory.
 
 Interlaced videos are automatically detected and deinterlaced.
 
@@ -26,10 +28,10 @@ Interlaced videos are automatically detected and deinterlaced.
 Audio encoding options: ${c_audio_encoding_options[*]}
 Video encoding options: ${c_video_encoding_options[*]}"
 
-v_in_file=
+v_input=
 v_out_file=
 v_chapter_number=1
-v_mountpoint=         # Must be global, as the exit hook function is not able to access local vars.
+v_video_ts_dir=       # Must be global, as the exit hook function is not able to access local vars.
 v_compress=1          # If blank, compression is not performed.
 v_fastest=            # True if not blank
 
@@ -69,7 +71,7 @@ function decode_cmdline_args {
 
   case $# in
   2)
-    v_in_file=$1
+    v_input=$1
     v_out_file=$2
     ;;
   *)
@@ -80,15 +82,17 @@ function decode_cmdline_args {
 }
 
 function create_mountpoint {
-  mktemp -d --suffix "-$(basename "${v_in_file%.*}")"
+  mktemp -d --suffix "-$(basename "$v_input")"
 }
 
-function register_exit_hook {
+function register_mounted_iso_exit_hook {
   function _exit_hook {
-    if umount "$v_mountpoint"; then
-      rm -rf "$v_mountpoint"
+    local mountpoint=${v_video_ts_dir%/*}
+
+    if umount "$mountpoint"; then
+      rm -rf "$mountpoint"
     else
-      >&2 echo "Couldn't unmount image (mountpoint: $v_mountpoint)"
+      >&2 echo "Couldn't unmount image (mountpoint: $mountpoint)"
     fi
   }
 
@@ -96,7 +100,9 @@ function register_exit_hook {
 }
 
 function mount_iso {
-  if ! fuseiso "$v_in_file" "$v_mountpoint"; then
+  local mountpoint=${v_video_ts_dir%/*}
+
+  if ! fuseiso "$v_input" "$mountpoint"; then
     >&2 echo "Couldn't mount image"
     exit 1
   fi
@@ -106,7 +112,7 @@ function check_video_interlaced {
   # fuseiso exposes files as lowercase, so  we need case-insensitive search.
 
   local vob_file
-  vob_file=$(find "$v_mountpoint"/video_ts -iname "vts_0${v_chapter_number}_1.vob")
+  vob_file=$(find "$v_video_ts_dir" -iname "vts_0${v_chapter_number}_1.vob")
 
   if [[ -z $vob_file ]]; then
     >&2 echo "Couldn't find VOB file"
@@ -114,7 +120,7 @@ function check_video_interlaced {
   fi
 
   local ffprobe_output
-  ffprobe_output=$(ffprobe -v error -show_entries stream=codec_name,width,height,field_order -of default=noprint_wrappers=1 -select_streams v "$v_mountpoint"/video_ts/"$vob_file")
+  ffprobe_output=$(ffprobe -v error -show_entries stream=codec_name,width,height,field_order -of default=noprint_wrappers=1 -select_streams v "$vob_file")
 
   if echo "$ffprobe_output" | grep -qP '^field_order=(tt|bb)$'; then
     echo 1
@@ -125,7 +131,7 @@ function print_banner {
   local is_interlaced=$1
 
   echo "################################################################################"
-  echo "# Compressing file $(basename "$v_in_file")..."
+  echo "# Compressing input '$v_input'..."
   echo "#"
   echo "# FFmpeg opts:"
   echo "#"
@@ -142,7 +148,7 @@ function set_ffmpeg_options {
 
   local vobs_pattern="vts_0${v_chapter_number}_*.vob"
 
-  v_input_options=(-i "concat:$(find "$v_mountpoint"/video_ts -iname "$vobs_pattern" | sort | tr $'\n' '|')")
+  v_input_options=(-i "concat:$(find "$v_video_ts_dir" -iname "$vobs_pattern" | sort | tr $'\n' '|')")
 
   if [[ -n $is_interlaced ]]; then
     v_deinterlace_options=(-vf "yadif")
@@ -167,11 +173,13 @@ function invoke_ffmpeg {
 }
 
 function main {
-  v_mountpoint=$(create_mountpoint)
-
-  register_exit_hook
-
-  mount_iso
+  if [[ -f $v_input ]]; then
+    v_video_ts_dir=$(create_mountpoint)/video_ts
+    register_mounted_iso_exit_hook
+    mount_iso
+  else
+    v_video_ts_dir=$v_input
+  fi
 
   is_interlaced=$(check_video_interlaced)
   set_ffmpeg_options "$is_interlaced"
