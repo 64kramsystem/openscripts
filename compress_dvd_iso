@@ -103,7 +103,15 @@ function mount_iso {
 }
 
 function check_video_interlaced {
-  local vob_file="vts_0${v_chapter_number}_1.vob"
+  # fuseiso exposes files as lowercase, so  we need case-insensitive search.
+
+  local vob_file
+  vob_file=$(find "$v_mountpoint"/video_ts -iname "vts_0${v_chapter_number}_1.vob")
+
+  if [[ -z $vob_file ]]; then
+    >&2 echo "Couldn't find VOB file"
+    exit 1
+  fi
 
   local ffprobe_output
   ffprobe_output=$(ffprobe -v error -show_entries stream=codec_name,width,height,field_order -of default=noprint_wrappers=1 -select_streams v "$v_mountpoint"/video_ts/"$vob_file")
@@ -134,7 +142,7 @@ function set_ffmpeg_options {
 
   local vobs_pattern="vts_0${v_chapter_number}_*.vob"
 
-  v_input_options=(-i "concat:$(find "$v_mountpoint"/video_ts -name "$vobs_pattern" | sort | tr $'\n' '|')")
+  v_input_options=(-i "concat:$(find "$v_mountpoint"/video_ts -iname "$vobs_pattern" | sort | tr $'\n' '|')")
 
   if [[ -n $is_interlaced ]]; then
     v_deinterlace_options=(-vf "yadif")
