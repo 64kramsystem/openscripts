@@ -212,5 +212,5 @@ if __FILE__ == $PROGRAM_NAME
 
   service_days = options.delete(:service_days).to_f
 
-  puts InvoiceGenerator.new.generate(service_days, options)
+  puts InvoiceGenerator.new.generate(service_days, **options)
 end
