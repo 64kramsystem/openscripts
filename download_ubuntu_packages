@@ -72,7 +72,7 @@ class DownloadUbuntuPackages
       else
         destination_file = compose_destination_file(package_address, download_to)
 
-        if File.exists?(destination_file)
+        if File.exist?(destination_file)
           puts ">>> File #{destination_file.inspect} existing; not downloading"
         else
           DownloadWithProgress.new.execute(package_address, destination_file)
