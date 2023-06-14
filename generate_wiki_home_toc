@@ -125,5 +125,5 @@ if __FILE__ == $0
     long_help: GenerateWikiHomeToc::LONG_HELP
   ) || exit
 
-  GenerateWikiHomeToc.new.execute(options)
+  GenerateWikiHomeToc.new.execute(**options)
 end
