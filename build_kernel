@@ -147,11 +147,22 @@ function find_latest_kernel_version {
   short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
   local escaped_short_version=${short_version//./\\.}
 
-  git tag |
-    grep -P "^v$escaped_short_version"'(?!-rc)' |
-    sort -V |
-    tail -n 1 |
-    perl -pe 's/^v//'
+  local latest_version
+  latest_version=$(
+    git tag |
+      grep -P "^v$escaped_short_version"'(?!-rc)' |
+      sort -V |
+      tail -n 1 |
+      perl -pe 's/^v//'
+    )
+
+  # First releases of a minor version may not have a patch version.
+  #
+  if [[ $latest_version =~ ^[[:digit:]]+\.[[:digit:]]+$ ]]; then
+    latest_version=$latest_version.0
+  fi
+
+  echo -n "$latest_version"
 }
 
 function check_if_version_already_packaged {
