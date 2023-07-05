@@ -275,7 +275,7 @@ function cherry_pick_commits {
         mapfile -td, commits < <(echo -n "$raw_commits")
 
         for commit in "${commits[@]}"; do
-          echo git cherry-pick "$commit"
+          git cherry-pick "$commit"
         done
 
         break;
