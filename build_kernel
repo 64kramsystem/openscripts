@@ -134,6 +134,20 @@ function find_latest_kernel_version {
     perl -pe 's/^v//'
 }
 
+function check_if_version_already_packaged {
+  local current_kernel_version=$1 latest_kernel_version=$2
+
+  # Format: `M.m.p`.
+  #
+  local latest_packaged_version
+  latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
+
+  if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
+    echo "No new version! Latest packaged/available: $latest_kernel_version"
+    exit 0
+  fi
+}
+
 # Assumes that there are no multiple builds for the same version.
 #
 # Return format: `M.m.p`.
@@ -327,15 +341,7 @@ function main {
   local latest_kernel_version
   latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
-  # Format: `M.m.p`.
-  #
-  local latest_packaged_version
-  latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
-
-  if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
-    echo "No new version! Latest packaged/available: $latest_kernel_version"
-    exit 0
-  fi
+  check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
 
   local source_config_file
   source_config_file=$(find_latest_config_file "$latest_kernel_version")
