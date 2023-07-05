@@ -14,6 +14,7 @@ Builds a kernel from the source code.
 Options:
 
 - [-v|--kernel-version <version>]
+- [-s|--stay-on-branch]           : don't change branch (useful when working with custom branches); requires '--kernel-version'
 - [-l|--local-version <name>]     : kernel local version (name suffix), defaults to (\$BUILD_KERNEL_LOCAL_VERSION
                                     or '$c_default_local_version'); the minus is automatically added
 - [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits
@@ -41,6 +42,7 @@ Notes:
 - RC versions are not supported (anymore)"
 
 v_kernel_version=
+v_stay_on_branch=       # boolean; false=blank; true=anything else
 v_install=              # boolean; false=blank; true=anything else
 v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
@@ -50,7 +52,7 @@ v_arg_cherry_picks=()   # array; value passed by user as argument
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:ir:l:dc: --long help,kernel-version:,install,repo-path:,local-version:,display-config-diff,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:sir:l:dc: --long help,kernel-version:,stay-on-branch,install,repo-path:,local-version:,display-config-diff,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -62,6 +64,9 @@ function decode_cmdline_args {
       -v|--kernel-version)
         v_kernel_version=$2
         shift 2 ;;
+      -s|--stay-on-branch)
+        v_stay_on_branch=1
+        shift ;;
       -i|--install)
         v_install=1
         shift ;;
@@ -84,6 +89,9 @@ function decode_cmdline_args {
   done
 
   if [[ $# -gt 1 ]]; then
+    echo "$c_help"
+    exit 1
+  elif [[ -n $v_stay_on_branch && -z $v_kernel_version ]]; then
     echo "$c_help"
     exit 1
   elif [[ $# -eq 1 ]]; then
@@ -132,6 +140,20 @@ function find_latest_kernel_version {
     sort -V |
     tail -n 1 |
     perl -pe 's/^v//'
+}
+
+function check_if_version_already_packaged {
+  local current_kernel_version=$1 latest_kernel_version=$2
+
+  # Format: `M.m.p`.
+  #
+  local latest_packaged_version
+  latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
+
+  if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
+    echo "No new version! Latest packaged/available: $latest_kernel_version"
+    exit 0
+  fi
 }
 
 # Assumes that there are no multiple builds for the same version.
@@ -327,20 +349,14 @@ function main {
   local latest_kernel_version
   latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
-  # Format: `M.m.p`.
-  #
-  local latest_packaged_version
-  latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
-
-  if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
-    echo "No new version! Latest packaged/available: $latest_kernel_version"
-    exit 0
-  fi
+  check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
 
   local source_config_file
   source_config_file=$(find_latest_config_file "$latest_kernel_version")
 
-  create_if_required_and_switch_branch "$latest_kernel_version"
+  if [[ -z $v_stay_on_branch ]]; then
+    create_if_required_and_switch_branch "$latest_kernel_version"
+  fi
 
   import_config_file "$source_config_file"
 
