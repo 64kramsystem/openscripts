@@ -6,7 +6,13 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_jpg_files_matcher='.*/\w*[[:digit:]]{2,}\.jpg' # ^/$ are implicit
+# Real-world cases (edited):
+#
+# - JPEGmini/'Foo - Bar 1 002-003.jpg'
+# - JPEGmini/'Foo - Bar 1 298b.jpg'
+#
+c_jpg_files_matcher='.*/.*\b[[:digit:]]{2,}[ab]?\.jpg' # ^/$ are implicit
+
 c_unnecessary_files=(*.xml *.txt Thumbs.db *.mp3)
 c_help="Usage: $(basename "$0") [-h|--help] [-d|--delete-source-file] <input1.cbr input2.cbz...>
 
