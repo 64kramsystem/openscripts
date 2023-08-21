@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_rebase_commands_file=$(mktemp)
+export c_commits_count_regex='have (\d+) and (\d+) different commits'
+c_help="Usage: $(basename "$0") [-h|--help] <filename>
+
+Rewrites the history of a repository, merging the commits including a given file into a single commit; this is useful when one wants to keep only the latest version of a file.
+
+Before the operation, the origin is pulled, and the branch rebased. After the operation, a keypress is required before pushing the repository.
+
+Currently, the script assumes that there are two commits involving the file, not more."
+
+v_filename=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_filename=$1
+}
+
+function register_exit_hook {
+  function _exit_hook { rm -f "$c_rebase_commands_file"; }
+  trap _exit_hook EXIT
+}
+
+function pull_and_rebase_branch {
+  git pull --rebase
+}
+
+function find_head_hash {
+  git log --oneline "$v_filename" | awk 'NR==1 {print $1}'
+}
+
+function find_first_addition_hash {
+  git log --oneline "$v_filename" | awk 'END {print $1}'
+}
+
+function prepare_rebase_commands {
+  local head_hash=$1 first_addition_hash=$2
+
+  # Don't include HEAD and $first_addition_hash.
+  #
+  tac > "$c_rebase_commands_file" << COMMANDS
+pick $head_hash
+fixup $first_addition_hash
+$(git log --pretty=format:'pick %h' "$first_addition_hash"..HEAD~)
+COMMANDS
+}
+
+function perform_rebase {
+  local first_addition_hash=$1
+
+  # Include $first_addition_hash, so it will be removed.
+  #
+  GIT_SEQUENCE_EDITOR="cp $c_rebase_commands_file" git rebase -i "$first_addition_hash"~
+}
+
+function rename_head_message {
+  local message=$1
+
+  # Easiest way to rename a commit non-interactively
+  #
+  git commit --amend --message "$message"
+}
+
+function print_diff_with_origin {
+  echo "Difference with origin:"
+  git diff origin/"$(git rev-parse --abbrev-ref HEAD)"
+}
+
+function check_commits_count {
+  local local_commits_count remote_commits_count
+
+  local_commits_count=$(git status | perl -ne 'print $1 if /$ENV{c_commits_count_regex}/')
+  remote_commits_count=$(git status | perl -ne 'print $2 if /$ENV{c_commits_count_regex}/')
+
+  if [[ -z $local_commits_count || -z $remote_commits_count ]]; then
+    >&2 echo "Commit counts not (fully found)"
+    exit 1
+  elif (( remote_commits_count != local_commits_count + 1 )); then
+    >&2 echo "Unexpected number of commits: local=$local_commits_count, remote=$remote_commits_count"
+    exit 1
+  fi
+}
+
+function push_repository {
+  git push --force
+}
+
+
+function main {
+  local head_hash first_addition_hash
+
+  register_exit_hook
+
+  pull_and_rebase_branch
+
+  head_hash=$(find_head_hash)
+  first_addition_hash=$(find_first_addition_hash)
+
+  prepare_rebase_commands "$head_hash" "$first_addition_hash"
+
+  perform_rebase "$first_addition_hash"
+
+  rename_head_message "Add $v_filename"
+
+  check_commits_count
+
+  push_repository
+}
+
+decode_cmdline_args "$@"
+main
