@@ -203,7 +203,7 @@ class ShipGem
 
   def find_readme_filename
     found_filename = README_FILENAMES.detect do |filename|
-      File.exists?(filename)
+      File.exist?(filename)
     end
 
     found_filename || raise("Readme not found!")
