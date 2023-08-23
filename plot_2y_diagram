@@ -141,7 +141,7 @@ class Plot2yDiagram
 
     `echo | gnuplot --persist #{plot_filename}`
   ensure
-    File.unlink(plot_filename) if File.exists?(plot_filename)
+    File.unlink(plot_filename) if File.exist?(plot_filename)
   end
 end
 

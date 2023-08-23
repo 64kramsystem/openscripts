@@ -88,7 +88,7 @@ class PlotDiagram
     puts error
     exit 1
   ensure
-    File.unlink(data_file) if data_file_is_temporary && File.exists?(data_file)
+    File.unlink(data_file) if data_file_is_temporary && File.exist?(data_file)
   end
 
   private
