@@ -175,7 +175,7 @@ class CleanKernelPackages
 
   def remove_module_directories(module_directories_to_remove, simulate:)
     module_directories_to_remove.each do |directory|
-      if Dir.exists?(directory)
+      if Dir.exist?(directory)
         puts "- #{directory}"
         FileUtils.rm_r(directory) unless simulate
       end

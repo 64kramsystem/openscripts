@@ -48,7 +48,7 @@ class UpdateMarkdownChapterReferences
     end
 
     if insert_file
-      raise "Insert file not found!" if ! File.exists?(insert_file)
+      raise "Insert file not found!" if ! File.exist?(insert_file)
       raise "Insert file must be in the reference directory!" if File.expand_path("..", insert_file) != directory
       raise "Insert file must be numbered!" if ! has_number?(insert_file)
     end
