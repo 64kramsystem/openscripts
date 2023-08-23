@@ -33,7 +33,7 @@ class DhlPacketSlip
   def fill(output_filename, options={})
     destination = options[:destination]
 
-    File.delete(output_filename ) if File.exists?( output_filename)
+    File.delete(output_filename ) if File.exist?( output_filename)
 
     Zip::File.open(@template_filename) do | input_zip_file |
       Zip::File.open(output_filename, Zip::File::CREATE) do | output_zip_file |
