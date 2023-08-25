@@ -34,6 +34,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
 - programming
   - `build_kernel`: builds the Linux kernel, with some automations
   - `meld`: wrapper around meld, that opens two blank panels, if no files are passed
+  - `merge_git_file_commits`: Merge the commits including a given file, in a Git repository
   - `prettify`: prettifies files; supports XML and JSON
   - `rename_variables`: rename variables/constants with composite names
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
@@ -53,7 +54,6 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `install_smart_notifier`: notifies the user on logon, when smartd finds a problem with any disk
   - `maestral_upgrade`: upgrades and restarts Maestral
   - `manage_bt`: enable a BT device if present, opens the BT manager, then disables the device
-  - `merge_git_file_commits`: Merge the commits including a given file, in a Git repository
   - `mkfloppy`: create a floppy image (IMG) from the specified files/dirs
   - `mylast`: runs the last executed MySQL query, and copies the result to the clipboard
   - `mysql_collect_stats`: collects MySQL server statistics over a session (global status values), in a convenient structure for processing
