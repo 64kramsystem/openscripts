@@ -34,8 +34,8 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
 - programming
   - `build_kernel`: builds the Linux kernel, with some automations
   - `git_full_delete_branch`: checked deletion of branch (local and remote)
+  - `git_merge_file_commits`: Merge the commits including a given file, in a Git repository
   - `meld`: wrapper around meld, that opens two blank panels, if no files are passed
-  - `merge_git_file_commits`: Merge the commits including a given file, in a Git repository
   - `prettify`: prettifies files; supports XML and JSON
   - `rename_variables`: rename variables/constants with composite names
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
