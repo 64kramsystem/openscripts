@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] [branch]
+
+Deletes the specified branch locally and remotely.
+
+If no branch is specified, the current branch is deleted, unless it's the development branch (in this case, an error is raised).
+
+If the branch doesn't exist remotely, the script doesn't fail."
+
+v_delete_branch=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  case $# in
+    0)
+      ;;
+    1)
+      v_delete_branch=$1
+      ;;
+    *)
+      echo "$c_help"
+      exit 1
+      ;;
+  esac
+}
+
+function set_delete_branch_if_empty {
+  if [[ -z $v_delete_branch ]]; then
+    v_delete_branch=$(git rev-parse --abbrev-ref HEAD)
+  fi
+}
+
+function find_development_branch {
+  local remote
+
+  remote=$(git remote show)
+  git remote show "$remote" | awk '/^  HEAD branch:/ {print $NF}'
+}
+
+function check_branch {
+  local development_branch=$1
+
+  if [[ $v_delete_branch == "$development_branch" ]]; then
+    echo "Cannot delete development branch ($development_branch)"'!'
+    exit 1
+  fi
+}
+
+function switch_branch {
+  local branch=$1
+
+  git checkout "$branch"
+}
+
+function delete_local_branch {
+  git branch -D "$v_delete_branch"
+}
+
+# Doesn't fail if branch doesn't exist on remote.
+#
+function delete_remote_branch {
+  git push origin :"$v_delete_branch" || true
+}
+
+function main {
+  set_delete_branch_if_empty
+  development_branch=$(find_development_branch)
+  check_branch "$development_branch"
+  switch_branch "$development_branch"
+  delete_local_branch
+  delete_remote_branch
+}
+
+decode_cmdline_args "$@"
+main
