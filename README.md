@@ -33,6 +33,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `git_rename_commits`: rename git commits, using the old git (`filter-branch`) method
 - programming
   - `build_kernel`: builds the Linux kernel, with some automations
+  - `git_full_delete_branch`: checked deletion of branch (local and remote)
   - `meld`: wrapper around meld, that opens two blank panels, if no files are passed
   - `merge_git_file_commits`: Merge the commits including a given file, in a Git repository
   - `prettify`: prettifies files; supports XML and JSON
