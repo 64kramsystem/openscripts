@@ -8,7 +8,7 @@ shopt -s inherit_errexit
 
 c_rebase_commands_file=$(mktemp)
 export c_commits_count_regex='have (\d+) and (\d+) different commits'
-c_help="Usage: $(basename "$0") [-h|--help] <filename>
+c_help="Usage: $(basename "$0") [-h|--help] <filename> [subject_suffix]
 
 Rewrites the history of a repository, merging the commits including a given file into a single commit; this is useful when one wants to keep only the latest version of a file.
 
@@ -17,6 +17,7 @@ Before the operation, the origin is pulled, and the branch rebased. A keypress i
 Currently, the script assumes that there are two commits involving the file, not more."
 
 v_filename=
+v_subject_suffix=
 
 function decode_cmdline_args {
   local params
@@ -35,10 +36,18 @@ function decode_cmdline_args {
     esac
   done
 
-  if [[ $# -ne 1 ]]; then
+  case $# in
+  1)
+    v_filename=$1
+    ;;
+  2)
+    v_filename=$1
+    v_subject_suffix=$2
+    ;;
+  *)
     echo "$c_help"
     exit 1
-  fi
+  esac
 
   v_filename=$1
 }
@@ -110,7 +119,11 @@ function perform_rebase {
 }
 
 function rename_head_message {
-  local message=$1
+  local message="Add $v_filename"
+
+  if [[ -n $v_subject_suffix ]]; then
+    message+=" $v_subject_suffix"
+  fi
 
   # Easiest way to rename a commit non-interactively
   #
@@ -162,7 +175,7 @@ function main {
 
   perform_rebase "$first_addition_hash"
 
-  rename_head_message "Add $v_filename"
+  rename_head_message
 
   check_commits_count
 
