@@ -79,8 +79,8 @@ function prepare_rebase_commands {
   # Don't include HEAD and $first_addition_hash.
   #
   tac > "$c_rebase_commands_file" << COMMANDS
-pick $head_hash
-fixup $first_addition_hash
+fixup $head_hash
+pick $first_addition_hash
 $(git log --pretty=format:'pick %h' "$first_addition_hash"..HEAD~)
 COMMANDS
 }
