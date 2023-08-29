@@ -8,15 +8,16 @@ shopt -s inherit_errexit
 
 c_rebase_commands_file=$(mktemp)
 export c_commits_count_regex='have (\d+) and (\d+) different commits'
-c_help="Usage: $(basename "$0") [-h|--help] <filename>
+c_help="Usage: $(basename "$0") [-h|--help] <filename> [subject_suffix]
 
 Rewrites the history of a repository, merging the commits including a given file into a single commit; this is useful when one wants to keep only the latest version of a file.
 
-Before the operation, the origin is pulled, and the branch rebased. After the operation, a keypress is required before pushing the repository.
+Before the operation, the origin is pulled, and the branch rebased. A keypress is required before rewriting the history.
 
 Currently, the script assumes that there are two commits involving the file, not more."
 
 v_filename=
+v_subject_suffix=
 
 function decode_cmdline_args {
   local params
@@ -35,10 +36,18 @@ function decode_cmdline_args {
     esac
   done
 
-  if [[ $# -ne 1 ]]; then
+  case $# in
+  1)
+    v_filename=$1
+    ;;
+  2)
+    v_filename=$1
+    v_subject_suffix=$2
+    ;;
+  *)
     echo "$c_help"
     exit 1
-  fi
+  esac
 
   v_filename=$1
 }
@@ -60,16 +69,45 @@ function find_first_addition_hash {
   git log --oneline "$v_filename" | awk 'END {print $1}'
 }
 
+function print_history_from_first_addition {
+  echo "#################################################"
+  echo "# Original history (old to new)"
+  echo "#################################################"
+  echo
+
+  local first_addition_hash=$1
+
+  git log --reverse --pretty=format:'%h %s' "$first_addition_hash"~..
+
+  echo
+}
+
 function prepare_rebase_commands {
   local head_hash=$1 first_addition_hash=$2
 
-  # Don't include HEAD and $first_addition_hash.
+  # The `log` command doesn't include HEAD and $first_addition_hash.
   #
-  tac > "$c_rebase_commands_file" << COMMANDS
-pick $head_hash
-fixup $first_addition_hash
-$(git log --pretty=format:'pick %h' "$first_addition_hash"..HEAD~)
+  cat >> "$c_rebase_commands_file" << COMMANDS
+$(git log --reverse --pretty=format:'pick %h %s' "$first_addition_hash"..HEAD~)
+pick $first_addition_hash $(git show -s --pretty=format:"%s" "$first_addition_hash")
+fixup $head_hash $(git show -s --pretty=format:"%s" "$head_hash")
 COMMANDS
+}
+
+function print_rebase_commands {
+  echo "#################################################"
+  echo "# Rebase commands (old to new)"
+  echo "#################################################"
+
+  cat "$c_rebase_commands_file"
+
+  echo
+}
+
+function ask_keypress {
+  echo "Press any key to continue..."
+
+  read -rsn1
 }
 
 function perform_rebase {
@@ -81,7 +119,11 @@ function perform_rebase {
 }
 
 function rename_head_message {
-  local message=$1
+  local message="Add $v_filename"
+
+  if [[ -n $v_subject_suffix ]]; then
+    message+=" $v_subject_suffix"
+  fi
 
   # Easiest way to rename a commit non-interactively
   #
@@ -123,11 +165,17 @@ function main {
   head_hash=$(find_head_hash)
   first_addition_hash=$(find_first_addition_hash)
 
+  print_history_from_first_addition "$first_addition_hash"
+
   prepare_rebase_commands "$head_hash" "$first_addition_hash"
+
+  print_rebase_commands
+
+  ask_keypress
 
   perform_rebase "$first_addition_hash"
 
-  rename_head_message "Add $v_filename"
+  rename_head_message
 
   check_commits_count
 
