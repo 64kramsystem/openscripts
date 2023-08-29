@@ -76,12 +76,12 @@ function print_history_from_first_addition {
 function prepare_rebase_commands {
   local head_hash=$1 first_addition_hash=$2
 
-  # Don't include HEAD and $first_addition_hash.
+  # The `log` command doesn't include HEAD and $first_addition_hash.
   #
-  tac > "$c_rebase_commands_file" << COMMANDS
-fixup $head_hash
+  cat >> "$c_rebase_commands_file" << COMMANDS
+$(git log --reverse --pretty=format:'pick %h' "$first_addition_hash"..HEAD~)
 pick $first_addition_hash
-$(git log --pretty=format:'pick %h' "$first_addition_hash"..HEAD~)
+fixup $head_hash
 COMMANDS
 }
 
