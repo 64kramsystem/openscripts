@@ -62,13 +62,13 @@ function find_first_addition_hash {
 
 function print_history_from_first_addition {
   echo "#################################################"
-  echo "# Original history"
+  echo "# Original history (old to new)"
   echo "#################################################"
   echo
 
   local first_addition_hash=$1
 
-  git log --pretty=format:'%h %s' "$first_addition_hash"~..
+  git log --reverse --pretty=format:'%h %s' "$first_addition_hash"~..
 
   echo
 }
@@ -87,7 +87,7 @@ COMMANDS
 
 function print_rebase_commands {
   echo "#################################################"
-  echo "# Rebase commands"
+  echo "# Rebase commands (old to new)"
   echo "#################################################"
 
   cat "$c_rebase_commands_file"
