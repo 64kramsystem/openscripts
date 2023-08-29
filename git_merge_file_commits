@@ -12,7 +12,7 @@ c_help="Usage: $(basename "$0") [-h|--help] <filename>
 
 Rewrites the history of a repository, merging the commits including a given file into a single commit; this is useful when one wants to keep only the latest version of a file.
 
-Before the operation, the origin is pulled, and the branch rebased. After the operation, a keypress is required before pushing the repository.
+Before the operation, the origin is pulled, and the branch rebased. A keypress is required before rewriting the history.
 
 Currently, the script assumes that there are two commits involving the file, not more."
 
@@ -95,6 +95,12 @@ function print_rebase_commands {
   echo
 }
 
+function ask_keypress {
+  echo "Press any key to continue..."
+
+  read -rsn1
+}
+
 function perform_rebase {
   local first_addition_hash=$1
 
@@ -151,6 +157,8 @@ function main {
   prepare_rebase_commands "$head_hash" "$first_addition_hash"
 
   print_rebase_commands
+
+  ask_keypress
 
   perform_rebase "$first_addition_hash"
 
