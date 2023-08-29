@@ -60,6 +60,19 @@ function find_first_addition_hash {
   git log --oneline "$v_filename" | awk 'END {print $1}'
 }
 
+function print_history_from_first_addition {
+  echo "#################################################"
+  echo "# Original history"
+  echo "#################################################"
+  echo
+
+  local first_addition_hash=$1
+
+  git log --pretty=format:'%h %s' "$first_addition_hash"~..
+
+  echo
+}
+
 function prepare_rebase_commands {
   local head_hash=$1 first_addition_hash=$2
 
@@ -70,6 +83,16 @@ pick $head_hash
 fixup $first_addition_hash
 $(git log --pretty=format:'pick %h' "$first_addition_hash"..HEAD~)
 COMMANDS
+}
+
+function print_rebase_commands {
+  echo "#################################################"
+  echo "# Rebase commands"
+  echo "#################################################"
+
+  cat "$c_rebase_commands_file"
+
+  echo
 }
 
 function perform_rebase {
@@ -123,7 +146,11 @@ function main {
   head_hash=$(find_head_hash)
   first_addition_hash=$(find_first_addition_hash)
 
+  print_history_from_first_addition "$first_addition_hash"
+
   prepare_rebase_commands "$head_hash" "$first_addition_hash"
+
+  print_rebase_commands
 
   perform_rebase "$first_addition_hash"
 
