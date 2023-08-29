@@ -79,9 +79,9 @@ function prepare_rebase_commands {
   # The `log` command doesn't include HEAD and $first_addition_hash.
   #
   cat >> "$c_rebase_commands_file" << COMMANDS
-$(git log --reverse --pretty=format:'pick %h' "$first_addition_hash"..HEAD~)
-pick $first_addition_hash
-fixup $head_hash
+$(git log --reverse --pretty=format:'pick %h %s' "$first_addition_hash"..HEAD~)
+pick $first_addition_hash $(git show -s --pretty=format:"%s" "$first_addition_hash")
+fixup $head_hash $(git show -s --pretty=format:"%s" "$head_hash")
 COMMANDS
 }
 
