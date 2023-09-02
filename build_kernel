@@ -114,17 +114,29 @@ function cache_sudo {
   done 2>/dev/null &
 }
 
-# Return format: M.m.p
+# Return format: `M.m.p`
 #
 function find_running_kernel_version {
   uname -r | sed -E 's/-.+//'
+}
+
+# Appends ".0" if the version is in the `M.m` format.
+#
+function normalize_kernel_version {
+  local version=$1
+
+  if [[ $version =~ ^[[:digit:]]+\.[[:digit:]]+$ ]]; then
+    echo -n "$version.0"
+  else
+    echo -n "$version"
+  fi
 }
 
 function fetch_repo {
   git fetch
 }
 
-# Return format: `M.m.p`.
+# Return format: `M.m` or `M.m.p`
 #
 function find_latest_kernel_version {
   local raw_version=$1
@@ -202,8 +214,14 @@ function find_latest_config_file {
   echo -n "$latest_config_file"
 }
 
+# `M.m.0` versions are stored without the patch version.
+#
 function create_if_required_and_switch_branch {
   local latest_kernel_version=$1
+
+  if [[ $latest_kernel_version =~ \.0$ ]]; then
+    latest_kernel_version=${latest_kernel_version%.0}
+  fi
 
   local branch_working_copy=bv"$latest_kernel_version"
 
@@ -338,25 +356,25 @@ function main {
     cd "$v_repo_path"
   fi
 
-  # Format: `M.m` or `M.m.p`.
-  #
+  # The tag for `M.m.0` versions is in the `M.m` format.
+
   local current_kernel_version=${v_kernel_version:-"$(find_running_kernel_version)"}
+  current_kernel_version=$(normalize_kernel_version "$current_kernel_version")
 
   fetch_repo
 
-  # Format: `M.m.p`.
-  #
   local latest_kernel_version
   latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+  latest_kernel_version=$(normalize_kernel_version "$latest_kernel_version")
 
   check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
-
-  local source_config_file
-  source_config_file=$(find_latest_config_file "$latest_kernel_version")
 
   if [[ -z $v_stay_on_branch ]]; then
     create_if_required_and_switch_branch "$latest_kernel_version"
   fi
+
+  local source_config_file
+  source_config_file=$(find_latest_config_file "$latest_kernel_version")
 
   import_config_file "$source_config_file"
 
