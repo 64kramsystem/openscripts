@@ -353,12 +353,12 @@ function main {
 
   check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
 
-  local source_config_file
-  source_config_file=$(find_latest_config_file "$latest_kernel_version")
-
   if [[ -z $v_stay_on_branch ]]; then
     create_if_required_and_switch_branch "$latest_kernel_version"
   fi
+
+  local source_config_file
+  source_config_file=$(find_latest_config_file "$latest_kernel_version")
 
   import_config_file "$source_config_file"
 
