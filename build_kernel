@@ -114,7 +114,7 @@ function cache_sudo {
   done 2>/dev/null &
 }
 
-# Return format: M.m.p
+# Return format: `M.m.p`
 #
 function find_running_kernel_version {
   uname -r | sed -E 's/-.+//'
@@ -124,7 +124,7 @@ function fetch_repo {
   git fetch
 }
 
-# Return format: `M.m.p`.
+# Return format: `M.m` or `M.m.p`
 #
 function find_latest_kernel_version {
   local raw_version=$1
@@ -338,13 +338,15 @@ function main {
     cd "$v_repo_path"
   fi
 
+  # The tag for `M.m.0` versions is in the `M.m` format.
+
   # Format: `M.m` or `M.m.p`.
   #
   local current_kernel_version=${v_kernel_version:-"$(find_running_kernel_version)"}
 
   fetch_repo
 
-  # Format: `M.m.p`.
+  # Format: `M.m` or `M.m.p`.
   #
   local latest_kernel_version
   latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
