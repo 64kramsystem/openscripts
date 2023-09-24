@@ -58,7 +58,11 @@ function register_exit_hook {
 }
 
 function pull_and_rebase_branch {
+  echo "Pulling and rebasing..."
+
   git pull --rebase
+
+  echo
 }
 
 function find_head_hash {
@@ -98,6 +102,7 @@ function print_rebase_commands {
   echo "#################################################"
   echo "# Rebase commands (old to new)"
   echo "#################################################"
+  echo
 
   cat "$c_rebase_commands_file"
 
