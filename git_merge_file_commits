@@ -74,15 +74,16 @@ function find_first_addition_hash {
 }
 
 function print_history_from_first_addition {
-  echo "#################################################"
-  echo "# Original history (old to new)"
-  echo "#################################################"
-  echo
-
   local first_addition_hash=$1
 
-  git log --reverse --pretty=format:'%h %s' "$first_addition_hash"~..
+  local history_log
+  history_log=$(git log --reverse --pretty=format:'%h %s' "$first_addition_hash"~..)
 
+  echo "#################################################"
+  echo "# Original history (old to new, $(wc -l <<< "$history_log"))"
+  echo "#################################################"
+  echo
+  echo "$history_log"
   echo
 }
 
@@ -100,12 +101,10 @@ COMMANDS
 
 function print_rebase_commands {
   echo "#################################################"
-  echo "# Rebase commands (old to new)"
+  echo "# Rebase commands (old to new, $(wc -l < "$c_rebase_commands_file"))"
   echo "#################################################"
   echo
-
   cat "$c_rebase_commands_file"
-
   echo
 }
 
@@ -140,21 +139,6 @@ function print_diff_with_origin {
   git diff origin/"$(git rev-parse --abbrev-ref HEAD)"
 }
 
-function check_commits_count {
-  local local_commits_count remote_commits_count
-
-  local_commits_count=$(git status | perl -ne 'print $1 if /$ENV{c_commits_count_regex}/')
-  remote_commits_count=$(git status | perl -ne 'print $2 if /$ENV{c_commits_count_regex}/')
-
-  if [[ -z $local_commits_count || -z $remote_commits_count ]]; then
-    >&2 echo "Commit counts not (fully found)"
-    exit 1
-  elif (( remote_commits_count != local_commits_count + 1 )); then
-    >&2 echo "Unexpected number of commits: local=$local_commits_count, remote=$remote_commits_count"
-    exit 1
-  fi
-}
-
 function push_repository {
   git push --force
 }
@@ -181,8 +165,6 @@ function main {
   perform_rebase "$first_addition_hash"
 
   rename_head_message
-
-  check_commits_count
 
   push_repository
 }
