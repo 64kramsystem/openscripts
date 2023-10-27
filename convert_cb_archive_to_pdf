@@ -126,7 +126,11 @@ function handle_subdirs {
 }
 
 function delete_unnecessary_files {
-  rm -f -- "${c_unnecessary_files[@]}"
+  # Simplest approach; otherwise, there are complications due to runtime glob expansion.
+  #
+  for pattern in "${c_unnecessary_files[@]}"; do
+    find . -type f -name "$pattern" -delete
+  done
 }
 
 function check_filenames {
