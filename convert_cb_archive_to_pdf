@@ -10,6 +10,11 @@ shopt -s inherit_errexit
 #
 # - JPEGmini/'Foo - Bar 1 002-003.jpg'
 # - JPEGmini/'Foo - Bar 1 298b.jpg'
+# - ./foo bar (637).jpg'
+# - ./000001B.jpg
+# - ./Foo bar-53.jpg
+# - ./4c0043-046.jpg
+# - ./0000247.jpg
 #
 # Regex notes:
 #
@@ -18,7 +23,13 @@ shopt -s inherit_errexit
 #
 export c_jpg_files_matcher='
 .+/(
-  .*\b[[:digit:]]{2,}[ab]?
+  .+\ [[:digit:]]{3}[ab]?
+  |
+  .+\ \([[:digit:]]{3}\)
+  |
+  [[:digit:]]{6,}[A-D]?
+  |
+  .+-[[:digit:]]{2,3}
 )\.jpg'
 
 c_unnecessary_files=(
