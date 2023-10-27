@@ -73,7 +73,7 @@ function decode_cmdline_args {
 #
 function check_input_files {
   for file in "${v_input_files[@]}"; do
-    if [[ ! $file =~ \.(cbr|cbz|zip)$ ]]; then
+    if [[ ! $file =~ \.(cbr|rar|cbz|zip)$ ]]; then
       >&2 echo "Unsupported file format: $file"
       exit 1
     fi
@@ -90,7 +90,7 @@ function create_temp_dir {
 
 function decompress_file {
   case $v_input_file in
-  *.cbr)
+  *.cbr|*.rar)
     unrar x "$v_input_file" "$v_temp_dir"
     ;;
   *.cbz|*.zip)
