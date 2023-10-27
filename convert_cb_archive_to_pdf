@@ -23,6 +23,7 @@ export c_jpg_files_matcher='
 
 c_unnecessary_files=(
   *.mp3
+  *.sfv
   *.txt
   *.xml
   Thumbs.db
