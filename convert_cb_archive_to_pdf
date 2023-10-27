@@ -10,10 +10,35 @@ shopt -s inherit_errexit
 #
 # - JPEGmini/'Foo - Bar 1 002-003.jpg'
 # - JPEGmini/'Foo - Bar 1 298b.jpg'
+# - ./foo bar (637).jpg'
+# - ./000001B.jpg
+# - ./Foo bar-53.jpg
+# - ./4c0043-046.jpg
+# - ./0000247.jpg
 #
-c_jpg_files_matcher='.*/.*\b[[:digit:]]{2,}[ab]?\.jpg' # ^/$ are implicit
+# Regex notes:
+#
+# - ^/$ are implicit
+# - the /x flag is used
+#
+export c_jpg_files_matcher='
+.+/(
+  .+\ [[:digit:]]{3}[ab]?
+  |
+  .+\ \([[:digit:]]{3}\)
+  |
+  [[:digit:]]{6,}[A-D]?
+  |
+  .+-[[:digit:]]{2,3}
+)\.jpg'
 
-c_unnecessary_files=(*.xml *.txt Thumbs.db *.mp3)
+c_unnecessary_files=(
+  *.mp3
+  *.sfv
+  *.txt
+  *.xml
+  Thumbs.db
+)
 c_help="Usage: $(basename "$0") [-h|--help] [-d|--delete-source-file] <input1.cbr input2.cbz...>
 
 On deletion, if 'trash' is in the path, it will be used; otherwise, 'rm' will be."
@@ -60,7 +85,7 @@ function decode_cmdline_args {
 #
 function check_input_files {
   for file in "${v_input_files[@]}"; do
-    if [[ ! $file =~ \.(cbr|cbz|zip)$ ]]; then
+    if [[ ! $file =~ \.(cbr|rar|cbz|zip)$ ]]; then
       >&2 echo "Unsupported file format: $file"
       exit 1
     fi
@@ -77,7 +102,7 @@ function create_temp_dir {
 
 function decompress_file {
   case $v_input_file in
-  *.cbr)
+  *.cbr|*.rar)
     unrar x "$v_input_file" "$v_temp_dir"
     ;;
   *.cbz|*.zip)
@@ -113,12 +138,16 @@ function handle_subdirs {
 }
 
 function delete_unnecessary_files {
-  rm -f -- "${c_unnecessary_files[@]}"
+  # Simplest approach; otherwise, there are complications due to runtime glob expansion.
+  #
+  for pattern in "${c_unnecessary_files[@]}"; do
+    find . -type f -name "$pattern" -delete
+  done
 }
 
 function check_filenames {
   local unexpected_filenames
-  unexpected_filenames=$(find . -type f -regextype egrep -not -regex "$c_jpg_files_matcher")
+  unexpected_filenames=$(find . -type f | perl -ne 'print if !/^$ENV{c_jpg_files_matcher}$/x')
 
   if [[ -n $unexpected_filenames ]]; then
     >&2 echo "Non jpg extensions found: $unexpected_filenames"
