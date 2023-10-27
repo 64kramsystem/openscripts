@@ -11,7 +11,15 @@ shopt -s inherit_errexit
 # - JPEGmini/'Foo - Bar 1 002-003.jpg'
 # - JPEGmini/'Foo - Bar 1 298b.jpg'
 #
-c_jpg_files_matcher='.*/.*\b[[:digit:]]{2,}[ab]?\.jpg' # ^/$ are implicit
+# Regex notes:
+#
+# - ^/$ are implicit
+# - the /x flag is used
+#
+export c_jpg_files_matcher='
+.+/(
+  .*\b[[:digit:]]{2,}[ab]?
+)\.jpg'
 
 c_unnecessary_files=(
   *.mp3
@@ -123,7 +131,7 @@ function delete_unnecessary_files {
 
 function check_filenames {
   local unexpected_filenames
-  unexpected_filenames=$(find . -type f -regextype egrep -not -regex "$c_jpg_files_matcher")
+  unexpected_filenames=$(find . -type f | perl -ne 'print if !/^$ENV{c_jpg_files_matcher}$/x')
 
   if [[ -n $unexpected_filenames ]]; then
     >&2 echo "Non jpg extensions found: $unexpected_filenames"
