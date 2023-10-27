@@ -13,7 +13,12 @@ shopt -s inherit_errexit
 #
 c_jpg_files_matcher='.*/.*\b[[:digit:]]{2,}[ab]?\.jpg' # ^/$ are implicit
 
-c_unnecessary_files=(*.xml *.txt Thumbs.db *.mp3)
+c_unnecessary_files=(
+  *.mp3
+  *.txt
+  *.xml
+  Thumbs.db
+)
 c_help="Usage: $(basename "$0") [-h|--help] [-d|--delete-source-file] <input1.cbr input2.cbz...>
 
 On deletion, if 'trash' is in the path, it will be used; otherwise, 'rm' will be."
