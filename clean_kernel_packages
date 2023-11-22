@@ -23,7 +23,11 @@ class CleanKernelPackages
     current_version = KernelVersion.find_current.to_s(raw: false)
     latest_version = KernelVersion.find_latest
 
-    puts "Current/latest kernel version: #{current_version}/#{latest_version}", ""
+    if current_version == latest_version
+      puts "Current kernel is up to date (#{current_version})", ""
+    else
+      puts "Current/latest kernel version: #{current_version}/#{latest_version}", ""
+    end
 
     installed_image_versions = checked_find_installed_image_versions(current_version)
 
