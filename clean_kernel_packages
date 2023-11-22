@@ -20,7 +20,7 @@ class CleanKernelPackages
   def execute(simulate: false, keep_previous: false, delete_current: false)
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
 
-    current_version = KernelVersion.find_current
+    current_version = KernelVersion.find_current.to_s(raw: false)
     latest_version = KernelVersion.find_latest
 
     puts "Current/latest kernel version: #{current_version}/#{latest_version}", ""
