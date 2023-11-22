@@ -81,8 +81,8 @@ class KernelVersion
     to_i
   end
 
-  def to_s
-    raw
+  def to_s(raw: true)
+    raw ? self.raw : "#{@major}.#{@minor}.#{@patch}"
   end
 
   def self.find_current
