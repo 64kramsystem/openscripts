@@ -1,3 +1,5 @@
+require 'open3'
+
 # Kernel versions can have different formats:
 #
 # - 4.10.0-14-generic        # official; `14` = "ongoing release")
@@ -95,9 +97,9 @@ class KernelVersion
   def self.find_latest
     current_version = find_current.to_s[/^\d+\.\d+/]
 
-    kernel_branches = `git ls-remote --tags --refs #{KERNEL_REPOSITORY_ADDR.shellescape}`
+    kernel_branches, child_status = Open3.capture2("git ls-remote --tags --refs #{KERNEL_REPOSITORY_ADDR.shellescape}")
 
-    exit $CHILD_STATUS.exitstatus if !$CHILD_STATUS
+    exit child_status.child_status if !child_status.success?
 
     # Branch examples: v6.2-rc1, v6.2, v6.2.1
     #
