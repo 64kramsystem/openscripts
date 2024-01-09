@@ -1,19 +1,6 @@
 require 'open3'
 require 'shellwords'
 
-# Kernel versions can have different formats:
-#
-# - 4.10.0-14-generic        # official; `14` = "ongoing release")
-# - 4.12.0-1019-azure-fde    # official, two-token type
-# - 4.11.6-041106-generic    # mainline, stable; the release version is not needed
-# - 4.12.0-041200rc7-generic # mainline, RC
-# - 4.12.0-rc4-sav           # built from sources
-#
-# The type is technically optional, but this class considers that case invalid.
-#
-# Note that this class refers to modern kernel versions. In the past, there could be subversions
-# and RCs for patch versions (e.g. v2.6.16.10/v2.6.16-rc6).
-#
 class KernelVersion
   attr_accessor :raw        # Unparsed string form
   attr_accessor :major
@@ -24,7 +11,20 @@ class KernelVersion
   attr_accessor :type       # Not "version", but useful
 
   ONGOING_MAX_CHARS = 6
-  VERSION_REGEX = /
+  # Version as found by `uname -a`; sample formats:
+  #
+  # - 4.10.0-14-generic        # official; `14` = "ongoing release")
+  # - 4.12.0-1019-azure-fde    # official, two-token type
+  # - 4.11.6-041106-generic    # mainline, stable; the release version is not needed
+  # - 4.12.0-041200rc7-generic # mainline, RC
+  # - 4.12.0-rc4-sav           # built from sources
+  #
+  # The type is technically optional, but this class considers that case invalid.
+  #
+  # Note that this class refers to modern kernel versions. In the past, there could be subversions
+  # and RCs for patch versions (e.g. v2.6.16.10/v2.6.16-rc6).
+  #
+  UNAME_VERSION_REGEX = /
     ^
     (\d)\.(\d+)\.(\d+)
     (
@@ -88,6 +88,8 @@ class KernelVersion
     raw ? self.raw : "#{@major}.#{@minor}.#{@patch}"
   end
 
+  # Returns a KernelVersion instance.
+  #
   def self.find_current
     # See class comment for the version numbering.
     #
@@ -95,6 +97,8 @@ class KernelVersion
     parse_version(raw_kernel_version)
   end
 
+  # Returns a tag format string, eg. "v6.7".
+  #
   def self.find_latest
     current_version = find_current.to_s[/^\d+\.\d+/]
 
@@ -115,7 +119,7 @@ class KernelVersion
   # raise_error:        (true) if true, on unidentified version, raise error, otherwise, return nil
   #
   def self.parse_version(version_str, raise_error: true)
-    version_match = version_str.match(VERSION_REGEX)
+    version_match = version_str.match(UNAME_VERSION_REGEX)
 
     if version_match.nil?
       raise_error ? raise("Unidentified version: #{version_str}") : return
