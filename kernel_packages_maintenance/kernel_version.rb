@@ -35,6 +35,21 @@ class KernelVersion
     ([-a-z]+)
     $
   /x
+  # Version as encoded by tags in the kernel repository; sample formats:
+  #
+  # - v6.2-rc1
+  # - v6.2
+  # - v6.2.1
+  #
+  # This regex is not exact (it allows `v6.7.X-rcY`), but it's good enough for our purposes.
+  #
+  TAG_VERSION_REGEX = /
+    ^
+    v
+    (\d)\.(\d+)
+    (\.(\d+))?
+    (-rc\d+)?
+  /x
   KERNEL_REPOSITORY_ADDR = "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git"
 
   def initialize(raw, major, minor, patch, type, ongoing: nil, rc: nil)
@@ -106,8 +121,6 @@ class KernelVersion
 
     exit child_status.child_status if !child_status.success?
 
-    # Branch examples: v6.2-rc1, v6.2, v6.2.1
-    #
     kernel_branches
       .lines
       .filter_map { |branch| $1 if branch =~ %r{\trefs/tags/v(#{Regexp.escape(current_version)}($|\.|-).*)} }
@@ -130,5 +143,15 @@ class KernelVersion
     rc = raw_rc[/\d+/] if raw_rc
 
     new(version_str, major.to_i, minor.to_i, patch.to_i, type, ongoing: ongoing, rc: rc&.to_i)
+  end
+
+  def self.parse_tag_version(version_str)
+    version_match = version_str.match(TAG_VERSION_REGEX) || raise("Unidentified version: #{version_str}")
+
+    major, minor, _, patch, raw_rc = version_match.captures
+
+    rc = raw_rc[/\d+/] if raw_rc
+
+    new(version_str, major.to_i, minor.to_i, patch.to_i, "version", rc: rc&.to_i)
   end
 end
