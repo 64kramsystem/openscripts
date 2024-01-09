@@ -112,7 +112,7 @@ class KernelVersion
     parse_uname_version(raw_kernel_version)
   end
 
-  # Returns a tag format string, eg. "v6.7".
+  # Returns a KernelVersion instance.
   #
   def self.find_latest
     current_version = find_current.to_s[/^\d+\.\d+/]
@@ -123,9 +123,8 @@ class KernelVersion
 
     kernel_branches
       .lines
-      .filter_map { |branch| $1 if branch =~ %r{\trefs/tags/v(#{Regexp.escape(current_version)}($|\.|-).*)} }
-      .sort_by { |version| Gem::Version.new(version) } # handles RCs (which have patch version = 0)!
-      .last
+      .filter_map { |branch| parse_tag_version($1) if branch =~ %r{\trefs/tags/(v#{Regexp.escape(current_version)}($|\.|-).*)} }
+      .max
   end
 
   # version_str format: see class comment
