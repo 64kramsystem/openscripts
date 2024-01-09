@@ -94,7 +94,7 @@ class KernelVersion
     # See class comment for the version numbering.
     #
     raw_kernel_version = `uname -r`.rstrip
-    parse_version(raw_kernel_version)
+    parse_uname_version(raw_kernel_version)
   end
 
   # Returns a tag format string, eg. "v6.7".
@@ -118,7 +118,7 @@ class KernelVersion
   # version_str format: see class comment
   # raise_error:        (true) if true, on unidentified version, raise error, otherwise, return nil
   #
-  def self.parse_version(version_str, raise_error: true)
+  def self.parse_uname_version(version_str, raise_error: true)
     version_match = version_str.match(UNAME_VERSION_REGEX)
 
     if version_match.nil?
