@@ -21,7 +21,7 @@ class CleanKernelPackages
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
 
     current_version = KernelVersion.find_current.to_s(raw: false)
-    latest_version = KernelVersion.find_latest
+    latest_version = KernelVersion.find_latest.to_s(raw: false)
 
     if current_version == latest_version
       puts "Current kernel is up to date (#{current_version})", ""
