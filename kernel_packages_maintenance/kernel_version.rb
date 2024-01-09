@@ -1,4 +1,5 @@
 require 'open3'
+require 'shellwords'
 
 # Kernel versions can have different formats:
 #
