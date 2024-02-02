@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_display=:0
+c_help="Usage: $(basename "$0") [-h|--help] <x> <y> <refresh_rate>
+
+Finds the primary port, and adds the given display resolution.
+
+The display used is '$c_display'."
+
+v_x=
+v_y=
+v_refresh_rate=
+
+# Sample 
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 3 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_x=$1
+  v_y=$2
+  v_refresh_rate=$3
+}
+
+function find_port {
+  xrandr | awk '/ primary / { print $1 }'
+}
+
+# Prepares the mode using cvt, stripping the double quotes, and compressing the multiple spaces, so
+# that this can be converted to a Bash array.
+#
+function prepare_mode {
+  cvt "$v_x" "$v_y" "$v_refresh_rate" \
+    | perl -ne 'print $1.$2 if /^Modeline "(.+?)" (.+)/' \
+    | sed -E 's/ +/ /g'
+}
+
+function add_mode {
+  local port=$1 new_mode=("${@:2}")
+
+  xrandr --newmode "${new_mode[@]}"
+  xrandr --addmode "$port" "${new_mode[0]}"
+  xrandr --output "$port" --mode "${new_mode[0]}"
+}
+
+function main {
+  export DISPLAY=$c_display
+
+  local port new_mode
+
+  port=$(find_port)
+
+  mapfile -td' ' new_mode < <(prepare_mode)
+
+  add_mode "$port" "${new_mode[@]}"
+}
+
+decode_cmdline_args "$@"
+main

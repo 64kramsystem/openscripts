@@ -41,6 +41,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
   - `unpack_gem`: unpacks a gem, with additional operations like directory creation, gemspec extraction (when not present), etc.
 - system
+  - `add_resolution_to_display`: add the given resolution to the display adapter, using `xrandr`
   - `clean_kernel_packages`: uninstall the redundant kernel packages, keeping only the current, and the latest (past or future)
   - `clean_recents`: clean the recent used file entries whose basename matches the specified patterns
   - `connect_bt_device`: connects a BT device, working around the complete garbage that is Bluetooth, Bluez, and the BT Ubuntu support
