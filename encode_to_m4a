@@ -9,7 +9,7 @@ set -o nounset
 #     for f in *.m4a; do aacgain -s r "$f"; done
 #     aacgain -k -a *.m4a
 
-c_default_quality=3
+c_default_quality=4
 # shellcheck disable=SC2016
 c_help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
 
