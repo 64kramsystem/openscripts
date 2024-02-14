@@ -24,7 +24,12 @@ The 'input' values can be either files or directories:
 
 Compressed input audio files which are not flac are copied, without being reencoded.
 
-The codec used is libfdk_aac, in VBR, with a default quality of 3 (~110 kbps).
+The codec used is libfdk_aac, in VBR, with a default quality of 3; bitrate tested on 4 albums of different genre:
+
+- 5: 225        # not necessarily so high on all albums
+- 4: 149        # balanced
+- 3: 115
+- 2:  99
 
 Requires aacgain, a recompiled FFmpeg, and GNU Parallel.
 
