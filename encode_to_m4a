@@ -9,8 +9,9 @@ set -o nounset
 #     for f in *.m4a; do aacgain -s r "$f"; done
 #     aacgain -k -a *.m4a
 
+c_default_quality=3
 # shellcheck disable=SC2016
-help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
+c_help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
 
 Encodes to m4a and applies gain; by default, outputs to the current directory.
 
@@ -24,7 +25,7 @@ The 'input' values can be either files or directories:
 
 Compressed input audio files which are not flac are copied, without being reencoded.
 
-The codec used is libfdk_aac, in VBR, with a default quality of 3; bitrate tested on 4 albums of different genre:
+The codec used is libfdk_aac, in VBR, with a default quality of $c_default_quality; bitrate tested on 4 albums of different genre:
 
 - 5: 225        # not necessarily so high on all albums
 - 4: 149        # balanced
@@ -38,7 +39,7 @@ Please note that not all the input/quality combinations work (see https://hydrog
 
 input_files=
 destination=.
-quality=3
+quality=$c_default_quality
 remove_file=
 
 function decode_commandline_params {
@@ -47,7 +48,7 @@ function decode_commandline_params {
   while true ; do
     case "$1" in
       -h|--help)
-        echo "$help"
+        echo "$c_help"
         exit 0 ;;
       -d|--destination)
         destination="$2"
@@ -65,7 +66,7 @@ function decode_commandline_params {
   done
 
   if [[ $# -eq 0 ]]; then
-    echo "$help"
+    echo "$c_help"
     exit 1
   fi
 
