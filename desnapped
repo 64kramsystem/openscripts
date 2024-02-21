@@ -7,10 +7,10 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_snap_binary=${DESNAPPED_SNAP_BINARY:-$(which snap)}
-c_help="Usage: $(basename "$0") [-h|--help] [-u|--invoking_user] snap_name
+c_help="Usage: $(basename "$0") [-h|--help] [-u|--user <user>] <snap_name>
 
 - Start the snap services
-- Start specified snasp
+- Start specified snap
 - Stop the snap services
 
 It's possible to specify the snap binary via \$DESNAPPED_SNAP_BINARY, for systems where it's overwritten.
