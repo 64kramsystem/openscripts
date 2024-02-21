@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help]
+
+Generates commands that can be used to tag mp3 files with BPM (other audio file types are not supported).
+
+Requires:
+
+- the Mixxx database with the audio files analysis (install Mixx and run the analysis)
+- sqlite3 installed
+- id3v2 installed"
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function main {
+  # id3v2 corrupts non-mp3 files, so we filter out any other (audio) file type.
+  # Some chars are escaped, but besides the double quote, essentially pro forma.
+  #
+  sqlite3 -markdown ~/.mixxx/mixxxdb.sqlite                                  \
+    <<< '
+      SELECT directory, filename, CAST(bpm AS INTEGER)
+      FROM library l JOIN track_locations tl ON tl.id = l.location
+      WHERE bpm != 0
+            AND filename LIKE "%.mp3"
+    '                                                                        \
+    | tail -n +3 | head -n -1      `# remove table header and records count` \
+    | sed -e 's/ *| */|/g'         `# remove separator spaces`               \
+    | perl -pe 's/(["\$`])/\\$1/g' `# escape some chars`                     \
+    | awk -F'|' '{ print "id3v2 --TBPM " $4 " \"" $2 "/" $3 "\"" }'
+}
+
+decode_cmdline_args "$@"
+main
