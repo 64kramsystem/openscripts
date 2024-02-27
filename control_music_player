@@ -9,7 +9,12 @@ set -o pipefail
 ################################################################################
 
 c_gmusicbrowser_socket_file="$HOME/.config/gmusicbrowser/gmusicbrowser.fifo"
-c_supported_players=(clementine mpv gmusicbrowser) # process name
+# process name
+c_supported_players=(
+  clementine
+  gmusicbrowser
+  mpv
+)
 
 c_help="\
 Usage: $(basename "$0") (previous|play_pause|next|quit) [socket]
@@ -25,10 +30,10 @@ In MATE, for example, this script will assign them (watch out - it resets existi
 
     ruby -rshellwords <<'RUBY'
       bindings = [
-        ['Previous song',              'control_music_player previous   /run/user/1000/play_random_musik.sock',  '<Mod4>F9' ],
-        ['Play/pause',                 'control_music_player play_pause /run/user/1000/play_random_musik.sock',  '<Mod4>F10'],
-        ['Next song',                  'control_music_player next       /run/user/1000/play_random_musik.sock',  '<Mod4>F11'],
-        ['Next album',                 'control_music_player quit       /run/user/1000/play_random_musik.sock',  '<Mod4>F12'],
+        ['Previous song',              'control_music_player previous   /run/user/$(id -u)/$(basename "$0").sock',  '<Mod4>F9' ],
+        ['Play/pause',                 'control_music_player play_pause /run/user/$(id -u)/$(basename "$0").sock',  '<Mod4>F10'],
+        ['Next song',                  'control_music_player next       /run/user/$(id -u)/$(basename "$0").sock',  '<Mod4>F11'],
+        ['Next album',                 'control_music_player quit       /run/user/$(id -u)/$(basename "$0").sock',  '<Mod4>F12'],
       ]
 
       puts \"Purging existing bindings...\"
@@ -82,6 +87,8 @@ function find_running_player {
 # PLAYER_COMMANDS
 ################################################################################
 
+# Clementine
+
 function clementine_previous {
   clementine --previous
 }
@@ -95,22 +102,6 @@ function clementine_next {
 }
 function clementine_quit {
   pkill clementine
-}
-
-function mpv_previous {
-  echo '{ "command": ["playlist-prev"] }' | socat - "$v_socket_file"
-}
-
-function mpv_play_pause {
-  echo '{ "command": ["cycle", "pause"] }' | socat - "$v_socket_file"
-}
-
-function mpv_next {
-  echo '{ "command": ["playlist-next", "force"] }' | socat - "$v_socket_file"
-}
-
-function mpv_quit {
-  echo '{ "command": ["quit"] }' | socat - "$v_socket_file"
 }
 
 # gmusicbrowser
@@ -129,6 +120,24 @@ function gmusicbrowser_next {
 
 function gmusicbrowser_quit {
   pkill gmusicbrowser
+}
+
+# mpv
+
+function mpv_previous {
+  echo '{ "command": ["playlist-prev"] }' | socat - "$v_socket_file"
+}
+
+function mpv_play_pause {
+  echo '{ "command": ["cycle", "pause"] }' | socat - "$v_socket_file"
+}
+
+function mpv_next {
+  echo '{ "command": ["playlist-next", "force"] }' | socat - "$v_socket_file"
+}
+
+function mpv_quit {
+  echo '{ "command": ["quit"] }' | socat - "$v_socket_file"
 }
 
 ################################################################################
