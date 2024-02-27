@@ -11,6 +11,7 @@ set -o pipefail
 c_gmusicbrowser_socket_file="$HOME/.config/gmusicbrowser/gmusicbrowser.fifo"
 # process name
 c_supported_players=(
+  audacious
   clementine
   gmusicbrowser
   mpv
@@ -86,6 +87,23 @@ function find_running_player {
 ################################################################################
 # PLAYER_COMMANDS
 ################################################################################
+
+# Audacious
+
+function audacious_previous {
+  audacious --rew
+}
+
+function audacious_play_pause {
+  audacious --play-pause
+}
+
+function audacious_next {
+  audacious --fwd
+}
+function audacious_quit {
+  pkill audacious
+}
 
 # Clementine
 
