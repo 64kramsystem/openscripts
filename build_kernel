@@ -17,7 +17,7 @@ Options:
 - [-s|--stay-on-branch]           : don't change branch (useful when working with custom branches); requires '--kernel-version'
 - [-l|--local-version <name>]     : kernel local version (name suffix), defaults to (\$BUILD_KERNEL_LOCAL_VERSION
                                     or '$c_default_local_version'); the minus is automatically added
-- [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits
+- [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits; prefix a hash with 'R' in order to create a revert commit
 - [-i|--install]
 - [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - [-d|--display-config-diff]
@@ -273,7 +273,11 @@ function cherry_pick_commits {
 
   if [[ ${#v_arg_cherry_picks[@]} -gt 0 ]]; then
     for commit in "${v_arg_cherry_picks[@]}"; do
-      git cherry-pick "$commit"
+      if [[ $commit == R* ]]; then
+        git revert --no-edit "${commit#R}"
+      else
+        git cherry-pick "$commit"
+      fi
     done
   else
     local short_kernel_version
