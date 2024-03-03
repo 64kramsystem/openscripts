@@ -419,18 +419,21 @@ function main {
 
   fetch_repo
 
-  local raw_latest_kernel_version latest_kernel_version
-  raw_latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
-  latest_kernel_version=$(normalize_kernel_version "$raw_latest_kernel_version")
+  # Set this, and run a plain `build_kernel`.
+  #
+  local latest_kernel_version=6.8-rc6
+  # local raw_latest_kernel_version
+  # latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+  # latest_kernel_version=$(normalize_kernel_version "$latest_kernel_version")
 
-  check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
+  # check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
 
   if [[ -z $v_stay_on_branch ]]; then
     create_if_required_and_switch_branch "$latest_kernel_version"
 
-    if same_major_minor_version "$current_kernel_version" "$latest_kernel_version"; then
-      print_sorted_commits_diff "$current_kernel_version"
-    fi
+    # if same_major_minor_version "$current_kernel_version" "$latest_kernel_version"; then
+    #   print_sorted_commits_diff "$current_kernel_version"
+    # fi
   fi
 
   # Package operations condensed for readability purposes.
@@ -442,8 +445,8 @@ function main {
     download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$latest_kernel_version"
   fi
 
-  local source_config_file
-  source_config_file=$(find_latest_config_file "$latest_kernel_version")
+  local source_config_file=$v_packages_destination/config-$latest_kernel_version
+  # source_config_file=$(find_latest_config_file "$latest_kernel_version")
 
   import_config_file "$source_config_file"
 
@@ -464,9 +467,9 @@ function main {
 
   compile_kernel
 
-  remove_destination_old_version_files "$current_kernel_version"
+  # remove_destination_old_version_files "$current_kernel_version"
 
-  export_config "$latest_kernel_version"
+  # export_config "$latest_kernel_version"
 
   move_packages_and_cleanup
 
