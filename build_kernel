@@ -235,6 +235,23 @@ function create_if_required_and_switch_branch {
   fi
 }
 
+function same_major_minor_version {
+  local current_kernel_version=$1 latest_kernel_version=$2 current_version_Mm latest_version_Mm
+
+   [[ $1 =~ ^([0-9]+\.[0-9]+)\. ]] && current_version_Mm=${BASH_REMATCH[1]}
+   [[ $2 =~ ^([0-9]+\.[0-9]+)\. ]] && latest_version_Mm=${BASH_REMATCH[1]}
+
+   [[ $current_version_Mm == "$latest_version_Mm" ]]
+}
+
+function print_sorted_commits_diff {
+  local previous_version=$1
+
+  local previous_branch=bv$previous_version
+
+  git cherry -v "$previous_branch" | sort -k3
+}
+
 function import_config_file {
   cp "$source_config_file" .config
 }
@@ -375,6 +392,10 @@ function main {
 
   if [[ -z $v_stay_on_branch ]]; then
     create_if_required_and_switch_branch "$latest_kernel_version"
+
+    if same_major_minor_version "$current_kernel_version" "$latest_kernel_version"; then
+      print_sorted_commits_diff "$current_kernel_version"
+    fi
   fi
 
   local source_config_file
