@@ -7,6 +7,10 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_default_local_version=custom
+# Example: https://kernel.ubuntu.com/mainline/v6.7/
+c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/v
+# Example: https://kernel.ubuntu.com/mainline/v6.8-rc1/amd64/linux-modules-6.8.0-060800rc1-generic_6.8.0-060800rc1.202401212233_amd64.deb
+c_package_name_pattern="amd64/linux-modules-[[:alnum:]_.-]+_amd64+\.deb"
 c_help="Usage: $(basename "$0") [-h|--help] <options...> [packages_destination]
 
 Builds a kernel from the source code.
@@ -187,6 +191,37 @@ function find_latest_packaged_version {
     tail -n 1 |
     perl -ne 'print /linux-image-(.*?)-/' ||
     true
+}
+
+function find_amd64_modules_package_link {
+  local raw_latest_kernel_version=$1
+
+  local builds_url=$c_mainline_ppa_url$raw_latest_kernel_version
+
+  local builds_page_content
+  builds_page_content=$(wget --quiet "$builds_url" --output-document - || true)
+
+  if [[ -n $builds_page_content ]]; then
+    [[ $builds_page_content =~ $c_package_name_pattern ]] || true
+
+    if [[ -n "${BASH_REMATCH[*]}" ]]; then
+      echo -n "$builds_url/${BASH_REMATCH[0]}"
+    fi
+  fi
+}
+
+function download_and_extract_config_file_from_modules_package {
+  local amd64_modules_package_link=$1 kernel_version=$2
+
+  local local_package_name=
+  local_package_name=$(dirname "$(mktemp --dry-run)")/${amd64_modules_package_link##*/}
+
+  wget "$amd64_modules_package_link" --output-document "$local_package_name"
+
+  # Example: ./boot/config-6.7.0-060700-generic
+  #
+  dpkg-deb --fsys-tarfile "$local_package_name" | \
+    tar xv -C . --wildcards --transform="s/^\.\/boot\/config-.*/config-$kernel_version/" "./boot/config-*"
 }
 
 function find_latest_config_file {
@@ -377,16 +412,16 @@ function main {
     cd "$v_repo_path"
   fi
 
-  # The tag for `M.m.0` versions is in the `M.m` format.
+  # The tag (and mainline PPA path) for `M.m.0` versions is in the `M.m` format.
 
   local current_kernel_version=${v_kernel_version:-"$(find_running_kernel_version)"}
   current_kernel_version=$(normalize_kernel_version "$current_kernel_version")
 
   fetch_repo
 
-  local latest_kernel_version
-  latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
-  latest_kernel_version=$(normalize_kernel_version "$latest_kernel_version")
+  local raw_latest_kernel_version latest_kernel_version
+  raw_latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+  latest_kernel_version=$(normalize_kernel_version "$raw_latest_kernel_version")
 
   check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
 
@@ -396,6 +431,15 @@ function main {
     if same_major_minor_version "$current_kernel_version" "$latest_kernel_version"; then
       print_sorted_commits_diff "$current_kernel_version"
     fi
+  fi
+
+  # Package operations condensed for readability purposes.
+  #
+  local amd64_modules_package_link
+  amd64_modules_package_link=$(find_amd64_modules_package_link "$raw_latest_kernel_version")
+
+  if [[ -n $amd64_modules_package_link ]]; then
+    download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$latest_kernel_version"
   fi
 
   local source_config_file
