@@ -282,6 +282,12 @@ function same_major_minor_version {
 function print_sorted_commits_diff {
   local previous_version=$1
 
+  # See create_if_required_and_switch_branch().
+  #
+  if [[ $previous_version =~ \.0$ ]]; then
+    previous_version=${previous_version%.0}
+  fi
+
   local previous_branch=bv$previous_version
 
   git cherry -v "$previous_branch" | sort -k3
