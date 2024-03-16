@@ -446,12 +446,12 @@ function main {
 
   if [[ -n $amd64_modules_package_link ]]; then
     download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$latest_kernel_version"
+  else
+    local source_config_file
+    source_config_file=$(find_latest_config_file "$latest_kernel_version")
+
+    import_config_file "$source_config_file"
   fi
-
-  local source_config_file
-  source_config_file=$(find_latest_config_file "$latest_kernel_version")
-
-  import_config_file "$source_config_file"
 
   backup_config
 
