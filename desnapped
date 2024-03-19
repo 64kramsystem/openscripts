@@ -12,6 +12,8 @@ c_help="Usage: $(basename "$0") [-h|--help] [-u|--user <user>] [-b|--binary <bin
 - Executes the operation (run, install, remove...) on the specified snap
 - Stop the snap services
 
+Doesn't support invocations from the desktop environment; only from terminal.
+
 For systems where the snap binary has been overwritten, it's possible to use the '--binary' option, or set \$DESNAPPED_SNAP_BINARY.
 
 The parameters '--invoking-user' should not be manually passed (it's used when switching to sudo)."
@@ -53,9 +55,9 @@ function decode_cmdline_args {
   v_snap_name=$2
 }
 
-function ensure_sudo {
+function prepare_sudo {
   if [[ $(id -u) -ne 0 ]]; then
-    pkexec env DISPLAY="$DISPLAY" XAUTHORITY="$XAUTHORITY" "$0" -u "$(whoami)" -b "$v_snap_binary" "$@"
+    sudo "$0" --user "$(whoami)" --binary "$v_snap_binary" "$@"
     exit $?
   fi
 }
@@ -73,7 +75,7 @@ function stop_snapd_units {
 }
 
 decode_cmdline_args "$@"
-ensure_sudo "$@"
+prepare_sudo "$@"
 start_snapd_units
 execute_snap_operation
 stop_snapd_units
