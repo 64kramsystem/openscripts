@@ -6,24 +6,26 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_snap_binary=${DESNAPPED_SNAP_BINARY:-$(which snap)}
-c_help="Usage: $(basename "$0") [-h|--help] [-u|--user <user>] <operation> <snap_name>
+c_help="Usage: $(basename "$0") [-h|--help] [-u|--user <user>] [-b|--binary <binary>] <operation> <operation_params...>
 
 - Start the snap services
 - Executes the operation (run, install, remove...) on the specified snap
 - Stop the snap services
 
-It's possible to specify the snap binary via \$DESNAPPED_SNAP_BINARY, for systems where it's overwritten.
+Doesn't support invocations from the desktop environment; only from terminal.
 
-The parameter --invoking-user should not be manually passed (it's used when switching to sudo)."
+For systems where the snap binary has been overwritten, it's possible to use the '--binary' option, or set \$DESNAPPED_SNAP_BINARY.
+
+The parameters '--invoking-user' should not be manually passed (it's used when switching to sudo)."
 
 v_invoking_user=
-v_snap_name=
+v_snap_binary=${DESNAPPED_SNAP_BINARY:-$(which snap)}
 v_operation=
+v_operation_params=()
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hu: --long help,user: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hu:b: --long help,user:,binary: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -35,24 +37,27 @@ function decode_cmdline_args {
       -u|--user)
         v_invoking_user=$2
         shift 2 ;;
+      -b|--binary)
+        v_snap_binary=$2
+        shift 2 ;;
       --)
         shift
         break ;;
     esac
   done
 
-  if [[ $# -ne 2 ]]; then
+  if [[ $# -lt 1 ]]; then
     echo "$c_help"
     exit 1
   fi
 
   v_operation=$1
-  v_snap_name=$2
+  v_operation_params+=("${@:2}")
 }
 
-function ensure_sudo {
+function prepare_sudo {
   if [[ $(id -u) -ne 0 ]]; then
-    pkexec env DISPLAY="$DISPLAY" XAUTHORITY="$XAUTHORITY" DESNAPPED_SNAP_BINARY="$c_snap_binary" "$0" -u "$(whoami)" "$@"
+    sudo "$0" --user "$(whoami)" --binary "$v_snap_binary" "$@"
     exit $?
   fi
 }
@@ -62,7 +67,7 @@ function start_snapd_units {
 }
 
 function execute_snap_operation {
-  sudo -u "$v_invoking_user" "$c_snap_binary" "$v_operation" "$v_snap_name"
+  sudo -u "$v_invoking_user" "$v_snap_binary" "$v_operation" "${v_operation_params[@]}"
 }
 
 function stop_snapd_units {
@@ -70,7 +75,7 @@ function stop_snapd_units {
 }
 
 decode_cmdline_args "$@"
-ensure_sudo "$@"
+prepare_sudo "$@"
 start_snapd_units
 execute_snap_operation
 stop_snapd_units
