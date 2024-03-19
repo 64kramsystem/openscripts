@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-h|--help] [-u|--user <user>] [-b|--binary <binary>] <operation> <snap_name>
+c_help="Usage: $(basename "$0") [-h|--help] [-u|--user <user>] [-b|--binary <binary>] <operation> <operation_params...>
 
 - Start the snap services
 - Executes the operation (run, install, remove...) on the specified snap
@@ -20,8 +20,8 @@ The parameters '--invoking-user' should not be manually passed (it's used when s
 
 v_invoking_user=
 v_snap_binary=${DESNAPPED_SNAP_BINARY:-$(which snap)}
-v_snap_name=
 v_operation=
+v_operation_params=()
 
 function decode_cmdline_args {
   local params
@@ -46,13 +46,13 @@ function decode_cmdline_args {
     esac
   done
 
-  if [[ $# -ne 2 ]]; then
+  if [[ $# -lt 1 ]]; then
     echo "$c_help"
     exit 1
   fi
 
   v_operation=$1
-  v_snap_name=$2
+  v_operation_params+=("${@:2}")
 }
 
 function prepare_sudo {
@@ -67,7 +67,7 @@ function start_snapd_units {
 }
 
 function execute_snap_operation {
-  sudo -u "$v_invoking_user" "$v_snap_binary" "$v_operation" "$v_snap_name"
+  sudo -u "$v_invoking_user" "$v_snap_binary" "$v_operation" "${v_operation_params[@]}"
 }
 
 function stop_snapd_units {
