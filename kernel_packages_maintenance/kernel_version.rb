@@ -119,7 +119,7 @@ class KernelVersion
 
     kernel_branches, child_status = Open3.capture2("git ls-remote --tags --refs #{KERNEL_REPOSITORY_ADDR.shellescape}")
 
-    exit child_status.child_status if !child_status.success?
+    exit child_status.exitstatus if !child_status.success?
 
     kernel_branches
       .lines
