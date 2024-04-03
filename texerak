@@ -96,4 +96,6 @@ prepare_parameters "$@"
 
 trap remove_intermediate ERR
 
+echo "OCR'ing with language: ${v_language:-(default)}"
+
 ocr_sources
