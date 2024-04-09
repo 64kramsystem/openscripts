@@ -42,6 +42,7 @@ function decode_cmdline_args {
 function main {
   # id3v2 corrupts non-mp3 files, so we filter out any other (audio) file type.
   # Some chars are escaped, but besides the double quote, essentially pro forma.
+  # eyed3 is a better alternative in many ways, but for this task, id3v2 works fine.
   #
   sqlite3 -markdown ~/.mixxx/mixxxdb.sqlite                                  \
     <<< '
