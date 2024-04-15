@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_binary_path=.WINETEMPLATE_BINARY_PATH
+export WINEPREFIX=${WINEPREFIX:-$HOME/.wine}
+c_help="Usage: $(basename "$0") [-h|--help] [<branch>]
+
+Runs an program in the given branch of the local Wine Git repository.
+
+On execution, the script:
+
+- changes to the Wine directory (\$WINEPREFIX or \$HOME/.wine)
+- cleans the index
+- checks out the branch
+- runs the binary specified in the '$c_binary_path' file
+
+If the script is executed without arguments, all the branches, except main/master, are listed."
+
+v_branch=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -gt 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_branch=${1:-}
+}
+
+# There are more rigorous ways to find the development branch, but in this context, it's not worth.
+#
+function list_branches {
+  git for-each-ref --format='%(refname:short)' refs/heads/ \
+    | grep -vP '^(main|master)$'
+}
+
+function run_branch {
+  git reset --hard HEAD
+  git clean -fdx
+
+  git checkout "$v_branch"
+
+  local binary_path
+  binary_path=$(<"$c_binary_path")
+
+  wine "$binary_path"
+}
+
+function wait_for_wine_to_exit {
+  echo 'Waiting for Wine to close...'
+
+  while pgrep -x wineserver > /dev/null; do
+    sleep 0.1
+  done
+}
+
+function main {
+  cd "$WINEPREFIX"
+
+  if [[ -z $v_branch ]]; then
+    list_branches
+  else
+    run_branch
+    wait_for_wine_to_exit
+  fi
+}
+
+decode_cmdline_args "$@"
+main
