@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_repo_address=https://github.com/bluez/bluez.git
+c_repo_dir=$(mktemp -d --suffix=.bluez)
+c_help="Usage: $(basename "$0") [-h|--help]
+
+Upgrade Bluez from source. Assumes that the current installation has been performed from source."
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function register_exit_hook {
+  function _exit_hook { rm -rf "$c_repo_address"; }
+  trap _exit_hook EXIT
+}
+
+function clone_repository_and_switch_dir {
+  git clone "$c_repo_address" "$c_repo_dir"
+  cd "$c_repo_dir"
+}
+
+# Format: X.YZ
+#
+function find_current_version {
+  bluetoothd --version
+}
+
+function change_to_version {
+  local version=$1
+
+  git checkout "$version"
+}
+
+function clean_and_configure {
+  git clean -fdx
+
+  ./bootstrap
+  ./configure \
+    --prefix=/usr --mandir=/usr/share/man --sysconfdir=/etc --localstatedir=/var \
+    --libexecdir=/usr/lib `# added to match Ubuntu`
+}
+
+function uninstall {
+  sudo make uninstall
+}
+
+# Format: X.YZ
+#
+function find_latest_version {
+  git ls-remote "$c_repo_address" \
+    | perl -lne 'print $1 if /refs\/tags\/([\d.]+)$/' \
+    | sort -V \
+    | tail -n 1
+}
+
+function build_and_install {
+  make -j "$(nproc)"
+
+  # The file `/usr/lib/cups/backend/bluetooth` is also owned by the `bluez-cups` package; it's not clear
+  # if it needs to be up to date, but if one doesn't use it, it doesn't matter.
+  # In theory, `--disable-cups` can be used, but it causes a configure error (not mentioned by the documentation).
+  #
+  sudo make install
+}
+
+function restart_bluetooth_service {
+  sudo systemctl daemon-reload
+  sudo systemctl restart bluetooth
+}
+
+function main {
+  register_exit_hook
+
+  clone_repository_and_switch_dir
+
+  current_release=$(find_current_version)
+
+  change_to_version "$current_release"
+
+  clean_and_configure
+
+  uninstall
+
+  latest_version=$(find_latest_version)
+
+  change_to_version "$latest_version"
+
+  clean_and_configure
+
+  build_and_install
+
+  restart_bluetooth_service
+
+  echo 'Upgrade finished!'
+}
+
+decode_cmdline_args "$@"
+main
