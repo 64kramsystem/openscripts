@@ -67,6 +67,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `purge_trash`: purge the trash files trashed before a certain threashold
   - `script_template`: create a Bash script template, and sets the permissions
   - `send_display_to_sleep`: send the display to sleep, working around GNOME's screensaver interference
+  - `upgrade_bluez_from_source`: upgrade the system Bluez to the latest version, from source
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
   - `winetemplate`: conveniently run Wine programs, stored in a Git repository with per-program branches
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
