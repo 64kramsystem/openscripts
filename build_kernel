@@ -406,7 +406,7 @@ function move_packages_and_cleanup {
 function install_kernel_packages {
   local latest_kernel_version=$1
 
-  sudo dpkg -i "$v_packages_destination"/linux-*-"$latest_kernel_version"-*.deb
+  sudo dpkg -i "$v_packages_destination"/linux-*[-_]"$latest_kernel_version"-*.deb
 }
 
 function main {
