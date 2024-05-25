@@ -434,7 +434,9 @@ function main {
   if [[ -z $v_stay_on_branch ]]; then
     create_if_required_and_switch_branch "$latest_kernel_version"
 
-    if same_major_minor_version "$current_kernel_version" "$latest_kernel_version"; then
+    # When specifying a different kernel version, don't display the diff.
+    #
+    if [[ -z $v_kernel_version ]] && same_major_minor_version "$current_kernel_version" "$latest_kernel_version"; then
       print_sorted_commits_diff "$current_kernel_version"
     fi
   fi
