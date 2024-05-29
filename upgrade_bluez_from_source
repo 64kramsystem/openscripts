@@ -12,7 +12,9 @@ c_help="Usage: $(basename "$0") [-h|--help]
 
 Upgrade Bluez from source.
 
-Uninstalles the files corresponding to the previous, and puts the bluez package on hold."
+Uninstalles the files corresponding to the previous, and puts the bluez package on hold.
+
+If the current version is the latest, nothing is done."
 
 function decode_cmdline_args {
   local params
@@ -53,6 +55,15 @@ function find_current_version {
   bluetoothd --version
 }
 
+# Format: X.YZ
+#
+function find_latest_version {
+  git ls-remote "$c_repo_address" \
+    | perl -lne 'print $1 if /refs\/tags\/([\d.]+)$/' \
+    | sort -V \
+    | tail -n 1
+}
+
 function change_to_version {
   local version=$1
 
@@ -70,15 +81,6 @@ function clean_and_configure {
 
 function uninstall {
   sudo make uninstall
-}
-
-# Format: X.YZ
-#
-function find_latest_version {
-  git ls-remote "$c_repo_address" \
-    | perl -lne 'print $1 if /refs\/tags\/([\d.]+)$/' \
-    | sort -V \
-    | tail -n 1
 }
 
 function build_and_install {
@@ -106,26 +108,29 @@ function main {
   clone_repository_and_switch_dir
 
   current_release=$(find_current_version)
-
-  change_to_version "$current_release"
-
-  clean_and_configure
-
-  uninstall
-
   latest_version=$(find_latest_version)
 
-  change_to_version "$latest_version"
+  if [[ "$current_release" != "$latest_version" ]]; then
+    change_to_version "$current_release"
 
-  clean_and_configure
+    clean_and_configure
 
-  build_and_install
+    uninstall
 
-  restart_bluetooth_service
+    change_to_version "$latest_version"
 
-  hold_bluez_package
+    clean_and_configure
 
-  echo 'Upgrade finished!'
+    build_and_install
+
+    restart_bluetooth_service
+
+    hold_bluez_package
+
+    echo "Upgraded to v$latest_version."
+  else
+    echo 'Already at the latest version.'
+  fi
 }
 
 decode_cmdline_args "$@"
