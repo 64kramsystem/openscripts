@@ -105,13 +105,13 @@ function hold_bluez_package {
 function main {
   register_exit_hook
 
-  clone_repository_and_switch_dir
-
-  current_release=$(find_current_version)
+  current_version=$(find_current_version)
   latest_version=$(find_latest_version)
 
-  if [[ "$current_release" != "$latest_version" ]]; then
-    change_to_version "$current_release"
+  if [[ $current_version != "$latest_version" ]]; then
+    clone_repository_and_switch_dir "$current_version"
+
+    change_to_version "$current_version"
 
     clean_and_configure
 
