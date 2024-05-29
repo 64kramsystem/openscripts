@@ -44,6 +44,10 @@ function register_exit_hook {
   trap _exit_hook EXIT
 }
 
+function cache_sudo {
+  sudo -v
+}
+
 function clone_repository_and_switch_dir {
   git clone "$c_repo_address" "$c_repo_dir"
   cd "$c_repo_dir"
@@ -109,6 +113,8 @@ function main {
   latest_version=$(find_latest_version)
 
   if [[ $current_version != "$latest_version" ]]; then
+    cache_sudo
+
     clone_repository_and_switch_dir "$current_version"
 
     change_to_version "$current_version"
