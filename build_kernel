@@ -157,7 +157,7 @@ function find_latest_kernel_version {
   local escaped_short_version=${short_version//./\\.}
 
   git tag |
-    grep -P "^v$escaped_short_version"'(?!-rc)' |
+    grep -P "^v$escaped_short_version"'($|\.)' |
     sort -V |
     tail -n 1 |
     perl -pe 's/^v//'
