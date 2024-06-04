@@ -123,13 +123,13 @@ function cache_sudo {
   done 2>/dev/null &
 }
 
-# Return format: `M.m.p`
+# Return format: `M.m.p` or `M.m.0-rcN`
 #
 function find_running_kernel_version {
   uname -r | sed -E 's/-.+//'
 }
 
-# Appends ".0" if the version is in the `M.m` format.
+# Return format: `M.m.p` or `M.m-rcN`.
 #
 function normalize_kernel_version {
   local version=$1
@@ -145,7 +145,7 @@ function fetch_repo {
   git fetch
 }
 
-# Return format: `M.m` or `M.m.p`
+# Return format: `M.m`, `M.m.p` or `M.m-rcN`.
 #
 function find_latest_kernel_version {
   local raw_version=$1
@@ -156,17 +156,21 @@ function find_latest_kernel_version {
   short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
   local escaped_short_version=${short_version//./\\.}
 
+  # Temporarily append a zero to GA releases, otherwise, `sort -V` places it before the RCs.
+  #
   git tag |
-    grep -P "^v$escaped_short_version"'($|\.)' |
+    grep -P "^v$escaped_short_version"'($|-rc|\.)' |
+    perl -pe 's/^\d+\.\d+\K$/.0/' |
     sort -V |
     tail -n 1 |
-    perl -pe 's/^v//'
+    perl -pe 's/^v//' |
+    perl -pe 's/^\d+\.\d+\K\.0$//'
 }
 
 function check_if_version_already_packaged {
   local current_kernel_version=$1 latest_kernel_version=$2
 
-  # Format: `M.m.p`.
+  # Format: `M.m.p` or or `M.m-rcN`.
   #
   local latest_packaged_version
   latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
@@ -179,22 +183,18 @@ function check_if_version_already_packaged {
 
 # Assumes that there are no multiple builds for the same version.
 #
-# Return format: `M.m.p`.
+# Return format: `M.m.p` or `M.m-rcN`.
 #
 function find_latest_packaged_version {
-  # Accepts full/short versions.
-  #
-  local raw_version=$1
-
-  local short_version
-  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+  local kernel_version=$1
 
   # Use the image package for reference.
   #
-  find "$v_packages_destination" -regextype egrep -regex ".*/linux-image-$short_version.[[:digit:]]+-.+" -printf "%P\n" |
+  find "$v_packages_destination" -printf "%P\n" |
+    perl -ne 'print $1 if /^linux-image-('"$kernel_version"'(-rc\d+)?)/' |
     sort -V |
     tail -n 1 |
-    perl -ne 'print /linux-image-(.*?)-/' ||
+    perl -pe 's/\.0(?=-rc)//' ||
     true
 }
 
@@ -229,6 +229,8 @@ function download_and_extract_config_file_from_modules_package {
     tar xv -C . --wildcards --transform="s/^\.\/boot\/config-.*/config-$kernel_version/" "./boot/config-*"
 }
 
+# See remove_destination_old_version_files() for the filenames format.
+#
 function find_latest_config_file {
   # Accepts full/short versions.
   #
@@ -241,7 +243,7 @@ function find_latest_config_file {
 
   local latest_config_file
   latest_config_file=$(
-    find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version.[[:digit:]]+" |
+    find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" |
       sort -V |
       tail -n 1
   )
@@ -384,15 +386,19 @@ function remove_destination_old_version_files {
   # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
   # e.g. reference/backup.
   #
-  find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version.[[:digit:]]+" -exec rm {} \;
-
-  # The package names are in the format:
+  find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
+  # Sample filenames:
+  #
+  # - config-6.9.0
+  # - config-6.10-rc2
   #
   # - linux-headers-6.1.9-sav_6.1.9-sav-4_amd64.deb
   # - linux-image-6.1.9-sav_6.1.9-sav-4_amd64.deb
   # - linux-libc-dev_6.1.9-sav-4_amd64.deb
   #
-  find "$v_packages_destination" -regextype egrep -regex ".*/linux.+[-_]$short_version\..+\.deb" -exec rm {} \;
+  # - linux-headers-6.10.0-rc2-sav_6.10.0-rc2-65_amd64.deb
+  #
+  find "$v_packages_destination" -regextype egrep -regex ".*/.+[-_]$short_version\..+\.deb" -exec rm {} \;
 }
 
 function export_config {
@@ -408,10 +414,15 @@ function move_packages_and_cleanup {
   rm ../*.{changes,buildinfo}
 }
 
+# See remove_destination_old_version_files() for the filenames format.
+#
 function install_kernel_packages {
-  local latest_kernel_version=$1
+  local normalized_version=$1
 
-  sudo dpkg -i "$v_packages_destination"/linux-*[-_]"$latest_kernel_version"-*.deb
+  local short_version
+  short_version=$(echo "$normalized_version" | perl -ne 'print /(\d+\.\d+)/')
+
+  sudo dpkg -i "$v_packages_destination"/linux-*[-_]"$short_version".[0-9]-*.deb
 }
 
 function main {
