@@ -75,6 +75,10 @@ class KernelVersion
     value + (rc || ongoing.to_i + 127)
   end
 
+  def <=>(other)
+    to_i <=> other.to_i
+  end
+
   def <(other)
     (self <=> other) == -1
   end
@@ -85,10 +89,6 @@ class KernelVersion
 
   def >=(other)
     (self <=> other) >= 0
-  end
-
-  def <=>(other)
-    to_i <=> other.to_i
   end
 
   def ==(other)
