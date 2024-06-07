@@ -91,6 +91,10 @@ class KernelVersion
     to_i <=> other.to_i
   end
 
+  def ==(other)
+    (self <=> other) == 0
+  end
+
   def eql?(other)
     (self <=> other) == 0
   end
