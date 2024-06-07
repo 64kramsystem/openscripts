@@ -31,7 +31,7 @@ class CleanKernelPackages
 
     installed_image_versions = checked_find_installed_image_versions(current_version)
 
-    puts "Currently installed image package versions:", *installed_image_versions.map { |version| "- #{version}" }, ""
+    puts "Currently installed image package versions:", *installed_image_versions.sort.map { |version| "- #{version}" }, ""
 
     image_versions_to_remove = find_image_versions_to_remove(current_version, installed_image_versions, **options)
 
