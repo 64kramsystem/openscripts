@@ -20,13 +20,13 @@ class CleanKernelPackages
   def execute(simulate: false, keep_previous: false, delete_current: false)
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
 
-    current_version = KernelVersion.find_current.to_s(raw: false)
-    latest_version = KernelVersion.find_latest.to_s(raw: false)
+    current_version = KernelVersion.find_current
+    latest_version = KernelVersion.find_latest
 
     if current_version == latest_version
-      puts "Current kernel is up to date (#{current_version})", ""
+      puts "Current kernel is up to date (#{current_version.to_s(raw: false)})", ""
     else
-      puts "Current/latest kernel version: #{current_version}/#{latest_version}", ""
+      puts "Current/latest kernel version: #{current_version.to_s(raw: false)}/#{latest_version.to_s(raw: false)}", ""
     end
 
     installed_image_versions = checked_find_installed_image_versions(current_version)
