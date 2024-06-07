@@ -76,15 +76,15 @@ class KernelVersion
   end
 
   def <(other)
-    to_i < other.to_i
+    (self <=> other) == -1
   end
 
   def >(other)
-    to_i > other.to_i
+    (self <=> other) == 1
   end
 
   def >=(other)
-    to_i >= other.to_i
+    (self <=> other) >= 0
   end
 
   def <=>(other)
