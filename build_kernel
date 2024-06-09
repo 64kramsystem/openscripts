@@ -173,7 +173,7 @@ function check_if_version_already_packaged {
   # Format: `M.m.p` or or `M.m-rcN`.
   #
   local latest_packaged_version
-  latest_packaged_version=$(find_latest_packaged_version "$current_kernel_version")
+  latest_packaged_version=$(find_latest_packaged_version "$latest_kernel_version")
 
   if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
     echo "No new version! Latest packaged/available: $latest_kernel_version"
