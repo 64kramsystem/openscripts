@@ -126,7 +126,7 @@ function cache_sudo {
 # Return format: `M.m.p` or `M.m.0-rcN`
 #
 function find_running_kernel_version {
-  uname -r | sed -E 's/-.+//'
+  uname -r | sed -E 's/-[^-]+$//'
 }
 
 # Return format: `M.m.p` or `M.m-rcN`.
@@ -187,6 +187,10 @@ function check_if_version_already_packaged {
 #
 function find_latest_packaged_version {
   local kernel_version=$1
+
+  if [[ $kernel_version =~ ^([0-9]+\.[0-9]+)($|-rc) ]]; then
+    kernel_version=${BASH_REMATCH[1]}.0
+  fi
 
   # Use the image package for reference.
   #
@@ -289,15 +293,9 @@ function same_major_minor_version {
 function print_sorted_commits_diff {
   local previous_version=$1
 
-  # See create_if_required_and_switch_branch().
-  #
-  if [[ $previous_version =~ \.0$ ]]; then
-    previous_version=${previous_version%.0}
-  fi
+  previous_version=$(echo "$previous_version" | perl -pe 's/^(\d+\.\d+)\.0/$1/')
 
-  local previous_branch=bv$previous_version
-
-  git cherry -v "$previous_branch" | sort -k3
+  git cherry -v "v$previous_version" | sort -k3
 }
 
 function import_config_file {
@@ -443,6 +441,7 @@ function main {
 
   local raw_latest_kernel_version latest_kernel_version
   raw_latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+
   latest_kernel_version=$(normalize_kernel_version "$raw_latest_kernel_version")
 
   check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
