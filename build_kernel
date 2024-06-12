@@ -444,9 +444,9 @@ function main {
 
   latest_kernel_version=$(normalize_kernel_version "$raw_latest_kernel_version")
 
-  check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
-
   if [[ -z $v_stay_on_branch ]]; then
+    check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
+
     create_if_required_and_switch_branch "$latest_kernel_version"
 
     # When specifying a different kernel version, don't display the diff.
