@@ -49,9 +49,9 @@ class Plot2yDiagram
   #   :title2
   #   :verbose
   #
-  def plot(data_file, options={})
-    gnuplot_commands = prepare_gnuplot_commands(data_file, options)
-    execute_gnuplot_commands(gnuplot_commands, options)
+  def plot(data_file, **options)
+    gnuplot_commands = prepare_gnuplot_commands(data_file, **options)
+    execute_gnuplot_commands(gnuplot_commands, **options)
   rescue => error
     puts error
     exit 1
@@ -150,5 +150,5 @@ if __FILE__ == $PROGRAM_NAME
 
   data_file = options.delete(:data_file)
 
-  Plot2yDiagram.new.plot(data_file, options)
+  Plot2yDiagram.new.plot(data_file, **options)
 end
