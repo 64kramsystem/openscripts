@@ -104,7 +104,7 @@ class KernelVersion
   end
 
   def to_s(raw: true)
-    raw ? self.raw : "#{@major}.#{@minor}.#{@patch}"
+    raw ? self.raw : "#{@major}.#{@minor}.#{@patch}#{"-rc#{@rc}" if @rc}"
   end
 
   # Returns a KernelVersion instance.
