@@ -74,13 +74,19 @@ function change_to_version {
   git checkout "$version"
 }
 
+function find_bluez_libexecdir {
+  dpkg -L bluez | perl -ne 'print $1 if /(\/usr\/lib.*)\/bluetooth$/'
+}
+
 function clean_and_configure {
+  local libexecdir=$1
+
   git clean -fdx
 
   ./bootstrap
   ./configure \
     --prefix=/usr --mandir=/usr/share/man --sysconfdir=/etc --localstatedir=/var \
-    --libexecdir=/usr/lib `# added to match Ubuntu`
+    --libexecdir="$libexecdir"
 }
 
 function uninstall {
@@ -119,13 +125,18 @@ function main {
 
     change_to_version "$current_version"
 
-    clean_and_configure
+    # The location changed between Ubuntu 22.04 and 24.04.
+    #
+    local libexecdir
+    libexecdir=$(find_bluez_libexecdir)
+
+    clean_and_configure "$libexecdir"
 
     uninstall
 
     change_to_version "$latest_version"
 
-    clean_and_configure
+    clean_and_configure "$libexecdir"
 
     build_and_install
 
