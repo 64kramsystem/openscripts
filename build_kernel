@@ -230,7 +230,7 @@ function download_and_extract_config_file_from_modules_package {
   # Example: ./boot/config-6.7.0-060700-generic
   #
   dpkg-deb --fsys-tarfile "$local_package_name" | \
-    tar xv -C . --wildcards --transform="s/^\.\/boot\/config-.*/config-$kernel_version/" "./boot/config-*"
+    tar xv -C . --wildcards --transform="s/^\.\/boot\/config-.*/.config/" "./boot/config-*"
 }
 
 # See remove_destination_old_version_files() for the filenames format.
