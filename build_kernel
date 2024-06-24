@@ -230,7 +230,7 @@ function download_and_extract_config_file_from_modules_package {
   # Example: ./boot/config-6.7.0-060700-generic
   #
   dpkg-deb --fsys-tarfile "$local_package_name" | \
-    tar xv -C . --wildcards --transform="s/^\.\/boot\/config-.*/.config/" "./boot/config-*"
+    tar xv -C "$v_packages_destination" --wildcards --transform="s/^\.\/boot\/config-.*/config-$kernel_version/" "./boot/config-*"
 }
 
 # See remove_destination_old_version_files() for the filenames format.
@@ -302,10 +302,6 @@ function import_config_file {
   cp "$source_config_file" .config
 }
 
-function backup_config {
-  cp .config{,.bak}
-}
-
 function patch_config {
   scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
   scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
@@ -374,17 +370,22 @@ function compile_kernel {
 }
 
 function remove_destination_old_version_files {
-  local raw_version=$1
+  local raw_version=$1 source_config_file=$2
 
   local short_version
   short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+
+  # This is actually redundant, although by using the basename, we make this logic more robust.
+  #
+  local source_config_file
+  source_config_file=$(basename "$source_config_file")
 
   # Note that at least one configuration is necessarily present, but not the packages.
 
   # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
   # e.g. reference/backup.
   #
-  find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
+  find "$v_packages_destination" -regextype egrep -not -name "$source_config_file" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
   # Sample filenames:
   #
   # - config-6.9.0
@@ -397,14 +398,6 @@ function remove_destination_old_version_files {
   # - linux-headers-6.10.0-rc2-sav_6.10.0-rc2-65_amd64.deb
   #
   find "$v_packages_destination" -regextype egrep -regex ".*/.+[-_]$short_version\..+\.deb" -exec rm {} \;
-}
-
-function export_config {
-  local version=$1
-
-  local config_backup=$v_packages_destination/config-$version
-
-  cp .config "$config_backup"
 }
 
 function move_packages_and_cleanup {
@@ -463,14 +456,12 @@ function main {
 
   if [[ -n $amd64_modules_package_link ]]; then
     download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$latest_kernel_version"
-  else
-    local source_config_file
-    source_config_file=$(find_latest_config_file "$latest_kernel_version")
-
-    import_config_file "$source_config_file"
   fi
 
-  backup_config
+  local source_config_file
+  source_config_file=$(find_latest_config_file "$latest_kernel_version")
+
+  import_config_file "$source_config_file"
 
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
@@ -487,9 +478,7 @@ function main {
 
   compile_kernel
 
-  remove_destination_old_version_files "$current_kernel_version"
-
-  export_config "$latest_kernel_version"
+  remove_destination_old_version_files "$current_kernel_version" "$source_config_file"
 
   move_packages_and_cleanup
 
