@@ -160,7 +160,7 @@ function find_latest_kernel_version {
   #
   git tag |
     grep -P "^v$escaped_short_version"'($|-rc|\.)' |
-    perl -pe 's/^\d+\.\d+\K$/.0/' |
+    perl -pe 's/^v\d+\.\d+\K$/.0/' |
     sort -V |
     tail -n 1 |
     perl -pe 's/^v//' |
