@@ -14,9 +14,11 @@ Upgrade Bluez from source.
 
 Uninstalles the files corresponding to the previous, and puts the bluez package on hold.
 
+The repository dir can be specified also via \$UPGRADE_BLUEZ_REPO_DIR; the cmdline option has higher priority.
+
 If the current version is the latest, nothing is done."
 
-v_repository_dir=
+v_repository_dir=${UPGRADE_BLUEZ_REPO_DIR:-}
 
 function decode_cmdline_args {
   local params
