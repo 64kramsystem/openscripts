@@ -7,8 +7,8 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_repo_address=https://github.com/bluez/bluez.git
-c_repo_dir=$(mktemp -d --suffix=.bluez)
-c_help="Usage: $(basename "$0") [-h|--help]
+c_temporary_dir=$(mktemp -d --suffix=.bluez)
+c_help="Usage: $(basename "$0") [-r|--repository-dir <dir>] [-h|--help]
 
 Upgrade Bluez from source.
 
@@ -16,9 +16,11 @@ Uninstalles the files corresponding to the previous, and puts the bluez package 
 
 If the current version is the latest, nothing is done."
 
+v_repository_dir=
+
 function decode_cmdline_args {
   local params
-  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hr: --long help,repository-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -27,6 +29,9 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
+      -r|--repository-dir)
+        v_repository_dir=$2
+        shift 2 ;;
       --)
         shift
         break ;;
@@ -36,6 +41,10 @@ function decode_cmdline_args {
   if [[ $# -ne 0 ]]; then
     echo "$c_help"
     exit 1
+  fi
+
+  if [[ -z $v_repository_dir ]]; then
+    v_repository_dir=$c_temporary_dir
   fi
 }
 
@@ -49,11 +58,21 @@ function cache_sudo {
 }
 
 function clone_repository {
-  git clone "$c_repo_address" "$c_repo_dir"
+  git clone "$c_repo_address" "$c_temporary_dir"
 }
 
 function switch_dir {
-  cd "$c_repo_dir"
+  cd "$v_repository_dir"
+}
+
+function clean_repository {
+  rm -f .gitignore
+  git clean -fd
+  git checkout .gitignore
+}
+
+function fetch_repository {
+  git fetch
 }
 
 # Format: X.YZ
@@ -124,8 +143,14 @@ function main {
   if [[ $current_version != "$latest_version" ]]; then
     cache_sudo
 
-    clone_repository "$current_version"
-    switch_dir
+    if [[ $v_repository_dir == "$c_temporary_dir" ]]; then
+      clone_repository "$current_version"
+      switch_dir
+    else
+      switch_dir
+      clean_repository
+      fetch_repository
+    fi
 
     change_to_version "$current_version"
 
