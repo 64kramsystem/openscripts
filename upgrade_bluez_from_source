@@ -48,8 +48,11 @@ function cache_sudo {
   sudo -v
 }
 
-function clone_repository_and_switch_dir {
+function clone_repository {
   git clone "$c_repo_address" "$c_repo_dir"
+}
+
+function switch_dir {
   cd "$c_repo_dir"
 }
 
@@ -121,7 +124,8 @@ function main {
   if [[ $current_version != "$latest_version" ]]; then
     cache_sudo
 
-    clone_repository_and_switch_dir "$current_version"
+    clone_repository "$current_version"
+    switch_dir
 
     change_to_version "$current_version"
 
