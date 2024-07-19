@@ -50,13 +50,18 @@ function decode_cmdline_args {
   fi
 }
 
+function prepare_sudo {
+  if [[ $(id -u) -ne 0 ]]; then
+    # The script is intended to be added to the sudoers file; this avoids having to call `sudo`.
+    #
+    sudo env UPGRADE_BLUEZ_REPO_DIR="${UPGRADE_BLUEZ_REPO_DIR:-}" "$0" "$@"
+    exit $?
+  fi
+}
+
 function register_exit_hook {
   function _exit_hook { rm -rf "$c_repo_address"; }
   trap _exit_hook EXIT
-}
-
-function cache_sudo {
-  sudo -v
 }
 
 function clone_repository {
@@ -143,8 +148,6 @@ function main {
   latest_version=$(find_latest_version)
 
   if [[ $current_version != "$latest_version" ]]; then
-    cache_sudo
-
     if [[ $v_repository_dir == "$c_temporary_dir" ]]; then
       clone_repository "$current_version"
       switch_dir
@@ -182,4 +185,5 @@ function main {
 }
 
 decode_cmdline_args "$@"
+prepare_sudo "$@"
 main
