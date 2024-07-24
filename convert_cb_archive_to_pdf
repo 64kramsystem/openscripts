@@ -41,9 +41,12 @@ c_unnecessary_files=(
 )
 c_help="Usage: $(basename "$0") [-h|--help] [-d|--delete-source-file] <input1.cbr input2.cbz...>
 
-On deletion, if 'trash' is in the path, it will be used; otherwise, 'rm' will be."
+On deletion, if 'trash' is in the path, it will be used; otherwise, 'rm' will be.
+
+Files with unexpected names are printed at the end."
 
 v_input_files=()
+v_unexpected_filenames=()
 v_delete_source_file= # boolean; false=blank, true=anything else
 # The below are set on every cycle of the main for loop
 v_input_file=
@@ -145,14 +148,8 @@ function delete_unnecessary_files {
   done
 }
 
-function check_filenames {
-  local unexpected_filenames
-  unexpected_filenames=$(find . -type f | perl -ne 'print if !/^$ENV{c_jpg_files_matcher}$/x')
-
-  if [[ -n $unexpected_filenames ]]; then
-    >&2 echo "Files with unexpected name found: $unexpected_filenames"
-    exit 1
-  fi
+function find_unexpected_filenames {
+  find . -type f | perl -ne 'print if !/^$ENV{c_jpg_files_matcher}$/x'
 }
 
 function pad_filenames {
@@ -182,6 +179,13 @@ function delete_source_file {
   fi
 }
 
+function print_unexpected_filenames {
+  echo
+  echo -n "Found files with unexpected filenames:"
+  printf %s "${v_unexpected_filenames[@]/#/$'\n'- }"
+  echo
+}
+
 decode_cmdline_args "$@"
 
 check_input_files
@@ -193,11 +197,14 @@ for v_input_file in "${v_input_files[@]}"; do
   enter_temp_dir
   handle_subdirs
   delete_unnecessary_files
-  check_filenames
+  mapfile -t v_unexpected_filenames < <(find_unexpected_filenames)
   pad_filenames
   create_pdf
   delete_temp_dir
   if [[ -n $v_delete_source_file ]]; then
     delete_source_file
+  fi
+  if [[ ${#v_unexpected_filenames[@]} -gt 0 ]]; then
+    print_unexpected_filenames
   fi
 done
