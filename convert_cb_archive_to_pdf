@@ -150,7 +150,7 @@ function check_filenames {
   unexpected_filenames=$(find . -type f | perl -ne 'print if !/^$ENV{c_jpg_files_matcher}$/x')
 
   if [[ -n $unexpected_filenames ]]; then
-    >&2 echo "Non jpg extensions found: $unexpected_filenames"
+    >&2 echo "Files with unexpected name found: $unexpected_filenames"
     exit 1
   fi
 }
