@@ -175,9 +175,9 @@ function main {
 
     hold_bluez_package
 
-    echo "Upgraded to v$latest_version."
+    echo "Upgraded Bluez to v$latest_version."
   else
-    echo 'Already at the latest version.'
+    echo 'Bluez already at the latest version.'
   fi
 }
 
