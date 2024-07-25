@@ -160,11 +160,9 @@ function pad_filenames {
 }
 
 function create_pdf {
-  # For unclear reasons, v6.9.10-23, when the source files are not in the current directory, sometimes
-  # hangs.
-  # Therefore, we make sure to be in the current directory.
+  # WATCH OUT!! Don't use Imagemagick, which is lossy.
   #
-  convert -monitor ./*.jpg "$v_output_file"
+  img2pdf ./*.jpg -o "$v_output_file"
 }
 
 function delete_temp_dir {
