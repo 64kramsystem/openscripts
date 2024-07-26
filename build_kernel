@@ -197,6 +197,9 @@ function find_latest_packaged_version {
 
   # Use the image package for reference.
   #
+  # See remove_destination_old_version_files() for the filenames format.
+  #
+  #
   find "$v_packages_destination" -printf "%P\n" |
     perl -ne 'print $1 if /^linux-image-('"$kernel_version"'(-rc\d+)?)/' |
     sort -V |
@@ -239,15 +242,15 @@ function download_and_extract_config_file_from_modules_package {
     tar xv -C "$v_packages_destination" --wildcards --transform="s/^\.\/boot\/config-.*/config-$kernel_version/" "./boot/config-*"
 }
 
-# See remove_destination_old_version_files() for the filenames format.
-#
 function find_latest_config_file {
   local normalized_version=$1
 
   local short_version
   short_version=$(echo "$normalized_version" | perl -ne 'print /(\d+\.\d+)/')
 
-  # The match need to be precise; ignore other configurations (with suffixes) that may be present.
+  # The match needs to be precise; ignore other configurations (with suffixes) that may be present.
+  #
+  # See remove_destination_old_version_files() for the filenames format.
 
   local latest_config_file
   latest_config_file=$(
@@ -409,14 +412,14 @@ function move_packages_and_cleanup {
   rm ../*.{changes,buildinfo}
 }
 
-# See remove_destination_old_version_files() for the filenames format.
-#
 function install_kernel_packages {
   local normalized_version=$1
 
   local short_version
   short_version=$(echo "$normalized_version" | perl -ne 'print /(\d+\.\d+)/')
 
+  # See remove_destination_old_version_files() for the filenames format.
+  #
   sudo dpkg -i "$v_packages_destination"/linux-*[-_]"$short_version".[0-9]-*.deb
 }
 
@@ -430,6 +433,7 @@ function main {
   fi
 
   # The tag (and mainline PPA path) for `M.m.0` versions is in the `M.m` format.
+  # We need to normalize regardless, because the version can also be passed by the user.
 
   local current_kernel_version=${v_kernel_version:-"$(find_running_kernel_version)"}
   current_kernel_version=$(normalize_kernel_version "$current_kernel_version")
