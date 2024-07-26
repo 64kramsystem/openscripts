@@ -6,16 +6,6 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-# Real-world cases (edited):
-#
-# - JPEGmini/'Foo - Bar 1 002-003.jpg'
-# - JPEGmini/'Foo - Bar 1 298b.jpg'
-# - ./foo bar (637).jpg'
-# - ./000001B.jpg
-# - ./Foo bar-53.jpg
-# - ./4c0043-046.jpg
-# - ./0000247.jpg
-#
 # Regex notes:
 #
 # - ^/$ are implicit
@@ -23,12 +13,27 @@ shopt -s inherit_errexit
 #
 export c_jpg_files_matcher='
 .+/.+(
+  #
+  # "JPEGmini/Foo - Bar 1 002-003.jpg"
+  # "JPEGmini/Foo - Bar 1 298b.jpg"
+  #
   \ [[:digit:]]{3}[ab]?
   |
+  #
+  # "foo bar (637).jpg"
+  #
   \ \([[:digit:]]{3}\)
   |
+  #
+  # "000001B.jpg"
+  # "0000247.jpg"
+  #
   [[:digit:]]{6,}[A-D]?
   |
+  #
+  # "Foo bar-53.jpg"
+  # "4c0043-046.jpg"
+  #
   -[[:digit:]]{2,3}
 )\.jpg'
 
