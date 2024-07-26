@@ -141,30 +141,33 @@ function normalize_kernel_version {
   fi
 }
 
+# Version with the patch `0` version (present in GA versions) removed.
+#
+function short_kernel_version {
+  perl -pe 's/^\d+\.\d+\K\.0$//' <<< "$1"
+}
+
 function fetch_repo {
   git fetch
 }
 
-# Return format: `M.m`, `M.m.p` or `M.m-rcN`.
+# Return format: `M.m.p` or `M.m-rcN`.
 #
 function find_latest_kernel_version {
-  local raw_version=$1
+  local normalized_version=$1
 
-  # Accepts full/short versions.
-  #
   local short_version
-  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+  short_version=$(echo "$normalized_version" | perl -ne 'print /(\d+\.\d+)/')
   local escaped_short_version=${short_version//./\\.}
 
-  # Temporarily append a zero to GA releases, otherwise, `sort -V` places it before the RCs.
+  # Append a zero to GA releases, otherwise, `sort -V` places it before the RCs.
   #
   git tag |
     grep -P "^v$escaped_short_version"'($|-rc|\.)' |
     perl -pe 's/^v\d+\.\d+\K$/.0/' |
     sort -V |
     tail -n 1 |
-    perl -pe 's/^v//' |
-    perl -pe 's/^\d+\.\d+\K\.0$//'
+    perl -pe 's/^v//'
 }
 
 function check_if_version_already_packaged {
@@ -203,9 +206,12 @@ function find_latest_packaged_version {
 }
 
 function find_amd64_modules_package_link {
-  local raw_latest_kernel_version=$1
+  local latest_kernel_version=$1
 
-  local builds_url=$c_mainline_ppa_url$raw_latest_kernel_version
+  local package_kernel_version
+  package_kernel_version=$(short_kernel_version "$latest_kernel_version")
+
+  local builds_url=$c_mainline_ppa_url$package_kernel_version
 
   local builds_page_content
   builds_page_content=$(wget --quiet "$builds_url" --output-document - || true)
@@ -236,12 +242,10 @@ function download_and_extract_config_file_from_modules_package {
 # See remove_destination_old_version_files() for the filenames format.
 #
 function find_latest_config_file {
-  # Accepts full/short versions.
-  #
-  local raw_version=$1
+  local normalized_version=$1
 
   local short_version
-  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+  short_version=$(echo "$normalized_version" | perl -ne 'print /(\d+\.\d+)/')
 
   # The match need to be precise; ignore other configurations (with suffixes) that may be present.
 
@@ -432,10 +436,8 @@ function main {
 
   fetch_repo
 
-  local raw_latest_kernel_version latest_kernel_version
-  raw_latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
-
-  latest_kernel_version=$(normalize_kernel_version "$raw_latest_kernel_version")
+  local latest_kernel_version
+  latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
   if [[ -z $v_stay_on_branch ]]; then
     check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
@@ -452,7 +454,7 @@ function main {
   # Package operations condensed for readability purposes.
   #
   local amd64_modules_package_link
-  amd64_modules_package_link=$(find_amd64_modules_package_link "$raw_latest_kernel_version")
+  amd64_modules_package_link=$(find_amd64_modules_package_link "$latest_kernel_version")
 
   if [[ -n $amd64_modules_package_link ]]; then
     download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$latest_kernel_version"
