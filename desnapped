@@ -63,7 +63,7 @@ function prepare_sudo {
 }
 
 function start_snapd_units {
-  systemctl start snapd
+  systemctl start snapd.apparmor snapd
 }
 
 function execute_snap_operation {
@@ -71,7 +71,7 @@ function execute_snap_operation {
 }
 
 function stop_snapd_units {
-  systemctl stop snapd{,.socket,.seeded,.snap-repair.timer}
+  systemctl stop snapd{,.socket,.seeded,.snap-repair.timer,.apparmor}
 }
 
 decode_cmdline_args "$@"
