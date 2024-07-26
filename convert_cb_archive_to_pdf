@@ -6,44 +6,6 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-# Regex notes:
-#
-# - ^/$ are implicit
-# - the /x flag is used
-#
-export c_jpg_files_matcher='
-.+/.+(
-  #
-  # "JPEGmini/Foo - Bar 1 002-003.jpg"
-  # "JPEGmini/Foo - Bar 1 298b.jpg"
-  #
-  \ [[:digit:]]{3}[ab]?
-  |
-  #
-  # "foo bar (637).jpg"
-  #
-  \ \([[:digit:]]{3}\)
-  |
-  #
-  # "000001B.jpg"
-  # "0000247.jpg"
-  #
-  [[:digit:]]{6,}[A-D]?
-  |
-  #
-  # "Foo bar-53.jpg"
-  # "4c0043-046.jpg"
-  #
-  -[[:digit:]]{2,3}
-  |
-  #
-  # "foo_bar_v01_082.jpg"
-  # "foo_bar_v01_082m.jpg"
-  # "foo_bar_v01_082mf.jpg"
-  #
-  _[[:digit:]]{3}(mf?)?
-)\.jpg'
-
 c_unnecessary_files=(
   *.mp3
   *.sfv
@@ -161,20 +123,15 @@ function delete_unnecessary_files {
 }
 
 function find_unexpected_filenames {
-  find . -type f | perl -ne 'print if !/^$ENV{c_jpg_files_matcher}$/x'
-}
-
-function pad_filenames {
-  # All the numbers are padded; for simplicity, also the unnecessary ones (e.g. belonging to the
-  # title).
-  #
-  rename 's/(\d+)/"0" x (4 - length($1)) . $1 . $2/eg' -- *.jpg
+  find . -type f -not -name '*.jpg'
 }
 
 function create_pdf {
   # WATCH OUT!! Don't use Imagemagick, which is lossy.
   #
-  img2pdf ./*.jpg -o "$v_output_file"
+  find . -name '*.jpg' -print0 \
+    | sort -z \
+    | xargs -0 img2pdf -o "$v_output_file"
 }
 
 function delete_temp_dir {
@@ -208,7 +165,6 @@ for v_input_file in "${v_input_files[@]}"; do
   handle_subdirs
   delete_unnecessary_files
   mapfile -t v_unexpected_filenames < <(find_unexpected_filenames)
-  pad_filenames
   create_pdf
   delete_temp_dir
   if [[ -n $v_delete_source_file ]]; then
