@@ -35,6 +35,13 @@ export c_jpg_files_matcher='
   # "4c0043-046.jpg"
   #
   -[[:digit:]]{2,3}
+  |
+  #
+  # "foo_bar_v01_082.jpg"
+  # "foo_bar_v01_082m.jpg"
+  # "foo_bar_v01_082mf.jpg"
+  #
+  _[[:digit:]]{3}(mf?)?
 )\.jpg'
 
 c_unnecessary_files=(
