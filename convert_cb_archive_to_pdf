@@ -22,14 +22,14 @@ shopt -s inherit_errexit
 # - the /x flag is used
 #
 export c_jpg_files_matcher='
-.+/(
-  .+\ [[:digit:]]{3}[ab]?
+.+/.+(
+  \ [[:digit:]]{3}[ab]?
   |
-  .+\ \([[:digit:]]{3}\)
+  \ \([[:digit:]]{3}\)
   |
   [[:digit:]]{6,}[A-D]?
   |
-  .+-[[:digit:]]{2,3}
+  -[[:digit:]]{2,3}
 )\.jpg'
 
 c_unnecessary_files=(
