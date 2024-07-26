@@ -6,6 +6,8 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
+c_image_extensions_regex='.+\.(jpg|png)'
+
 c_unnecessary_files=(
   *.mp3
   *.sfv
@@ -121,7 +123,7 @@ function delete_unnecessary_files {
 
 function check_filenames {
   local unexpected_filenames
-  unexpected_filenames=$(find . -type f -not -name '*.jpg')
+  unexpected_filenames=$(find . -type f -not -regextype egrep -regex "$c_image_extensions_regex")
 
   if [[ -n $unexpected_filenames ]]; then
     >&2 echo "Files with unexpected name found: $unexpected_filenames"
@@ -132,7 +134,7 @@ function check_filenames {
 function create_pdf {
   # WATCH OUT!! Don't use Imagemagick, which is lossy.
   #
-  find . -name '*.jpg' -print0 \
+  find . -regextype egrep -regex "$c_image_extensions_regex" -print0 \
     | sort -z \
     | xargs -0 img2pdf -o "$v_output_file"
 }
