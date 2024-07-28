@@ -162,12 +162,23 @@ function find_latest_kernel_version {
 
   # Append a zero to GA releases, otherwise, `sort -V` places it before the RCs.
   #
-  git tag |
-    grep -P "^v$escaped_short_version"'($|-rc|\.)' |
-    perl -pe 's/^v\d+\.\d+\K$/.0/' |
-    sort -V |
-    tail -n 1 |
-    perl -pe 's/^v//'
+  local latest_version
+  latest_version=$(
+    git tag \
+      | grep -P "^v$escaped_short_version"'($|-rc|\.)' \
+      | perl -pe 's/^v\d+\.\d+\K$/.0/' \
+      | sort -V \
+      | tail -n 1 \
+      | perl -pe 's/^v//' \
+    || true
+  )
+
+  if [[ -z $latest_version ]]; then
+    >&2 echo "No kernel versions found for v$short_version."
+    exit 1
+  fi
+
+  echo -n "$latest_version"
 }
 
 function check_if_version_already_packaged {
