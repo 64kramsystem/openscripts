@@ -147,8 +147,8 @@ function short_kernel_version {
   perl -pe 's/^\d+\.\d+\K\.0$//' <<< "$1"
 }
 
-function fetch_repo {
-  git fetch
+function fetch_remotes {
+  git fetch --all
 }
 
 # Return format: `M.m.p` or `M.m-rcN`.
@@ -438,7 +438,7 @@ function main {
   local current_kernel_version=${v_kernel_version:-"$(find_running_kernel_version)"}
   current_kernel_version=$(normalize_kernel_version "$current_kernel_version")
 
-  fetch_repo
+  fetch_remotes
 
   local latest_kernel_version
   latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
