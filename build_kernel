@@ -141,12 +141,6 @@ function normalize_kernel_version {
   fi
 }
 
-# Version with the patch `0` version (present in GA versions) removed.
-#
-function short_kernel_version {
-  perl -pe 's/^\d+\.\d+\K\.0$//' <<< "$1"
-}
-
 function fetch_remotes {
   git fetch --all
 }
@@ -222,8 +216,10 @@ function find_latest_packaged_version {
 function find_amd64_modules_package_link {
   local latest_kernel_version=$1
 
+  # Remove the patch `0` version from GAs.
+  #
   local package_kernel_version
-  package_kernel_version=$(short_kernel_version "$latest_kernel_version")
+  package_kernel_version=$(echo "$latest_kernel_version" | perl -pe 's/^\d+\.\d+\K\.0$//')
 
   local builds_url=$c_mainline_ppa_url$package_kernel_version
 
