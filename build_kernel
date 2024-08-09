@@ -431,7 +431,7 @@ function install_kernel_packages {
 
   # See remove_destination_old_version_files() for the filenames format.
   #
-  sudo dpkg -i "$v_packages_destination"/linux-*[-_]"$short_version".[0-9]-*.deb
+  sudo dpkg -i "$v_packages_destination"/linux-*[-_]"$short_version".*-*.deb
 }
 
 function main {
