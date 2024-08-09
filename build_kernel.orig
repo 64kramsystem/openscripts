@@ -141,7 +141,17 @@ function normalize_kernel_version {
   fi
 }
 
-unction fetch_remotes {
+<<<<<<< Updated upstream
+=======
+# Version with the patch `0` version (present in GA versions) removed.
+#
+function short_kernel_version {
+  perl -pe 's/^\d+\.\d+\K\.0$//' <<< "$1"
+}
+
+
+>>>>>>> Stashed changes
+function fetch_remotes {
   git fetch --all
 }
 
@@ -216,25 +226,17 @@ function find_latest_packaged_version {
 function find_amd64_modules_package_link {
   local latest_kernel_version=$1
 
+<<<<<<< Updated upstream
+  # Remove the patch `0` version from GAs.
+  #
+=======
   local mainline_ppa_page_content
   mainline_ppa_page_content=$(wget --quiet "$builds_url" --output-document -)
 
-  local short_kernel_version
-  short_kernel_version=$(echo "$latest_kernel_version" | perl -ne 'print /(\d+\.\d+)/')
-  WRITEME # escape dots
+  local minor_major_kernel_version
+  minor_major_kernel_version=$(echo "$latest_kernel_version" | perl -ne 'print /(\d+\.\d+)/')
 
-
-  # Examples:
-  #
-  #   >v6.6/</a>
-  #   >v6.7-rc1/</a>
-  #   >v6.7.1/</a>
-  #
-  local found_versions
-  found_versions=$(echo "$mainline_ppa_page_content" | grep -P ">v$short_kernel_version()/<")
-
-  # Remove the patch `0` version from GAs.
-  #
+>>>>>>> Stashed changes
   local package_kernel_version
   package_kernel_version=$(echo "$latest_kernel_version" | perl -pe 's/^\d+\.\d+\K\.0$//')
 
