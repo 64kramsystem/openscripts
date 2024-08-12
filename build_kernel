@@ -200,6 +200,16 @@ function find_latest_kernel_version {
   echo -n "$latest_version"
 }
 
+# See remove_destination_old_version_files() for the filenames format.
+#
+# Returns the config file full path.
+#
+function find_config_file_for_version {
+  local kernel_version=$1
+
+  find "$v_packages_destination" -name "config-$kernel_version" -printf "%p"
+}
+
 function check_if_version_already_packaged {
   local current_kernel_version=$1 building_kernel_version=$2
 
@@ -490,17 +500,21 @@ function main {
     fi
   fi
 
-  # Package operations condensed for readability purposes.
-
-  local amd64_modules_package_link
-  amd64_modules_package_link=$(find_amd64_modules_package_link "$building_kernel_version")
-
-  if [[ -n $amd64_modules_package_link ]]; then
-    download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$building_kernel_version"
-  fi
-
   local source_config_file
-  source_config_file=$(find_latest_config_file "$building_kernel_version")
+  source_config_file=$(find_config_file_for_version "$building_kernel_version")
+
+  if [[ -z $source_config_file ]]; then
+    # Package operations condensed for readability purposes.
+
+    local amd64_modules_package_link
+    amd64_modules_package_link=$(find_amd64_modules_package_link "$building_kernel_version")
+
+    if [[ -n $amd64_modules_package_link ]]; then
+      download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$building_kernel_version"
+    fi
+
+    source_config_file=$(find_latest_config_file "$building_kernel_version")
+  fi
 
   import_config_file "$source_config_file"
 
