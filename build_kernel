@@ -140,10 +140,26 @@ function normalize_kernel_version {
   fi
 }
 
-# Version with the patch `0` version (present in GA versions) removed.
+# Shorten the kernel version:
+#
+# - `with_rc`: remove the patch `0` version (present in GA versions), but keep the RC (if present)
+# - `no_rc`  : remove both the patch `0` and RC versions
+#
+# $2: `with_rc` or `no_rc`
 #
 function short_kernel_version {
-  perl -pe 's/^\d+\.\d+\K\.0$//' <<< "$1"
+  case $2 in
+  with_rc)
+    echo "$1" | perl -pe 's/^\d+\.\d+\K\.0//'
+    ;;
+  no_rc)
+    echo "$1" | perl -ne 'print /^(\d+\.\d+)/'
+    ;;
+  *)
+    >&2 echo "Invalid short version mode: $2"
+    exit 1
+    ;;
+  esac
 }
 
 function fetch_remotes {
@@ -156,7 +172,7 @@ function find_latest_kernel_version {
   local normalized_version=$1
 
   local short_version
-  short_version=$(echo "$normalized_version" | perl -ne 'print /(\d+\.\d+)/')
+  short_version=$(short_kernel_version "$normalized_version" no_rc)
   local escaped_short_version=${short_version//./\\.}
 
   # Append a zero to GA releases, otherwise, `sort -V` places it before the RCs.
@@ -221,7 +237,7 @@ function find_amd64_modules_package_link {
   local kernel_version=$1
 
   local package_kernel_version
-  package_kernel_version=$(short_kernel_version "$kernel_version")
+  package_kernel_version=$(short_kernel_version "$kernel_version" with_rc)
 
   local builds_url=$c_mainline_ppa_url$package_kernel_version
 
@@ -255,7 +271,7 @@ function find_latest_config_file {
   local normalized_version=$1
 
   local short_version
-  short_version=$(echo "$normalized_version" | perl -ne 'print /(\d+\.\d+)/')
+  short_version=$(short_kernel_version "$normalized_version" no_rc)
 
   # The match needs to be precise; ignore other configurations (with suffixes) that may be present.
   #
@@ -298,18 +314,18 @@ function create_if_required_and_switch_branch {
 }
 
 function same_major_minor_version {
-  local current_version=$1 building_kernel_version=$2
+  local short_version_1 short_version_2
 
-   [[ $1 =~ ^[0-9]+\.[0-9]+ ]] && current_version=${BASH_REMATCH[0]}
-   [[ $2 =~ ^[0-9]+\.[0-9]+ ]] && latest_version=${BASH_REMATCH[0]}
+  short_version_1=$(short_kernel_version "$1" no_rc)
+  short_version_2=$(short_kernel_version "$2" no_rc)
 
-   [[ $current_version == "$latest_version" ]]
+  [[ $short_version_1 == "$short_version_2" ]]
 }
 
 function print_sorted_commits_diff {
   local previous_version=$1
 
-  previous_version=$(echo "$previous_version" | perl -pe 's/^(\d+\.\d+)\.0/$1/')
+  previous_version=$(short_kernel_version "$previous_version" with_rc)
 
   git cherry -v "v$previous_version" | sort -k3
 }
@@ -356,7 +372,7 @@ function cherry_pick_commits {
     done
   else
     local short_kernel_version
-    short_kernel_version=$(echo "$raw_kernel_version" | perl -ne 'print /(\d+\.\d+)/')
+    short_kernel_version=$(short_kernel_version "$raw_kernel_version" no_rc)
 
     # Array of <shortver:c1,c2>.
     #
@@ -395,7 +411,7 @@ function remove_destination_old_version_files {
   local raw_version=$1 source_config_file=$2
 
   local short_version
-  short_version=$(echo "$raw_version" | perl -ne 'print /(\d+\.\d+)/')
+  short_version=$(short_kernel_version "$raw_version" no_rc)
 
   # This is actually redundant, although by using the basename, we make this logic more robust.
   #
@@ -434,7 +450,7 @@ function install_kernel_packages {
   local normalized_version=$1
 
   local short_version
-  short_version=$(echo "$normalized_version" | perl -ne 'print /(\d+\.\d+)/')
+  short_version=$(short_kernel_version "$normalized_version" no_rc)
 
   # See remove_destination_old_version_files() for the filenames format.
   #
