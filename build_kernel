@@ -26,24 +26,24 @@ Options:
 - [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - [-d|--display-config-diff]
 
-'packages_destination' must be specified, either explicitly or via \$BUILD_KERNEL_PACKAGES_DESTINATION env variable.
+Parameters:
+
+- packages_destination : mandatory; can be specified via \$BUILD_KERNEL_PACKAGES_DESTINATION
+
+Options/parameters override the corresponding env variables.
 
 Workflow:
 
-- fetches the repository and finds the latest patch version (for the current branch version, or the specified one)
-- copies the latest version of the configuration for the current kernel, in <packages_destination>
-- updates the configuration
-- patches the configuration to make it compile (assumes it's Ubuntu)
-- copies the configuration to <packages_destination>
-- compiles and moves the packages to <packages_destination>
+- fetches the remote(s) and finds the latest patch version, for the running or specified kernel
+- checks the target version's branch out
+- find the target version's config, and copies it to the packages destination
+- patches the configuration to make it compile (assumes it's Ubuntu), and updates it
+- removes the old packages/configs from the packages destination
+- builds and moves the packages to the packages destination
 - if --install is specified, it installs the packages
 
 Cherry picks can also be specified via \$BUILD_KERNEL_CHERRY_PICKS, with format 'shortver1:c1a,c1b;shortver2:c2a,c2b'.
-The parameter --cherry-pick takes priority over \$BUILD_KERNEL_CHERRY_PICKS.
-
-Notes:
-
-- RC versions are not supported (anymore)"
+"
 
 v_kernel_version=
 v_stay_on_branch=       # boolean; false=blank; true=anything else
@@ -209,7 +209,6 @@ function find_latest_packaged_version {
   # Use the image package for reference.
   #
   # See remove_destination_old_version_files() for the filenames format.
-  #
   #
   find "$v_packages_destination" -printf "%P\n" |
     perl -ne 'print $1 if /^linux-image-('"$kernel_version"'(-rc\d+)?)/' |
@@ -400,20 +399,23 @@ function remove_destination_old_version_files {
 
   # Note that at least one configuration is necessarily present, but not the packages.
 
-  # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
-  # e.g. reference/backup.
-  #
-  find "$v_packages_destination" -regextype egrep -not -name "$source_config_file" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
   # Sample filenames:
   #
   # - config-6.9.0
   # - config-6.10-rc2
   #
-  # - linux-headers-6.1.9-sav_6.1.9-sav-4_amd64.deb
-  # - linux-image-6.1.9-sav_6.1.9-sav-4_amd64.deb
-  # - linux-libc-dev_6.1.9-sav-4_amd64.deb
+  # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
+  # e.g. reference/backup.
   #
-  # - linux-headers-6.10.0-rc2-sav_6.10.0-rc2-65_amd64.deb
+  find "$v_packages_destination" -regextype egrep -not -name "$source_config_file" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
+
+  # Sample filenames:
+  #
+  # - linux-headers-6.1.9-mybuild_6.1.9-mybuild-4_amd64.deb
+  # - linux-image-6.1.9-mybuild_6.1.9-mybuild-4_amd64.deb
+  # - linux-libc-dev_6.1.9-mybuild-4_amd64.deb
+  #
+  # - linux-headers-6.10.0-rc2-mybuild_6.10.0-rc2-65_amd64.deb
   #
   find "$v_packages_destination" -regextype egrep -regex ".*/.+[-_]$short_version\..+\.deb" -exec rm {} \;
 }
@@ -467,7 +469,7 @@ function main {
   fi
 
   # Package operations condensed for readability purposes.
-  #
+
   local amd64_modules_package_link
   amd64_modules_package_link=$(find_amd64_modules_package_link "$latest_kernel_version")
 
