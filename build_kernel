@@ -6,7 +6,6 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_default_local_version=custom
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
 c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/v
 # Example: https://kernel.ubuntu.com/mainline/v6.8-rc1/amd64/linux-modules-6.8.0-060800rc1-generic_6.8.0-060800rc1.202401212233_amd64.deb
@@ -19,8 +18,8 @@ Options:
 
 - [-v|--kernel-version <version>]
 - [-s|--stay-on-branch]           : don't change branch (useful when working with custom branches); requires '--kernel-version'
-- [-l|--local-version <name>]     : kernel local version (name suffix), defaults to (\$BUILD_KERNEL_LOCAL_VERSION
-                                    or '$c_default_local_version'); the minus is automatically added
+- [-l|--local-version <name>]     : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
+                                    minus is automatically added
 - [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits; prefix a hash with 'R' in order to create a revert commit
 - [-i|--install]
 - [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
@@ -383,7 +382,13 @@ function cherry_pick_commits {
 }
 
 function compile_kernel {
-  make -j "$(nproc)" bindeb-pkg LOCALVERSION=-"$v_local_version"
+  local make_options=()
+
+  if [[ -n $v_local_version ]]; then
+    make_options+=(LOCALVERSION=-"$v_local_version")
+  fi
+
+  make -j "$(nproc)" bindeb-pkg "${make_options[@]}"
 }
 
 function remove_destination_old_version_files {
