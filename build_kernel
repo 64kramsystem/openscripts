@@ -181,15 +181,15 @@ function find_latest_kernel_version {
 }
 
 function check_if_version_already_packaged {
-  local current_kernel_version=$1 latest_kernel_version=$2
+  local current_kernel_version=$1 building_kernel_version=$2
 
   # Format: `M.m.p` or or `M.m-rcN`.
   #
   local latest_packaged_version
-  latest_packaged_version=$(find_latest_packaged_version "$latest_kernel_version")
+  latest_packaged_version=$(find_latest_packaged_version "$building_kernel_version")
 
-  if [[ $latest_kernel_version == "$latest_packaged_version" ]]; then
-    echo "No new version! Latest packaged/available: $latest_kernel_version"
+  if [[ $building_kernel_version == "$latest_packaged_version" ]]; then
+    echo "No new version! Latest packaged/available: $building_kernel_version"
     exit 0
   fi
 }
@@ -218,10 +218,10 @@ function find_latest_packaged_version {
 }
 
 function find_amd64_modules_package_link {
-  local latest_kernel_version=$1
+  local kernel_version=$1
 
   local package_kernel_version
-  package_kernel_version=$(short_kernel_version "$latest_kernel_version")
+  package_kernel_version=$(short_kernel_version "$kernel_version")
 
   local builds_url=$c_mainline_ppa_url$package_kernel_version
 
@@ -279,13 +279,13 @@ function find_latest_config_file {
 # `M.m.0` versions are stored without the patch version.
 #
 function create_if_required_and_switch_branch {
-  local latest_kernel_version=$1
+  local building_kernel_version=$1
 
-  if [[ $latest_kernel_version =~ \.0$ ]]; then
-    latest_kernel_version=${latest_kernel_version%.0}
+  if [[ $building_kernel_version =~ \.0$ ]]; then
+    building_kernel_version=${building_kernel_version%.0}
   fi
 
-  local branch_working_copy=bv"$latest_kernel_version"
+  local branch_working_copy=bv"$building_kernel_version"
 
   # When switching across branches for different non-patch versions, some files may be end up changed,
   # which blocks the checkout; in order to solve this, we do `--force`d checkout.
@@ -293,12 +293,12 @@ function create_if_required_and_switch_branch {
   if git rev-parse --verify "$branch_working_copy" 2> /dev/null; then
     git checkout --force "$branch_working_copy"
   else
-    git checkout -b "$branch_working_copy" --force v"$latest_kernel_version"
+    git checkout -b "$branch_working_copy" --force v"$building_kernel_version"
   fi
 }
 
 function same_major_minor_version {
-  local current_version=$1 latest_kernel_version=$2
+  local current_version=$1 building_kernel_version=$2
 
    [[ $1 =~ ^[0-9]+\.[0-9]+ ]] && current_version=${BASH_REMATCH[0]}
    [[ $2 =~ ^[0-9]+\.[0-9]+ ]] && latest_version=${BASH_REMATCH[0]}
@@ -458,17 +458,17 @@ function main {
 
   fetch_remotes
 
-  local latest_kernel_version
-  latest_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+  local building_kernel_version
+  building_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
   if [[ -z $v_stay_on_branch ]]; then
-    check_if_version_already_packaged "$current_kernel_version" "$latest_kernel_version"
+    check_if_version_already_packaged "$current_kernel_version" "$building_kernel_version"
 
-    create_if_required_and_switch_branch "$latest_kernel_version"
+    create_if_required_and_switch_branch "$building_kernel_version"
 
     # When specifying a different kernel version, don't display the diff.
     #
-    if [[ -z $v_kernel_version ]] && same_major_minor_version "$current_kernel_version" "$latest_kernel_version"; then
+    if [[ -z $v_kernel_version ]] && same_major_minor_version "$current_kernel_version" "$building_kernel_version"; then
       print_sorted_commits_diff "$current_kernel_version"
     fi
   fi
@@ -476,14 +476,14 @@ function main {
   # Package operations condensed for readability purposes.
 
   local amd64_modules_package_link
-  amd64_modules_package_link=$(find_amd64_modules_package_link "$latest_kernel_version")
+  amd64_modules_package_link=$(find_amd64_modules_package_link "$building_kernel_version")
 
   if [[ -n $amd64_modules_package_link ]]; then
-    download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$latest_kernel_version"
+    download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$building_kernel_version"
   fi
 
   local source_config_file
-  source_config_file=$(find_latest_config_file "$latest_kernel_version")
+  source_config_file=$(find_latest_config_file "$building_kernel_version")
 
   import_config_file "$source_config_file"
 
@@ -507,7 +507,7 @@ function main {
   move_packages_and_cleanup
 
   if [[ -n $v_install ]]; then
-    install_kernel_packages "$latest_kernel_version"
+    install_kernel_packages "$building_kernel_version"
   fi
 }
 
