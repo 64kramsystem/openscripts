@@ -20,7 +20,7 @@ Options:
 - [-s|--stay-on-branch]           : don't change branch (useful when working with custom branches); requires '--kernel-version'
 - [-l|--local-version <name>]     : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                     minus is automatically added
-- [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits; prefix a hash with 'R' in order to create a revert commit
+- [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
 - [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - [-d|--display-config-diff]
@@ -41,7 +41,11 @@ Workflow:
 - builds and moves the packages to the packages destination
 - if --install is specified, it installs the packages
 
-Cherry picks can also be specified via \$BUILD_KERNEL_CHERRY_PICKS, with format 'shortver1:c1a,c1b;shortver2:c2a,c2b'.
+Cherry picking:
+
+- the format is 'shortver1:c1a,c1b;shortver2:c2a,c2b'
+- 'shortver' is optional, and defaults to the current kernel short version
+- each commit can be prefixed with 'R', which will revert the given commit
 "
 
 v_kernel_version=
@@ -51,7 +55,7 @@ v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
-v_arg_cherry_picks=()   # array; value passed by user as argument
+v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
 
 function decode_cmdline_args {
   local params
@@ -83,7 +87,7 @@ function decode_cmdline_args {
         v_display_config_diff=1
         shift ;;
       -c|cherry-pick)
-        mapfile -td, v_arg_cherry_picks < <(echo -n "$2")
+        v_raw_cherry_picks=$2
         shift 2 ;;
       --)
         shift
@@ -359,42 +363,39 @@ function display_config_diff {
   fi
 }
 
+# $1: current kernel version
+#
+# $v_raw_cherry_picks can be empty, in which case no CPs are performed.
+#
 function cherry_pick_commits {
-  local raw_kernel_version=$1
+  local short_current_kernel_version
+  short_current_kernel_version=$(short_kernel_version "$1" no_rc)
 
-  if [[ ${#v_arg_cherry_picks[@]} -gt 0 ]]; then
-    for commit in "${v_arg_cherry_picks[@]}"; do
-      if [[ $commit == R* ]]; then
-        git revert --no-edit "${commit#R}"
-      else
-        git cherry-pick "$commit"
-      fi
-    done
-  else
-    local short_kernel_version
-    short_kernel_version=$(short_kernel_version "$raw_kernel_version" no_rc)
+  local raw_cherry_pick_entries
+  mapfile -d';' raw_cherry_pick_entries < <(echo -n "$v_raw_cherry_picks")
 
-    # Array of <shortver:c1,c2>.
-    #
-    local env_cherry_picks
-    mapfile -d';' env_cherry_picks < <(echo -n "${BUILD_KERNEL_CHERRY_PICKS:-}")
+  for cherry_picks_entry in "${raw_cherry_pick_entries[@]}"; do
+    if [[ $cherry_picks_entry != *:* ]]; then
+      cherry_picks_entry=$short_current_kernel_version:$cherry_picks_entry
+    fi
 
-    for cherry_picks_entry in "${env_cherry_picks[@]}"; do
-      local short_version=${cherry_picks_entry%:*}
+    local entry_kernel_version=${cherry_picks_entry%:*}
 
-      if [[ $short_version == "$short_kernel_version" ]]; then
-        local raw_commits=${cherry_picks_entry#*:}
-        local commits
-        mapfile -td, commits < <(echo -n "$raw_commits")
+    if [[ $entry_kernel_version == "$short_current_kernel_version" ]]; then
+      local entry_raw_commits=${cherry_picks_entry#*:}
 
-        for commit in "${commits[@]}"; do
+      local entry_commits
+      mapfile -td, entry_commits < <(echo -n "$entry_raw_commits")
+
+      for commit in "${entry_commits[@]}"; do
+        if [[ $commit == R* ]]; then
+          git revert --no-edit "${commit#R}"
+        else
           git cherry-pick "$commit"
-        done
-
-        break;
-      fi
-    done
-  fi
+        fi
+      done
+    fi
+  done
 }
 
 function compile_kernel {
