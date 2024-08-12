@@ -8,7 +8,7 @@ shopt -s inherit_errexit
 
 c_bisect_local_version=bisect
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
-c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/v
+c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/
 # Example: https://kernel.ubuntu.com/mainline/v6.8-rc1/amd64/linux-modules-6.8.0-060800rc1-generic_6.8.0-060800rc1.202401212233_amd64.deb
 c_package_name_pattern="amd64/linux-modules-[[:alnum:]_.-]+_amd64+\.deb"
 c_help="Usage: $(basename "$0") [-h|--help] <options...> [packages_destination]
@@ -233,6 +233,50 @@ function find_config_file_for_version {
   find "$v_packages_destination" -name "config-$kernel_version" -printf "%p"
 }
 
+# Find the link of the module package corresponding to the latest PPA config available for the (short)
+# version of the given kernel.
+#
+function find_latest_ppa_config_module_link {
+  local target_version
+  target_version=$(short_kernel_version "$1" no_rc)
+
+  local builds_url=${c_mainline_ppa_url}v$target_version
+
+  declare -x target_version_regex=${target_version//./\\.}
+
+  local mainline_ppa_page_content
+  mainline_ppa_page_content=$(wget --quiet "$builds_url" --output-document -)
+
+  # Examples:
+  #
+  #   >v6.6/</a>
+  #   >v6.7-rc1/</a>
+  #   >v6.7.1/</a>
+  #
+  # Append a zero to GA releases, otherwise, `sort -V` places it before the RCs.
+  #
+  local candidate_versions
+  mapfile -t candidate_versions < <(
+    echo "$mainline_ppa_page_content" \
+    | perl -lne 'print $1 if />v($ENV{target_version_regex}(\.\d+|-rc\d+)?)\/</' \
+    | perl -pe 's/^\d+\.\d+\K$/.0/' \
+    | sort --version-sort --reverse
+  )
+
+  for candidate_version in "${candidate_versions[@]}"; do
+    local amd64_modules_package_link
+    amd64_modules_package_link=$(find_amd64_modules_package_link "$candidate_version")
+
+    if [[ -n $amd64_modules_package_link ]]; then
+      echo -n "$amd64_modules_package_link"
+      return
+    fi
+  done
+
+  >&2 echo "No config (module package) found for version $target_version"
+  exit 1
+}
+
 function check_if_version_already_packaged {
   local current_kernel_version=$1 building_kernel_version=$2
 
@@ -276,7 +320,7 @@ function find_amd64_modules_package_link {
   local package_kernel_version
   package_kernel_version=$(short_kernel_version "$kernel_version" with_rc)
 
-  local builds_url=$c_mainline_ppa_url$package_kernel_version
+  local builds_url=${c_mainline_ppa_url}v$package_kernel_version
 
   local builds_page_content
   builds_page_content=$(wget --quiet "$builds_url" --output-document - || true)
@@ -290,43 +334,49 @@ function find_amd64_modules_package_link {
   fi
 }
 
+# Prints the full path of the extracted config file, transformed to use the standard naming.
+#
 function download_and_extract_config_file_from_modules_package {
-  local amd64_modules_package_link=$1 kernel_version=$2
+  local amd64_modules_package_link=$1
 
   local local_package_name=
   local_package_name=$(dirname "$(mktemp --dry-run)")/${amd64_modules_package_link##*/}
 
   wget "$amd64_modules_package_link" --output-document "$local_package_name"
 
-  # Example: ./boot/config-6.7.0-060700-generic
+  # Examples:
   #
-  dpkg-deb --fsys-tarfile "$local_package_name" | \
-    tar xv -C "$v_packages_destination" --wildcards --transform="s/^\.\/boot\/config-.*/config-$kernel_version/" "./boot/config-*"
-}
-
-function find_latest_config_file {
-  local normalized_version=$1
-
-  local short_version
-  short_version=$(short_kernel_version "$normalized_version" no_rc)
-
-  # The match needs to be precise; ignore other configurations (with suffixes) that may be present.
+  #   ./boot/config-6.7.0-060700-generic
+  #   ./boot/config-6.10.0-061000rc1-generic
   #
-  # See remove_destination_old_version_files() for the filenames format.
-
-  local latest_config_file
-  latest_config_file=$(
-    find "$v_packages_destination" -regextype egrep -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" |
-      sort -V |
-      tail -n 1
+  # The filename returned is the input one, so we need to further process it.
+  #
+  local raw_config_file
+  raw_config_file=$(
+    dpkg-deb --fsys-tarfile "$local_package_name" \
+      | tar xv -C "$v_packages_destination" --wildcards --transform="s|^\./boot/||" "./boot/config-*" \
+      | perl -pe 's|^\./boot/||'
   )
 
-  if [[ -z $latest_config_file ]]; then
-    >&2 echo "Config file not found (for version $short_version)"
+  # We can't unify the regex easily, because of the required dash preceding the `rc` in the desired
+  # output.
+  #
+  if [[ $raw_config_file == *rc* ]]; then
+    config_file=$(echo "$raw_config_file" | perl -pe 's/\.0-\d{6}(rc\d+)-generic/-$1/')
+  else
+    config_file=$(echo "$raw_config_file" | perl -pe 's/(\.0)?-\d{6}-generic//')
+  fi
+
+  # Make sure that the processing was correct.
+  #
+  if [[ -z $(echo "$config_file" | perl -ne 'print if /^config-\d+\.\d+(\.\d+|-rc\d+)?$/') ]]; then
+    >&2 "Config filename processing failed: $raw_config_file"
     exit 1
   fi
 
-  echo -n "$latest_config_file"
+  mv "$v_packages_destination/$raw_config_file" "$v_packages_destination/$config_file"
+
+  echo -n "$v_packages_destination/$config_file"
 }
 
 # `M.m.0` versions are stored without the patch version.
@@ -539,17 +589,23 @@ function main {
   local source_config_file
   source_config_file=$(find_config_file_for_version "$building_kernel_version")
 
+  # If the matching version is not found locally, search it on the mainline PPA.
+  #
   if [[ -z $source_config_file ]]; then
     # Package operations condensed for readability purposes.
 
     local amd64_modules_package_link
     amd64_modules_package_link=$(find_amd64_modules_package_link "$building_kernel_version")
 
-    if [[ -n $amd64_modules_package_link ]]; then
-      download_and_extract_config_file_from_modules_package "$amd64_modules_package_link" "$building_kernel_version"
+    if [[ -z $amd64_modules_package_link ]]; then
+      # If the matching version is not found on the PPA, search the latest config for the given short version.
+      # We could search from the precise version backwards, but it's not worth.
+
+      local amd64_modules_package_link
+      amd64_modules_package_link=$(find_latest_ppa_config_module_link "$building_kernel_version")
     fi
 
-    source_config_file=$(find_latest_config_file "$building_kernel_version")
+    source_config_file=$(download_and_extract_config_file_from_modules_package "$amd64_modules_package_link")
   fi
 
   import_config_file "$source_config_file"
