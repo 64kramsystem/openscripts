@@ -482,6 +482,12 @@ function move_packages_and_cleanup {
   rm ../*.{changes,buildinfo}
 }
 
+# Doesn't uninstall the libc package (which doesn't carry the local version), but we can live with it.
+#
+function remove_installed_bisect_kernels {
+  sudo aptitude purge -y ~i"linux-.*-$c_bisect_local_version"
+}
+
 function install_kernel_packages {
   local normalized_version=$1
 
@@ -570,6 +576,9 @@ function main {
   move_packages_and_cleanup
 
   if [[ -n $v_install ]]; then
+    if [[ -n $v_bisect ]]; then
+      remove_installed_bisect_kernels
+    fi
     install_kernel_packages "$building_kernel_version"
   fi
 }
