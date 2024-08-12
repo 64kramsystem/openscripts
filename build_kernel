@@ -6,6 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
+c_bisect_local_version=bisect
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
 c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/v
 # Example: https://kernel.ubuntu.com/mainline/v6.8-rc1/amd64/linux-modules-6.8.0-060800rc1-generic_6.8.0-060800rc1.202401212233_amd64.deb
@@ -17,7 +18,7 @@ Builds a kernel from the source code.
 Options:
 
 - [-v|--kernel-version <version>]
-- [-s|--stay-on-branch]           : don't change branch (useful when working with custom branches); requires '--kernel-version'
+- [-b|--bisect]                   : bisect mode (see below); incompatible with '--kernel-version'
 - [-l|--local-version <name>]     : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                     minus is automatically added
 - [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
@@ -31,7 +32,7 @@ Parameters:
 
 Options/parameters override the corresponding env variables.
 
-Workflow:
+Workflow (regular):
 
 - fetches the remote(s) and finds the latest patch version, for the running or specified kernel
 - checks the target version's branch out
@@ -41,6 +42,15 @@ Workflow:
 - builds and moves the packages to the packages destination
 - if --install is specified, it installs the packages
 
+Workflow (bisect):
+
+- the kernel local version is set to '$c_bisect_local_version', overriding any user setting
+- the kernel version is gathered from the latest tag reachable from HEAD
+- (the configuration is handled as regular)
+- removes the old packages (not the configs) from the packages destination
+- builds and moves the packages to the packages destination
+- installs the packages
+
 Cherry picking:
 
 - the format is 'shortver1:c1a,c1b;shortver2:c2a,c2b'
@@ -49,7 +59,7 @@ Cherry picking:
 "
 
 v_kernel_version=
-v_stay_on_branch=       # boolean; false=blank; true=anything else
+v_bisect=               # boolean; false=blank; true=anything else
 v_install=              # boolean; false=blank; true=anything else
 v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
@@ -59,7 +69,7 @@ v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:sir:l:dc: --long help,kernel-version:,stay-on-branch,install,repo-path:,local-version:,display-config-diff,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:dc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -71,8 +81,8 @@ function decode_cmdline_args {
       -v|--kernel-version)
         v_kernel_version=$2
         shift 2 ;;
-      -s|--stay-on-branch)
-        v_stay_on_branch=1
+      -b|--bisect)
+        v_bisect=1
         shift ;;
       -i|--install)
         v_install=1
@@ -98,7 +108,7 @@ function decode_cmdline_args {
   if [[ $# -gt 1 ]]; then
     echo "$c_help"
     exit 1
-  elif [[ -n $v_stay_on_branch && -z $v_kernel_version ]]; then
+  elif [[ -n $v_bisect && -n $v_kernel_version ]]; then
     echo "$c_help"
     exit 1
   elif [[ $# -eq 1 ]]; then
@@ -113,6 +123,11 @@ function decode_cmdline_args {
   if [[ ! -d $v_packages_destination ]]; then
     >&2 echo "Invalid packages destination!"
     exit 1
+  fi
+
+  if [[ -n $v_bisect ]]; then
+    v_local_version=$c_bisect_local_version
+    v_install=1
   fi
 }
 
@@ -198,6 +213,14 @@ function find_latest_kernel_version {
   fi
 
   echo -n "$latest_version"
+}
+
+# Return format: `M.m.p` or `M.m-rcN`.
+#
+function find_branch_kernel_version {
+  git describe --tags --abbrev=0 \
+    | perl -pe 's/^v\d+\.\d+\K$/.0/' \
+    | perl -pe 's/^v//'
 }
 
 # See remove_destination_old_version_files() for the filenames format.
@@ -431,15 +454,17 @@ function remove_destination_old_version_files {
 
   # Note that at least one configuration is necessarily present, but not the packages.
 
-  # Sample filenames:
-  #
-  # - config-6.9.0
-  # - config-6.10-rc2
-  #
-  # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
-  # e.g. reference/backup.
-  #
-  find "$v_packages_destination" -regextype egrep -not -name "$source_config_file" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
+  if [[ -z $v_bisect ]]; then
+    # Sample filenames:
+    #
+    # - config-6.9.0
+    # - config-6.10-rc2
+    #
+    # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
+    # e.g. reference/backup.
+    #
+    find "$v_packages_destination" -regextype egrep -not -name "$source_config_file" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
+  fi
 
   # Sample filenames:
   #
@@ -483,12 +508,15 @@ function main {
   local current_kernel_version=${v_kernel_version:-"$(find_running_kernel_version)"}
   current_kernel_version=$(normalize_kernel_version "$current_kernel_version")
 
-  fetch_remotes
+  if [[ -z $v_bisect ]]; then
+    fetch_remotes
+  fi
 
   local building_kernel_version
-  building_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
-  if [[ -z $v_stay_on_branch ]]; then
+  if [[ -z $v_bisect ]]; then
+    building_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
+
     check_if_version_already_packaged "$current_kernel_version" "$building_kernel_version"
 
     create_if_required_and_switch_branch "$building_kernel_version"
@@ -498,6 +526,8 @@ function main {
     if [[ -z $v_kernel_version ]] && same_major_minor_version "$current_kernel_version" "$building_kernel_version"; then
       print_sorted_commits_diff "$current_kernel_version"
     fi
+  else
+    building_kernel_version=$(find_branch_kernel_version)
   fi
 
   local source_config_file
@@ -533,6 +563,8 @@ function main {
 
   compile_kernel
 
+  # Config files are handled based on $v_bisect.
+  #
   remove_destination_old_version_files "$current_kernel_version" "$source_config_file"
 
   move_packages_and_cleanup
