@@ -7,6 +7,7 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_bisect_local_version=bisect
+c_cherry_picks_log=$(dirname "$(mktemp -d)")/build_kernel.cherry-picks.log
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
 c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/
 # Example: https://kernel.ubuntu.com/mainline/v6.8-rc1/amd64/linux-modules-6.8.0-060800rc1-generic_6.8.0-060800rc1.202401212233_amd64.deb
@@ -459,6 +460,10 @@ function cherry_pick_commits {
   local raw_cherry_pick_entries
   mapfile -d';' raw_cherry_pick_entries < <(echo -n "$v_raw_cherry_picks")
 
+  # Don't bother with an exit deletion hook.
+  #
+  true > "$c_cherry_picks_log"
+
   for cherry_picks_entry in "${raw_cherry_pick_entries[@]}"; do
     if [[ $cherry_picks_entry != *:* ]]; then
       cherry_picks_entry=$short_current_kernel_version:$cherry_picks_entry
@@ -473,11 +478,30 @@ function cherry_pick_commits {
       mapfile -td, entry_commits < <(echo -n "$entry_raw_commits")
 
       for commit in "${entry_commits[@]}"; do
-          if [[ $commit == R* ]]; then
-            git revert --no-edit "${commit#R}"
-          else
-          git cherry-pick "$commit"
+        local operation_error_log
+        operation_error_log=$(mktemp)
+
+        local header="# CHERRY PICK $commit ##################################################"
+        echo "$header"
+
+        if [[ $commit == R* ]]; then
+          # Git revert is inconsistent: when a revert has already been applied, it exits with error,
+          # but outputs to stdout; for this reason, we need to capture both stdout and stderr;
+          # additionally, it will cause git revert --abort to fail (which in turn, outputs to
+          # stderr instead). 🤷
+          #
+          if ! git revert --no-edit "${commit#R}" > "$operation_error_log" 2>&1; then
+            git revert --abort 2> /dev/null || true
+            { echo "$header"; cat "$operation_error_log"; } >> "$c_cherry_picks_log"
           fi
+        else
+          if ! git cherry-pick "$commit" 2> "$operation_error_log"; then
+            git cherry-pick --abort
+            { echo "$header"; cat "$operation_error_log"; } >> "$c_cherry_picks_log"
+          fi
+        fi
+
+        rm "$operation_error_log"
       done
     fi
   done
@@ -662,6 +686,13 @@ function main {
       remove_installed_bisect_kernels
     fi
     install_kernel_packages "$built_packages"
+  fi
+
+  if [[ -s $c_cherry_picks_log ]]; then
+    {
+      echo "Cherry picking failures:"
+      cat "$c_cherry_picks_log"
+    } >&2
   fi
 
   send_built_packages_to_fd3 "$built_packages"
