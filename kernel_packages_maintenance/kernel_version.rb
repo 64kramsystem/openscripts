@@ -133,7 +133,8 @@ class KernelVersion
 
     kernel_branches
       .lines
-      .filter_map { |branch| parse_tag_version($1) if branch =~ %r{\trefs/tags/(v#{Regexp.escape(current_version)}($|\.|-).*)} }
+      .filter_map { |tag| parse_tag_version(Regexp.last_match[1]) if tag =~ %r{\trefs/tags/(v#{Regexp.escape(current_version)}($|\.|-).*)} }
+      .uniq
       .max
   end
 
