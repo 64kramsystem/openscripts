@@ -51,7 +51,9 @@ function decode_cmdline_args {
 }
 
 function register_exit_hook {
-  function _exit_hook { rm -rf "$c_repo_address"; }
+  # Don't delete the user-passed dir!
+  #
+  function _exit_hook { rm -rf "$c_temporary_dir"; }
   trap _exit_hook EXIT
 }
 
