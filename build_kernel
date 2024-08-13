@@ -424,10 +424,14 @@ function import_config_file {
   cp "$source_config_file" .config
 }
 
-function patch_config {
+function make_ubuntu_config_build {
   scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
   scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
+}
 
+function apply_secondary_config_patches {
+  # Disable debug info (pretty chunky!).
+  #
   scripts/config --undefine DEBUG_INFO
   scripts/config --undefine DEBUG_INFO_COMPRESSED
   scripts/config --undefine DEBUG_INFO_REDUCED
@@ -437,7 +441,7 @@ function patch_config {
   scripts/config --set-val DEBUG_INFO_NONE y
 }
 
-function update_config {
+function set_new_config_defaults {
   make olddefconfig
 }
 
@@ -659,10 +663,10 @@ function main {
 
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
-  #
-  patch_config
 
-  update_config
+  make_ubuntu_config_build
+  apply_secondary_config_patches
+  set_new_config_defaults
 
   if [[ -n $v_display_config_diff ]]; then
     display_config_diff
