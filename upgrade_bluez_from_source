@@ -117,9 +117,11 @@ function uninstall {
   sudo make uninstall
 }
 
-function build_and_install {
+function build_project {
   make -j "$(nproc)"
+}
 
+function install {
   # The file `/usr/lib/cups/backend/bluetooth` is also owned by the `bluez-cups` package; it's not clear
   # if it needs to be up to date, but if one doesn't use it, it doesn't matter.
   # In theory, `--disable-cups` can be used, but it causes a configure error (not mentioned by the documentation).
@@ -169,7 +171,9 @@ function main {
 
     clean_and_configure "$libexecdir"
 
-    build_and_install
+    build_project
+
+    install
 
     restart_bluetooth_service
 
