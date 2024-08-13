@@ -8,21 +8,19 @@ shopt -s inherit_errexit
 
 c_repo_address=https://github.com/bluez/bluez.git
 c_temporary_dir=$(mktemp -d --suffix=.bluez)
-c_help="Usage: $(basename "$0") [-r|--repository-dir <dir>] [-h|--help]
+c_help="Usage: $(basename "$0") [-h|--help]
 
 Upgrade Bluez from source.
 
-Uninstalls the files corresponding to the previous, and puts the bluez package on hold.
+Needs to be run as root.
 
-The repository dir can be specified also via \$UPGRADE_BLUEZ_REPO_DIR; the cmdline option has higher priority.
+Uninstalls the files corresponding to the previous, and puts the bluez package on hold.
 
 If the current version is the latest, nothing is done."
 
-v_repository_dir=${UPGRADE_BLUEZ_REPO_DIR:-}
-
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hr: --long help,repository-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -31,9 +29,6 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
-      -r|--repository-dir)
-        v_repository_dir=$2
-        shift 2 ;;
       --)
         shift
         break ;;
@@ -44,21 +39,18 @@ function decode_cmdline_args {
     echo "$c_help"
     exit 1
   fi
+}
 
-  if [[ -z $v_repository_dir ]]; then
-    v_repository_dir=$c_temporary_dir
+function check_user {
+  if [[ $EUID -ne 0 ]]; then
+    >&2 echo "The script needs to be run as root"
+    exit 1
   fi
 }
 
 function register_exit_hook {
-  # Don't delete the user-passed dir!
-  #
   function _exit_hook { rm -rf "$c_temporary_dir"; }
   trap _exit_hook EXIT
-}
-
-function cache_sudo {
-  sudo -v
 }
 
 function clone_repository {
@@ -66,17 +58,7 @@ function clone_repository {
 }
 
 function switch_dir {
-  cd "$v_repository_dir"
-}
-
-function clean_repository {
-  rm -f .gitignore
-  git clean -fd
-  git checkout .gitignore
-}
-
-function fetch_repository {
-  git fetch
+  cd "$c_temporary_dir"
 }
 
 # Format: X.YZ
@@ -116,7 +98,7 @@ function clean_and_configure {
 }
 
 function uninstall {
-  sudo make uninstall
+  make uninstall
 }
 
 function build_project {
@@ -128,35 +110,29 @@ function install {
   # if it needs to be up to date, but if one doesn't use it, it doesn't matter.
   # In theory, `--disable-cups` can be used, but it causes a configure error (not mentioned by the documentation).
   #
-  sudo make install
+  make install
 }
 
 function restart_bluetooth_service {
-  sudo systemctl daemon-reload
-  sudo systemctl restart bluetooth
+  systemctl daemon-reload
+  systemctl restart bluetooth
 }
 
 function hold_bluez_package {
-  sudo apt-mark hold bluez
+  apt-mark hold bluez
 }
 
 function main {
   register_exit_hook
 
+  check_user
+
   current_version=$(find_current_version)
   latest_version=$(find_latest_version)
 
   if [[ $current_version != "$latest_version" ]]; then
-    cache_sudo
-
-    if [[ $v_repository_dir == "$c_temporary_dir" ]]; then
-      clone_repository "$current_version"
-      switch_dir
-    else
-      switch_dir
-      clean_repository
-      fetch_repository
-    fi
+    clone_repository "$current_version"
+    switch_dir
 
     change_to_version "$current_version"
 
