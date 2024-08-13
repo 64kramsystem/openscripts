@@ -15,6 +15,8 @@ c_help="Usage: $(basename "$0") [-h|--help] <options...> [packages_destination]
 
 Builds a kernel from the source code.
 
+The list (newline-separated) of built packages is sent to FD 3 (if open/valid).
+
 Options:
 
 - [-v|--kernel-version <version>]
@@ -471,11 +473,11 @@ function cherry_pick_commits {
       mapfile -td, entry_commits < <(echo -n "$entry_raw_commits")
 
       for commit in "${entry_commits[@]}"; do
-        if [[ $commit == R* ]]; then
-          git revert --no-edit "${commit#R}"
-        else
+          if [[ $commit == R* ]]; then
+            git revert --no-edit "${commit#R}"
+          else
           git cherry-pick "$commit"
-        fi
+          fi
       done
     fi
   done
@@ -532,13 +534,9 @@ function move_packages_and_cleanup {
   rm ../*.{changes,buildinfo}
 }
 
-# Doesn't uninstall the libc package (which doesn't carry the local version), but we can live with it.
+# Output the package filenames, newline-separated.
 #
-function remove_installed_bisect_kernels {
-  sudo aptitude purge -y ~i"linux-.*-$c_bisect_local_version"
-}
-
-function install_kernel_packages {
+function find_built_packages {
   local normalized_version=$1
 
   local short_version
@@ -546,7 +544,32 @@ function install_kernel_packages {
 
   # See remove_destination_old_version_files() for the filenames format.
   #
-  sudo dpkg -i "$v_packages_destination"/linux-*[-_]"$short_version".*-*.deb
+  find "$v_packages_destination" -name "linux-*[-_]$short_version.*-*.deb"
+}
+
+# Doesn't uninstall the libc package (which doesn't carry the local version), but we can live with it.
+#
+function remove_installed_bisect_kernels {
+  sudo aptitude purge -y ~i"linux-.*-$c_bisect_local_version"
+}
+
+# $1: see find_built_packages().
+#
+function install_kernel_packages {
+  local packages_to_install
+  mapfile -t packages_to_install < <(echo -n "$1")
+
+  sudo dpkg -i "${packages_to_install[@]}"
+}
+
+# Sends only if the FD is open/valid.
+#
+# $1: see find_built_packages().
+#
+function send_built_packages_to_fd3 {
+  if { true >&3; } 2>/dev/null; then
+    echo -n "$1" >&3
+  fi
 }
 
 function main {
@@ -631,12 +654,17 @@ function main {
 
   move_packages_and_cleanup
 
+  local built_packages
+  built_packages=$(find_built_packages "$building_kernel_version")
+
   if [[ -n $v_install ]]; then
     if [[ -n $v_bisect ]]; then
       remove_installed_bisect_kernels
     fi
-    install_kernel_packages "$building_kernel_version"
+    install_kernel_packages "$built_packages"
   fi
+
+  send_built_packages_to_fd3 "$built_packages"
 }
 
 decode_cmdline_args "$@"
