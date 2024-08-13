@@ -50,7 +50,10 @@ class KernelVersion
     (\.(\d+))?
     (-rc\d+)?
   /x
-  KERNEL_REPOSITORY_ADDR = "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git"
+  KERNEL_REPOSITORY_ADDRESSES = [
+    "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git",
+    "https://github.com/torvalds/linux.git",
+  ]
 
   def initialize(raw, major, minor, patch, type, ongoing: nil, rc: nil)
     @raw = raw
@@ -121,7 +124,10 @@ class KernelVersion
   def self.find_latest
     current_version = find_current.to_s[/^\d+\.\d+/]
 
-    kernel_branches, child_status = Open3.capture2("git ls-remote --tags --refs #{KERNEL_REPOSITORY_ADDR.shellescape}")
+    kernel_branches, child_status = KERNEL_REPOSITORY_ADDRESSES
+      .map { |address| "git ls-remote --tags --refs #{address.shellescape}" }
+      .join(" && ")
+      .then { |command| Open3.capture2(command) }
 
     exit child_status.exitstatus if !child_status.success?
 
