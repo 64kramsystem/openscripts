@@ -12,7 +12,7 @@ c_help="Usage: $(basename "$0") [-r|--repository-dir <dir>] [-h|--help]
 
 Upgrade Bluez from source.
 
-Uninstalles the files corresponding to the previous, and puts the bluez package on hold.
+Uninstalls the files corresponding to the previous, and puts the bluez package on hold.
 
 The repository dir can be specified also via \$UPGRADE_BLUEZ_REPO_DIR; the cmdline option has higher priority.
 
