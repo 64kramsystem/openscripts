@@ -439,6 +439,54 @@ function apply_secondary_config_patches {
   scripts/config --undefine GDB_SCRIPTS
   scripts/config --set-val DEBUG_INFO_DWARF5 n
   scripts/config --set-val DEBUG_INFO_NONE y
+
+  # Some don't make any measurable comptime improvements, but anyway they're not used
+  #
+  # On my current setup, compilation without (deb's or changes below) takes ~479".
+  # With the changes below takes ~455".
+  #
+  # To test:
+  #
+  #     make mrproper
+  #     cp .config{.sav,}
+  #     # (apply below)
+  #     make olddefconfig
+  #     /usr/bin/time -f "TIME: %e" make -j $(nproc)
+  #     plin
+  #
+  scripts/config --disable  CONFIG_CPU_SUP_HYGON            # exotic hw architectures...
+  scripts/config --disable  CONFIG_CPU_SUP_CENTAUR
+  scripts/config --disable  CONFIG_CPU_SUP_ZHAOXIN
+  scripts/config --disable  CONFIG_DRM_RADEON               # radeon...
+  scripts/config --undefine CONFIG_DRM_RADEON_USERPTR
+  scripts/config --disable  CONFIG_DRM_NOUVEAU              # nouveau...
+  scripts/config --undefine CONFIG_NOUVEAU_DEBUG
+  scripts/config --undefine CONFIG_NOUVEAU_DEBUG_DEFAULT
+  scripts/config --undefine CONFIG_NOUVEAU_DEBUG_MMU
+  scripts/config --undefine CONFIG_NOUVEAU_DEBUG_PUSH
+  scripts/config --undefine CONFIG_DRM_NOUVEAU_BACKLIGHT
+  scripts/config --undefine CONFIG_DRM_NOUVEAU_SVM
+  scripts/config --undefine CONFIG_DRM_NOUVEAU_GSP_DEFAULT
+  scripts/config --disable  CONFIG_DRM_XE                   # intel xe...
+  scripts/config --undefine CONFIG_DRM_GPUVM
+  scripts/config --undefine CONFIG_DRM_XE_DISPLAY
+  scripts/config --undefine CONFIG_DRM_XE_FORCE_PROBE
+  scripts/config --undefine CONFIG_DRM_XE_WERROR
+  scripts/config --undefine CONFIG_DRM_XE_DEBUG
+  scripts/config --undefine CONFIG_DRM_XE_DEBUG_VM
+  scripts/config --undefine CONFIG_DRM_XE_DEBUG_SRIOV
+  scripts/config --undefine CONFIG_DRM_XE_DEBUG_MEM
+  scripts/config --undefine CONFIG_DRM_XE_LARGE_GUC_BUFFER
+  scripts/config --undefine CONFIG_DRM_XE_USERPTR_INVAL_INJECT
+  scripts/config --undefine CONFIG_DRM_XE_JOB_TIMEOUT_MAX
+  scripts/config --undefine CONFIG_DRM_XE_JOB_TIMEOUT_MIN
+  scripts/config --undefine CONFIG_DRM_XE_TIMESLICE_MAX
+  scripts/config --undefine CONFIG_DRM_XE_TIMESLICE_MIN
+  scripts/config --undefine CONFIG_DRM_XE_PREEMPT_TIMEOUT
+  scripts/config --undefine CONFIG_DRM_XE_PREEMPT_TIMEOUT_MAX
+  scripts/config --undefine CONFIG_DRM_XE_PREEMPT_TIMEOUT_MIN
+  scripts/config --undefine CONFIG_DRM_XE_ENABLE_SCHEDTIMEOUT_LIMIT
+  scripts/config --disable  CONFIG_DRM_MGAG200              # matrox g200
 }
 
 function set_new_config_defaults {
