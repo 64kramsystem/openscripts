@@ -505,6 +505,76 @@ function apply_secondary_config_patches {
   scripts/config --undefine CONFIG_DRM_XE_PREEMPT_TIMEOUT_MIN
   scripts/config --undefine CONFIG_DRM_XE_ENABLE_SCHEDTIMEOUT_LIMIT
   scripts/config --disable  CONFIG_DRM_MGAG200              # matrox g200
+  scripts/config --disable  CONFIG_XEN                      # xen...
+  scripts/config --disable  CONFIG_KVM_XEN
+  scripts/config --undefine CONFIG_PARAVIRT_XXL
+  scripts/config --undefine CONFIG_XEN_PV
+  scripts/config --undefine CONFIG_XEN_512GB
+  scripts/config --undefine CONFIG_XEN_PV_SMP
+  scripts/config --undefine CONFIG_XEN_PV_DOM0
+  scripts/config --undefine CONFIG_XEN_PVHVM
+  scripts/config --undefine CONFIG_XEN_PVHVM_SMP
+  scripts/config --undefine CONFIG_XEN_PVHVM_GUEST
+  scripts/config --undefine CONFIG_XEN_SAVE_RESTORE
+  scripts/config --undefine CONFIG_XEN_DEBUG_FS
+  scripts/config --undefine CONFIG_XEN_PVH
+  scripts/config --undefine CONFIG_XEN_DOM0
+  scripts/config --undefine CONFIG_XEN_PV_MSR_SAFE
+  scripts/config --undefine CONFIG_PCI_XEN
+  scripts/config --undefine CONFIG_NET_9P_XEN
+  scripts/config --undefine CONFIG_XEN_PCIDEV_FRONTEND
+  scripts/config --undefine CONFIG_SYS_HYPERVISOR
+  scripts/config --undefine CONFIG_XEN_BLKDEV_FRONTEND
+  scripts/config --undefine CONFIG_XEN_BLKDEV_BACKEND
+  scripts/config --undefine CONFIG_XEN_SCSI_FRONTEND
+  scripts/config --undefine CONFIG_XEN_NETDEV_FRONTEND
+  scripts/config --undefine CONFIG_XEN_NETDEV_BACKEND
+  scripts/config --undefine CONFIG_INPUT_XEN_KBDDEV_FRONTEND
+  scripts/config --undefine CONFIG_HVC_IRQ
+  scripts/config --undefine CONFIG_HVC_XEN
+  scripts/config --undefine CONFIG_HVC_XEN_FRONTEND
+  scripts/config --undefine CONFIG_TCG_XEN
+  scripts/config --undefine CONFIG_XEN_WDT
+  scripts/config --undefine CONFIG_DRM_XEN
+  scripts/config --undefine CONFIG_DRM_XEN_FRONTEND
+  scripts/config --undefine CONFIG_XEN_FBDEV_FRONTEND
+  scripts/config --undefine CONFIG_SND_XEN_FRONTEND
+  scripts/config --undefine CONFIG_USB_XEN_HCD
+  scripts/config --undefine CONFIG_XEN_BALLOON
+  scripts/config --undefine CONFIG_XEN_BALLOON_MEMORY_HOTPLUG
+  scripts/config --undefine CONFIG_XEN_MEMORY_HOTPLUG_LIMIT
+  scripts/config --undefine CONFIG_XEN_SCRUB_PAGES_DEFAULT
+  scripts/config --undefine CONFIG_XEN_DEV_EVTCHN
+  scripts/config --undefine CONFIG_XEN_BACKEND
+  scripts/config --undefine CONFIG_XENFS
+  scripts/config --undefine CONFIG_XEN_COMPAT_XENFS
+  scripts/config --undefine CONFIG_XEN_SYS_HYPERVISOR
+  scripts/config --undefine CONFIG_XEN_XENBUS_FRONTEND
+  scripts/config --undefine CONFIG_XEN_GNTDEV
+  scripts/config --undefine CONFIG_XEN_GNTDEV_DMABUF
+  scripts/config --undefine CONFIG_XEN_GRANT_DEV_ALLOC
+  scripts/config --undefine CONFIG_XEN_GRANT_DMA_ALLOC
+  scripts/config --undefine CONFIG_SWIOTLB_XEN
+  scripts/config --undefine CONFIG_XEN_PCI_STUB
+  scripts/config --undefine CONFIG_XEN_PCIDEV_BACKEND
+  scripts/config --undefine CONFIG_XEN_PVCALLS_FRONTEND
+  scripts/config --undefine CONFIG_XEN_PVCALLS_BACKEND
+  scripts/config --undefine CONFIG_XEN_SCSI_BACKEND
+  scripts/config --undefine CONFIG_XEN_PRIVCMD
+  scripts/config --undefine CONFIG_XEN_PRIVCMD_EVENTFD
+  scripts/config --undefine CONFIG_XEN_ACPI_PROCESSOR
+  scripts/config --undefine CONFIG_XEN_MCE_LOG
+  scripts/config --undefine CONFIG_XEN_HAVE_PVMMU
+  scripts/config --undefine CONFIG_XEN_EFI
+  scripts/config --undefine CONFIG_XEN_AUTO_XLATE
+  scripts/config --undefine CONFIG_XEN_ACPI
+  scripts/config --undefine CONFIG_XEN_SYMS
+  scripts/config --undefine CONFIG_XEN_HAVE_VPMU
+  scripts/config --undefine CONFIG_XEN_FRONT_PGDIR_SHBUF
+  scripts/config --undefine CONFIG_XEN_UNPOPULATED_ALLOC
+  scripts/config --undefine CONFIG_XEN_GRANT_DMA_OPS
+  scripts/config --undefine CONFIG_XEN_VIRTIO
+  scripts/config --undefine CONFIG_XEN_VIRTIO_FORCE_GRANT
 }
 
 function set_new_config_defaults {
