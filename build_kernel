@@ -447,21 +447,23 @@ function make_ubuntu_config_build {
   scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
 }
 
+# Extracted from kernel 6.11-rc3.
+#
 function apply_secondary_config_patches {
-  # Disable debug info (pretty chunky!).
+  # Disable debug info, which consumes a lot of comptime/disk.
   #
   scripts/config --undefine DEBUG_INFO
-  scripts/config --undefine DEBUG_INFO_COMPRESSED
+  scripts/config --set-val  DEBUG_INFO_NONE y
   scripts/config --undefine DEBUG_INFO_REDUCED
-  scripts/config --undefine DEBUG_INFO_SPLIT
+  scripts/config --undefine CONFIG_DEBUG_INFO_COMPRESSED_NONE
+  scripts/config --undefine CONFIG_DEBUG_INFO_COMPRESSED_ZLIB
+  scripts/config --undefine CONFIG_DEBUG_INFO_SPLIT
   scripts/config --undefine GDB_SCRIPTS
-  scripts/config --set-val DEBUG_INFO_DWARF5 n
-  scripts/config --set-val DEBUG_INFO_NONE y
+  scripts/config --disable  CONFIG_DEBUG_INFO_DWARF5
 
-  # Some don't make any measurable comptime improvements, but anyway they're not used
+  # Some don't make any measurable comptime improvements, but anyway they're not used.
   #
-  # On my current setup, compilation without (deb's or changes below) takes ~479".
-  # With the changes below takes ~455".
+  # On my current setup, compilation without (deb's or changes below) takes ~8'.
   #
   # To test:
   #
