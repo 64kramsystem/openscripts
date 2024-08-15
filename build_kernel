@@ -109,10 +109,10 @@ function decode_cmdline_args {
   done
 
   if [[ $# -gt 1 ]]; then
-    echo "$c_help"
+    echo "Only one argument is allowed!"
     exit 1
   elif [[ -n $v_bisect && -n $v_kernel_version ]]; then
-    echo "$c_help"
+    echo "Bisection and specific kernel version are incompatible!"
     exit 1
   elif [[ $# -eq 1 ]]; then
     v_packages_destination=$1
