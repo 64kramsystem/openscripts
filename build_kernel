@@ -7,7 +7,7 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_bisect_local_version=bisect
-c_cherry_picks_log=$(dirname "$(mktemp -d)")/build_kernel.cherry-picks.log
+c_cherry_pick_branch=temporary_cherry_picks
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
 c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/
 # Example: https://kernel.ubuntu.com/mainline/v6.8-rc1/amd64/linux-modules-6.8.0-060800rc1-generic_6.8.0-060800rc1.202401212233_amd64.deb
@@ -56,6 +56,7 @@ Workflow (bisect):
 
 Cherry picking:
 
+- incompatible with bisect workflow
 - the format is 'shortver1:c1a,c1b;shortver2:c2a,c2b'
 - 'shortver' is optional, and defaults to the current kernel short version
 - each commit can be prefixed with 'R', which will revert the given commit
@@ -113,6 +114,9 @@ function decode_cmdline_args {
     exit 1
   elif [[ -n $v_bisect && -n $v_kernel_version ]]; then
     echo "Bisection and specific kernel version are incompatible!"
+    exit 1
+  elif [[ -n $v_bisect && -n $v_raw_cherry_picks ]]; then
+    echo "Bisection and cherry picking are incompatible!"
     exit 1
   elif [[ $# -eq 1 ]]; then
     v_packages_destination=$1
@@ -182,6 +186,20 @@ function short_kernel_version {
     exit 1
     ;;
   esac
+}
+
+function register_exit_hook {
+  function _exit_hook {
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+    if [[ $current_branch == "$c_cherry_pick_branch" ]]; then
+      git checkout -
+      git branch -d "$current_branch"
+    fi
+  }
+
+  trap _exit_hook EXIT
 }
 
 function fetch_remotes {
@@ -506,57 +524,41 @@ function display_config_diff {
 # $v_raw_cherry_picks can be empty, in which case no CPs are performed.
 #
 function cherry_pick_commits {
-  local short_current_kernel_version
-  short_current_kernel_version=$(short_kernel_version "$1" no_rc)
+  if [[ -n $v_raw_cherry_picks ]]; then
+    git checkout -b "$c_cherry_pick_branch"
 
-  local raw_cherry_pick_entries
-  mapfile -d';' raw_cherry_pick_entries < <(echo -n "$v_raw_cherry_picks")
+    local short_current_kernel_version
+    short_current_kernel_version=$(short_kernel_version "$1" no_rc)
 
-  # Don't bother with an exit deletion hook.
-  #
-  true > "$c_cherry_picks_log"
+    local raw_cherry_pick_entries
+    mapfile -d';' raw_cherry_pick_entries < <(echo -n "$v_raw_cherry_picks")
 
-  for cherry_picks_entry in "${raw_cherry_pick_entries[@]}"; do
-    if [[ $cherry_picks_entry != *:* ]]; then
-      cherry_picks_entry=$short_current_kernel_version:$cherry_picks_entry
-    fi
+    for cherry_picks_entry in "${raw_cherry_pick_entries[@]}"; do
+      if [[ $cherry_picks_entry != *:* ]]; then
+        cherry_picks_entry=$short_current_kernel_version:$cherry_picks_entry
+      fi
 
-    local entry_kernel_version=${cherry_picks_entry%:*}
+      local entry_kernel_version=${cherry_picks_entry%:*}
 
-    if [[ $entry_kernel_version == "$short_current_kernel_version" ]]; then
-      local entry_raw_commits=${cherry_picks_entry#*:}
+      if [[ $entry_kernel_version == "$short_current_kernel_version" ]]; then
+        local entry_raw_commits=${cherry_picks_entry#*:}
 
-      local entry_commits
-      mapfile -td, entry_commits < <(echo -n "$entry_raw_commits")
+        local entry_commits
+        mapfile -td, entry_commits < <(echo -n "$entry_raw_commits")
 
-      for commit in "${entry_commits[@]}"; do
-        local operation_error_log
-        operation_error_log=$(mktemp)
-
-        local header="# CHERRY PICK $commit ##################################################"
-        echo "$header"
-
-        if [[ $commit == R* ]]; then
-          # Git revert is inconsistent: when a revert has already been applied, it exits with error,
-          # but outputs to stdout; for this reason, we need to capture both stdout and stderr;
-          # additionally, it will cause git revert --abort to fail (which in turn, outputs to
-          # stderr instead). 🤷
-          #
-          if ! git revert --no-edit "${commit#R}" > "$operation_error_log" 2>&1; then
-            git revert --abort 2> /dev/null || true
-            { echo "$header"; cat "$operation_error_log"; } >> "$c_cherry_picks_log"
+        for commit in "${entry_commits[@]}"; do
+          if [[ $commit == R* ]]; then
+            commit=${commit#R}
+            echo "# REVERT $commit #######################################################"
+            git revert --no-edit
+          else
+            echo "# CHERRY PICK $commit ##################################################"
+            git cherry-pick "$commit"
           fi
-        else
-          if ! git cherry-pick "$commit" 2> "$operation_error_log"; then
-            git cherry-pick --abort
-            { echo "$header"; cat "$operation_error_log"; } >> "$c_cherry_picks_log"
-          fi
-        fi
-
-        rm "$operation_error_log"
-      done
-    fi
-  done
+        done
+      fi
+    done
+  fi
 }
 
 function compile_kernel {
@@ -657,6 +659,8 @@ function main {
     cd "$v_repo_path"
   fi
 
+  register_exit_hook
+
   # The tag (and mainline PPA path) for `M.m.0` versions is in the `M.m` format.
   # We need to normalize regardless, because the version can also be passed by the user.
 
@@ -738,13 +742,6 @@ function main {
       remove_installed_bisect_kernels
     fi
     install_kernel_packages "$built_packages"
-  fi
-
-  if [[ -s $c_cherry_picks_log ]]; then
-    {
-      echo "Cherry picking failures:"
-      cat "$c_cherry_picks_log"
-    } >&2
   fi
 
   send_built_packages_to_fd3 "$built_packages"
