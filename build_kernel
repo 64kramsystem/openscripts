@@ -442,14 +442,15 @@ function import_config_file {
   cp "$source_config_file" .config
 }
 
-function make_ubuntu_config_build {
-  scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
-  scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
-}
-
 # Extracted from kernel 6.11-rc3.
 #
-function apply_secondary_config_patches {
+function apply_config_changes {
+  # Required to build the Ubuntu config. They should be in a separate function. but they're too
+  # easy to miss.
+  #
+  scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
+  scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
+
   # Disable debug info, which consumes a lot of comptime/disk.
   #
   scripts/config --undefine DEBUG_INFO
@@ -788,8 +789,7 @@ function main {
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
 
-  make_ubuntu_config_build
-  apply_secondary_config_patches
+  apply_config_changes
   set_new_config_defaults
 
   if [[ -n $v_display_config_diff ]]; then
