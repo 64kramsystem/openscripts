@@ -24,6 +24,7 @@ Options:
 - [-b|--bisect]                   : bisect mode (see below); incompatible with '--kernel-version'
 - [-l|--local-version <name>]     : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                     minus is automatically added
+- [-t|--config-tweaks]            : apply configuration tweaks
 - [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
 - [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
@@ -70,10 +71,11 @@ v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
+v_apply_tweaks=         # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:dc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:dtc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,config-tweaks,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -99,6 +101,9 @@ function decode_cmdline_args {
         shift 2 ;;
       -d|--display-config-diff)
         v_display_config_diff=1
+        shift ;;
+      -t|--config-tweaks)
+        v_apply_tweaks=1
         shift ;;
       -c|cherry-pick)
         v_raw_cherry_picks=$2
@@ -442,17 +447,14 @@ function import_config_file {
   cp "$source_config_file" .config
 }
 
-# Extracted from kernel 6.11-rc3.
-#
-function apply_config_changes {
-  # Required to build the Ubuntu config. They should be in a separate function. but they're too
-  # easy to miss.
-  #
+function fix_ubuntu_config {
   scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
   scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
+}
 
-  # Disable debug info, which consumes a lot of comptime/disk.
-  #
+# Takes a lot of time, and generates a large package.
+#
+function disable_debug_info {
   scripts/config --undefine DEBUG_INFO
   scripts/config --set-val  DEBUG_INFO_NONE y
   scripts/config --undefine DEBUG_INFO_REDUCED
@@ -461,6 +463,12 @@ function apply_config_changes {
   scripts/config --undefine CONFIG_DEBUG_INFO_SPLIT
   scripts/config --undefine GDB_SCRIPTS
   scripts/config --disable  CONFIG_DEBUG_INFO_DWARF5
+}
+
+# Extracted from kernel 6.11-rc3.
+#
+function apply_config_tweaks {
+  # DON'T FORGET TO APPLY THE UBUNTU FIXES, IF COPY/PASTING!
 
   # Some don't make any measurable comptime improvements, but anyway they're not used.
   #
@@ -789,7 +797,13 @@ function main {
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
 
-  apply_config_changes
+  fix_ubuntu_config
+  disable_debug_info
+
+  if [[ -n $v_apply_tweaks ]]; then
+    apply_config_tweaks
+  fi
+
   set_new_config_defaults
 
   if [[ -n $v_display_config_diff ]]; then
