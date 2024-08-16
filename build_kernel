@@ -304,7 +304,7 @@ function find_latest_ppa_config_module_link {
 }
 
 function check_if_version_already_packaged {
-  local current_kernel_version=$1 building_kernel_version=$2
+  local building_kernel_version=$1
 
   # Format: `M.m.p` or or `M.m-rcN`.
   #
@@ -765,7 +765,7 @@ function main {
   if [[ -z $v_bisect ]]; then
     building_kernel_version=$(find_latest_kernel_version "$current_kernel_version")
 
-    check_if_version_already_packaged "$current_kernel_version" "$building_kernel_version"
+    check_if_version_already_packaged "$building_kernel_version"
 
     create_if_required_and_switch_branch "$building_kernel_version"
 
