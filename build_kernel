@@ -606,8 +606,6 @@ function display_config_diff {
 #
 function cherry_pick_commits {
   if [[ -n $v_raw_cherry_picks ]]; then
-    git checkout -b "$c_cherry_pick_branch"
-
     local short_current_kernel_version
     short_current_kernel_version=$(short_kernel_version "$1" no_rc)
 
@@ -622,6 +620,16 @@ function cherry_pick_commits {
       local entry_kernel_version=${cherry_picks_entry%:*}
 
       if [[ $entry_kernel_version == "$short_current_kernel_version" ]]; then
+        # Switch to a temporary branch only when there are CPs for the current kernel; this
+        # makes the output cleaner.
+        #
+        local current_branch
+        current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+        if [[ $current_branch != "$c_cherry_pick_branch" ]]; then
+          git checkout -b "$c_cherry_pick_branch"
+        fi
+
         local entry_raw_commits=${cherry_picks_entry#*:}
 
         local entry_commits
