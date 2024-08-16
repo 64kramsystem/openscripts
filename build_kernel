@@ -25,6 +25,7 @@ Options:
 - [-l|--local-version <name>]     : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                     minus is automatically added
 - [-t|--config-tweaks]            : apply configuration tweaks
+- [-f|--fill-missing-config]      : run 'make olddefconfig' after applying all the config changes
 - [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
 - [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
@@ -50,7 +51,7 @@ Workflow (bisect):
 
 - the kernel local version is set to '$c_bisect_local_version', overriding any user setting
 - the kernel version is gathered from the latest tag reachable from HEAD
-- (the configuration is handled as regular)
+- (the configuration is handled as regular, plus 'make olddefconfig' is executed)
 - removes the old packages (not the configs) from the packages destination
 - builds and moves the packages to the packages destination
 - installs the packages
@@ -72,10 +73,11 @@ v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
 v_apply_tweaks=         # boolean; false=blank; true=anything else
+v_run_olddefconfig=     # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:dtc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,config-tweaks,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:dtfc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,config-tweaks,fill-missing-config,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -104,6 +106,9 @@ function decode_cmdline_args {
         shift ;;
       -t|--config-tweaks)
         v_apply_tweaks=1
+        shift ;;
+      -f|--fill-missing-config)
+        v_run_olddefconfig=1
         shift ;;
       -c|cherry-pick)
         v_raw_cherry_picks=$2
@@ -588,7 +593,7 @@ function apply_config_tweaks {
   scripts/config --undefine CONFIG_XEN_VIRTIO_FORCE_GRANT
 }
 
-function set_new_config_defaults {
+function run_olddefconfig {
   make olddefconfig
 }
 
@@ -812,7 +817,9 @@ function main {
     apply_config_tweaks
   fi
 
-  set_new_config_defaults
+  if [[ -n $v_run_olddefconfig || -n $v_bisect ]]; then
+    run_olddefconfig
+  fi
 
   if [[ -n $v_display_config_diff ]]; then
     display_config_diff
