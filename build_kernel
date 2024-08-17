@@ -615,7 +615,7 @@ function cherry_pick_commits {
     short_current_kernel_version=$(short_kernel_version "$1" no_rc)
 
     local raw_cherry_pick_entries
-    mapfile -d'/' raw_cherry_pick_entries < <(echo -n "$v_raw_cherry_picks")
+    mapfile -td'/' raw_cherry_pick_entries < <(echo -n "$v_raw_cherry_picks")
 
     for cherry_picks_entry in "${raw_cherry_pick_entries[@]}"; do
       if [[ $cherry_picks_entry != *:* ]]; then
