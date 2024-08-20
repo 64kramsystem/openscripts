@@ -22,14 +22,14 @@ The list (newline-separated) of built packages is sent to FD 3 (if open/valid).
 Options:
 
 - [-v|--kernel-version <version>]
-- [-b|--bisect]                   : bisect mode (see below); incompatible with '--kernel-version'
-- [-l|--local-version <name>]     : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
-                                    minus is automatically added
-- [-t|--config-tweaks]            : apply configuration tweaks
-- [-f|--fill-missing-config]      : run 'make olddefconfig' after applying all the config changes
-- [-c|--cherry-pick <c1,c2,...>]  : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
+- [-b|--bisect]                    : bisect mode (see below); incompatible with '--kernel-version'
+- [-l|--local-version <name>]      : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
+                                     minus is automatically added
+- [-t|--config-tweaks]             : apply configuration tweaks
+- [-f|--fill-missing-config]       : run 'make olddefconfig' after applying all the config changes
+- [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
-- [-r|--repo-path <path>]         : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
+- [-r|--repo-path <path>]          : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - [-d|--display-config-diff]
 
 Parameters:
