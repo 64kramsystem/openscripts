@@ -6,6 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
+c_logfile=$(dirname "$(mktemp)")/$(basename "$0").log
 c_bisect_local_version=bisect
 c_cherry_pick_branch=temporary_cherry_picks
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
@@ -209,6 +210,14 @@ function register_exit_hook {
   }
 
   trap _exit_hook EXIT
+}
+
+function setup_logging {
+  exec 5> "$c_logfile"
+  BASH_XTRACEFD=5
+  rm -f "$c_logfile"
+  exec > >(tee -ai "$c_logfile") 2>&1
+  set -x
 }
 
 function fetch_remotes {
@@ -747,6 +756,8 @@ function main {
   fi
 
   register_exit_hook
+
+  setup_logging
 
   # The tag (and mainline PPA path) for `M.m.0` versions is in the `M.m` format.
   # We need to normalize regardless, because the version can also be passed by the user.
