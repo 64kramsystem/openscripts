@@ -7,6 +7,8 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_logfile=$(dirname "$(mktemp)")/$(basename "$0").log
+c_config_tweaks_config_script=$(mktemp --suffix=.config_tweaks-C.sh)
+c_config_tweaks_processing_script=$(mktemp --suffix=.config_tweaks-P.sh)
 c_bisect_local_version=bisect
 c_cherry_pick_branch=temporary_cherry_picks
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
@@ -25,7 +27,7 @@ Options:
 - [-b|--bisect]                    : bisect mode (see below); incompatible with '--kernel-version'
 - [-l|--local-version <name>]      : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                      minus is automatically added
-- [-t|--config-tweaks]             : apply configuration tweaks
+- [-t|--config-tweaks <file.diff>] : apply configuration tweaks, from a diff file
 - [-f|--fill-missing-config]       : run 'make olddefconfig' after applying all the config changes
 - [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
@@ -62,6 +64,10 @@ Cherry picking:
 - incompatible with bisect workflow
 - format: 'shortver1:c1a,c1b/shortver2:c2a,c2b'
 - each commit can be prefixed with 'R', which will revert the given commit
+
+Config tweaks diff:
+
+- the diff is processed before applying, so that it can apply to any kernel version
 "
 
 v_kernel_version=
@@ -72,12 +78,12 @@ v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
-v_apply_tweaks=         # boolean; false=blank; true=anything else
+v_tweaks_file=
 v_run_olddefconfig=     # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:dtfc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,config-tweaks,fill-missing-config,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:dt:fc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,config-tweaks:,fill-missing-config,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -105,8 +111,8 @@ function decode_cmdline_args {
         v_display_config_diff=1
         shift ;;
       -t|--config-tweaks)
-        v_apply_tweaks=1
-        shift ;;
+        v_tweaks_file=$2
+        shift 2 ;;
       -f|--fill-missing-config)
         v_run_olddefconfig=1
         shift ;;
@@ -204,6 +210,9 @@ function short_kernel_version {
 function register_exit_hook {
   function _exit_hook {
     "${SCRIPTING_ALARM_PROGRAM:-true}"
+
+    rm "$c_config_tweaks_config_script"
+    rm "$c_config_tweaks_processing_script"
 
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -515,127 +524,16 @@ function disable_debug_info {
   scripts/config --disable  CONFIG_DEBUG_INFO_DWARF5
 }
 
-# Extracted from kernel 6.11-rc3.
-#
 function apply_config_tweaks {
-  # DON'T FORGET TO APPLY THE UBUNTU FIXES, IF COPY/PASTING!
+  cat > "$c_config_tweaks_processing_script" <<'RUBY'
+# Use ARGV.fetch(0)
+# Send to stdout
+WRITEME!!!
+RUBY
 
-  # Some don't make any measurable comptime improvements, but anyway they're not used.
-  #
-  # On my current setup, compilation without (deb's or changes below) takes ~8'.
-  #
-  # To test:
-  #
-  #     make mrproper
-  #     cp .config{.sav,}
-  #     # (apply below)
-  #     make olddefconfig
-  #     /usr/bin/time -f "TIME: %e" make -j $(nproc)
-  #     plin
-  #
-  scripts/config --disable  CONFIG_CPU_SUP_HYGON            # exotic hw architectures...
-  scripts/config --disable  CONFIG_CPU_SUP_CENTAUR
-  scripts/config --disable  CONFIG_CPU_SUP_ZHAOXIN
-  scripts/config --disable  CONFIG_DRM_RADEON               # radeon...
-  scripts/config --undefine CONFIG_DRM_RADEON_USERPTR
-  scripts/config --disable  CONFIG_DRM_NOUVEAU              # nouveau...
-  scripts/config --undefine CONFIG_NOUVEAU_DEBUG
-  scripts/config --undefine CONFIG_NOUVEAU_DEBUG_DEFAULT
-  scripts/config --undefine CONFIG_NOUVEAU_DEBUG_MMU
-  scripts/config --undefine CONFIG_NOUVEAU_DEBUG_PUSH
-  scripts/config --undefine CONFIG_DRM_NOUVEAU_BACKLIGHT
-  scripts/config --undefine CONFIG_DRM_NOUVEAU_SVM
-  scripts/config --undefine CONFIG_DRM_NOUVEAU_GSP_DEFAULT
-  scripts/config --disable  CONFIG_DRM_XE                   # intel xe...
-  scripts/config --undefine CONFIG_DRM_GPUVM
-  scripts/config --undefine CONFIG_DRM_XE_DISPLAY
-  scripts/config --undefine CONFIG_DRM_XE_FORCE_PROBE
-  scripts/config --undefine CONFIG_DRM_XE_WERROR
-  scripts/config --undefine CONFIG_DRM_XE_DEBUG
-  scripts/config --undefine CONFIG_DRM_XE_DEBUG_VM
-  scripts/config --undefine CONFIG_DRM_XE_DEBUG_SRIOV
-  scripts/config --undefine CONFIG_DRM_XE_DEBUG_MEM
-  scripts/config --undefine CONFIG_DRM_XE_LARGE_GUC_BUFFER
-  scripts/config --undefine CONFIG_DRM_XE_USERPTR_INVAL_INJECT
-  scripts/config --undefine CONFIG_DRM_XE_JOB_TIMEOUT_MAX
-  scripts/config --undefine CONFIG_DRM_XE_JOB_TIMEOUT_MIN
-  scripts/config --undefine CONFIG_DRM_XE_TIMESLICE_MAX
-  scripts/config --undefine CONFIG_DRM_XE_TIMESLICE_MIN
-  scripts/config --undefine CONFIG_DRM_XE_PREEMPT_TIMEOUT
-  scripts/config --undefine CONFIG_DRM_XE_PREEMPT_TIMEOUT_MAX
-  scripts/config --undefine CONFIG_DRM_XE_PREEMPT_TIMEOUT_MIN
-  scripts/config --undefine CONFIG_DRM_XE_ENABLE_SCHEDTIMEOUT_LIMIT
-  scripts/config --disable  CONFIG_DRM_MGAG200              # matrox g200
-  scripts/config --disable  CONFIG_XEN                      # xen...
-  scripts/config --disable  CONFIG_KVM_XEN
-  scripts/config --undefine CONFIG_PARAVIRT_XXL
-  scripts/config --undefine CONFIG_XEN_PV
-  scripts/config --undefine CONFIG_XEN_512GB
-  scripts/config --undefine CONFIG_XEN_PV_SMP
-  scripts/config --undefine CONFIG_XEN_PV_DOM0
-  scripts/config --undefine CONFIG_XEN_PVHVM
-  scripts/config --undefine CONFIG_XEN_PVHVM_SMP
-  scripts/config --undefine CONFIG_XEN_PVHVM_GUEST
-  scripts/config --undefine CONFIG_XEN_SAVE_RESTORE
-  scripts/config --undefine CONFIG_XEN_DEBUG_FS
-  scripts/config --undefine CONFIG_XEN_PVH
-  scripts/config --undefine CONFIG_XEN_DOM0
-  scripts/config --undefine CONFIG_XEN_PV_MSR_SAFE
-  scripts/config --undefine CONFIG_PCI_XEN
-  scripts/config --undefine CONFIG_NET_9P_XEN
-  scripts/config --undefine CONFIG_XEN_PCIDEV_FRONTEND
-  scripts/config --undefine CONFIG_SYS_HYPERVISOR
-  scripts/config --undefine CONFIG_XEN_BLKDEV_FRONTEND
-  scripts/config --undefine CONFIG_XEN_BLKDEV_BACKEND
-  scripts/config --undefine CONFIG_XEN_SCSI_FRONTEND
-  scripts/config --undefine CONFIG_XEN_NETDEV_FRONTEND
-  scripts/config --undefine CONFIG_XEN_NETDEV_BACKEND
-  scripts/config --undefine CONFIG_INPUT_XEN_KBDDEV_FRONTEND
-  scripts/config --undefine CONFIG_HVC_IRQ
-  scripts/config --undefine CONFIG_HVC_XEN
-  scripts/config --undefine CONFIG_HVC_XEN_FRONTEND
-  scripts/config --undefine CONFIG_TCG_XEN
-  scripts/config --undefine CONFIG_XEN_WDT
-  scripts/config --undefine CONFIG_DRM_XEN
-  scripts/config --undefine CONFIG_DRM_XEN_FRONTEND
-  scripts/config --undefine CONFIG_XEN_FBDEV_FRONTEND
-  scripts/config --undefine CONFIG_SND_XEN_FRONTEND
-  scripts/config --undefine CONFIG_USB_XEN_HCD
-  scripts/config --undefine CONFIG_XEN_BALLOON
-  scripts/config --undefine CONFIG_XEN_BALLOON_MEMORY_HOTPLUG
-  scripts/config --undefine CONFIG_XEN_MEMORY_HOTPLUG_LIMIT
-  scripts/config --undefine CONFIG_XEN_SCRUB_PAGES_DEFAULT
-  scripts/config --undefine CONFIG_XEN_DEV_EVTCHN
-  scripts/config --undefine CONFIG_XEN_BACKEND
-  scripts/config --undefine CONFIG_XENFS
-  scripts/config --undefine CONFIG_XEN_COMPAT_XENFS
-  scripts/config --undefine CONFIG_XEN_SYS_HYPERVISOR
-  scripts/config --undefine CONFIG_XEN_XENBUS_FRONTEND
-  scripts/config --undefine CONFIG_XEN_GNTDEV
-  scripts/config --undefine CONFIG_XEN_GNTDEV_DMABUF
-  scripts/config --undefine CONFIG_XEN_GRANT_DEV_ALLOC
-  scripts/config --undefine CONFIG_XEN_GRANT_DMA_ALLOC
-  scripts/config --undefine CONFIG_SWIOTLB_XEN
-  scripts/config --undefine CONFIG_XEN_PCI_STUB
-  scripts/config --undefine CONFIG_XEN_PCIDEV_BACKEND
-  scripts/config --undefine CONFIG_XEN_PVCALLS_FRONTEND
-  scripts/config --undefine CONFIG_XEN_PVCALLS_BACKEND
-  scripts/config --undefine CONFIG_XEN_SCSI_BACKEND
-  scripts/config --undefine CONFIG_XEN_PRIVCMD
-  scripts/config --undefine CONFIG_XEN_PRIVCMD_EVENTFD
-  scripts/config --undefine CONFIG_XEN_ACPI_PROCESSOR
-  scripts/config --undefine CONFIG_XEN_MCE_LOG
-  scripts/config --undefine CONFIG_XEN_HAVE_PVMMU
-  scripts/config --undefine CONFIG_XEN_EFI
-  scripts/config --undefine CONFIG_XEN_AUTO_XLATE
-  scripts/config --undefine CONFIG_XEN_ACPI
-  scripts/config --undefine CONFIG_XEN_SYMS
-  scripts/config --undefine CONFIG_XEN_HAVE_VPMU
-  scripts/config --undefine CONFIG_XEN_FRONT_PGDIR_SHBUF
-  scripts/config --undefine CONFIG_XEN_UNPOPULATED_ALLOC
-  scripts/config --undefine CONFIG_XEN_GRANT_DMA_OPS
-  scripts/config --undefine CONFIG_XEN_VIRTIO
-  scripts/config --undefine CONFIG_XEN_VIRTIO_FORCE_GRANT
+  ruby "$c_config_tweaks_processing_script" "$v_tweaks_file" > "$c_config_tweaks_config_script"
+
+  bash "$c_config_tweaks_config_script"
 }
 
 function run_olddefconfig {
@@ -851,7 +749,7 @@ function main {
   fix_ubuntu_config
   disable_debug_info
 
-  if [[ -n $v_apply_tweaks ]]; then
+  if [[ -n $v_tweaks_file ]]; then
     apply_config_tweaks
   fi
 
