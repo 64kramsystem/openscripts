@@ -441,11 +441,9 @@ function same_major_minor_version {
 }
 
 function print_sorted_commits_diff {
-  local previous_version=$1
+  local upstream=$1 head=$2
 
-  previous_version=$(short_kernel_version "$previous_version" with_rc)
-
-  git cherry -v "v$previous_version" | sort -k3
+  git cherry -v "v$upstream" "v$head" | sort -k3
 }
 
 function import_config_file {
@@ -605,27 +603,27 @@ function display_config_diff {
   fi
 }
 
-# $1: running kernel version
+# $1: building kernel version
 #
 # $v_raw_cherry_picks can be empty, in which case no CPs are performed.
 #
 function cherry_pick_commits {
   if [[ -n $v_raw_cherry_picks ]]; then
-    local short_running_kernel_version
-    short_running_kernel_version=$(short_kernel_version "$1" no_rc)
+    local short_building_kernel_version
+    short_building_kernel_version=$(short_kernel_version "$1" no_rc)
 
     local raw_cherry_pick_entries
     mapfile -td'/' raw_cherry_pick_entries < <(echo -n "$v_raw_cherry_picks")
 
     for cherry_picks_entry in "${raw_cherry_pick_entries[@]}"; do
       if [[ $cherry_picks_entry != *:* ]]; then
-        cherry_picks_entry=$short_running_kernel_version:$cherry_picks_entry
+        cherry_picks_entry=$short_building_kernel_version:$cherry_picks_entry
       fi
 
       local entry_kernel_version=${cherry_picks_entry%:*}
 
-      if [[ $entry_kernel_version == "$short_running_kernel_version" ]]; then
-        # Switch to a temporary branch only when there are CPs for the running kernel; this
+      if [[ $entry_kernel_version == "$short_building_kernel_version" ]]; then
+        # Switch to a temporary branch only when there are CPs for the building kernel; this
         # makes the output cleaner.
         #
         local current_branch
@@ -758,7 +756,8 @@ function main {
   # The tag (and mainline PPA path) for `M.m.0` versions is in the `M.m` format.
   # We need to normalize regardless, because the version can also be passed by the user.
 
-  local running_kernel_version=${v_kernel_version:-"$(find_running_kernel_version)"}
+  local running_kernel_version
+  running_kernel_version=$(find_running_kernel_version)
   running_kernel_version=$(normalize_kernel_version "$running_kernel_version")
 
   if [[ -z $v_bisect ]]; then
@@ -768,7 +767,7 @@ function main {
   local building_kernel_version
 
   if [[ -z $v_bisect ]]; then
-    building_kernel_version=$(find_latest_kernel_version "$running_kernel_version")
+    building_kernel_version=${v_kernel_version:-"$(find_latest_kernel_version "$running_kernel_version")"}
 
     check_if_version_already_packaged "$building_kernel_version"
 
@@ -777,7 +776,7 @@ function main {
     # When specifying a different kernel version, don't display the diff.
     #
     if [[ -z $v_kernel_version ]] && same_major_minor_version "$running_kernel_version" "$building_kernel_version"; then
-      print_sorted_commits_diff "$running_kernel_version"
+      print_sorted_commits_diff "$running_kernel_version" "$building_kernel_version"
     fi
   else
     building_kernel_version=$(find_branch_kernel_version)
@@ -825,13 +824,13 @@ function main {
     display_config_diff
   fi
 
-  cherry_pick_commits "$running_kernel_version"
+  cherry_pick_commits "$building_kernel_version"
 
   compile_kernel
 
   # Config files are handled based on $v_bisect.
   #
-  remove_destination_old_version_files "$running_kernel_version" "$source_config_file"
+  remove_destination_old_version_files "$building_kernel_version" "$source_config_file"
 
   move_packages_and_cleanup
 
