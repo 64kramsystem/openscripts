@@ -158,10 +158,13 @@ function cache_sudo {
   done 2>/dev/null &
 }
 
-# Return format: `M.m.p` or `M.m.0-rcN`
+# Return format: normalized version.
 #
 function find_running_kernel_version {
-  uname -r | sed -E 's/-[^-]+$//'
+  local raw_version
+  raw_version=$(uname -r | sed -E 's/-[^-]+$//')
+
+  normalize_kernel_version "$raw_version"
 }
 
 # Return format: `M.m.p` or `M.m-rcN`.
@@ -228,7 +231,7 @@ function fetch_remotes {
   git fetch --all
 }
 
-# Return format: `M.m.p` or `M.m-rcN`.
+# Return format: normalized version.
 #
 function find_latest_kernel_version {
   local normalized_version=$1
@@ -258,7 +261,7 @@ function find_latest_kernel_version {
   echo -n "$latest_version"
 }
 
-# Return format: `M.m.p` or `M.m-rcN`.
+# Return format: normalized version.
 #
 function find_branch_kernel_version {
   git describe --tags --abbrev=0 \
@@ -336,7 +339,7 @@ function check_if_version_already_packaged {
 
 # Assumes that there are no multiple builds for the same version.
 #
-# Return format: `M.m.p` or `M.m-rcN`.
+# Return format: normalized version.
 #
 function find_latest_packaged_version {
   local kernel_version=$1
@@ -768,7 +771,6 @@ function main {
 
   local running_kernel_version
   running_kernel_version=$(find_running_kernel_version)
-  running_kernel_version=$(normalize_kernel_version "$running_kernel_version")
 
   if [[ -z $v_bisect ]]; then
     fetch_remotes
