@@ -21,7 +21,7 @@ The list (newline-separated) of built packages is sent to FD 3 (if open/valid).
 
 Options:
 
-- [-v|--kernel-version <version>]
+- [-v|--kernel-version <version>]  : if 'M.m', the latest version is set; RCs must be set in the format 'M.m-rcN'.
 - [-b|--bisect]                    : bisect mode (see below); incompatible with '--kernel-version'
 - [-l|--local-version <name>]      : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                      minus is automatically added
@@ -145,6 +145,10 @@ function decode_cmdline_args {
   if [[ -n $v_bisect ]]; then
     v_local_version=$c_bisect_local_version
     v_install=1
+  fi
+
+  if [[ $v_kernel_version =~ ^[[:digit:]]+\.[[:digit:]]+$ ]]; then
+    v_kernel_version=$(find_latest_kernel_version "$v_kernel_version")
   fi
 }
 
