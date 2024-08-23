@@ -20,8 +20,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 elif [[ $# -gt 1 ]]; then
   echo "Unexpected number of parameters"
   exit 1
-elif ! grep -qP "^trash-cli\s+install$" <<< "$(dpkg --get-selections)"; then
-  echo 'The `trash-cli` package is required!'
+elif ! command -v trash > /dev/null; then
+  echo "The 'trash-cli' tool is required!"
   exit 1
 fi
 
