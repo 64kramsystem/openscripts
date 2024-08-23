@@ -9,7 +9,8 @@ c_help="Usage: $(basename "$0") [<threshold_days>]
 
 Clean the files trashed before the given threshold in days.
 
-Note that the tool used (\`trash-cli\` package) support deletion via filenames, so if two files are one inside the threshold, and one outside, they will both be deleted.
+The 'trash-cli' package used, is as trashy as it gets, for many reasons; one of the problems is that deletion is performed via base filename, so if two files are one inside the threshold, and one outside, they will both be deleted.
+There is a 'trash-empty' command, but it's interactive.
 
 Default threshold: $c_default_threshold_days days."
 
