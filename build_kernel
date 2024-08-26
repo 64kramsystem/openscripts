@@ -146,10 +146,6 @@ function decode_cmdline_args {
     v_local_version=$c_bisect_local_version
     v_install=1
   fi
-
-  if [[ $v_kernel_version =~ ^[[:digit:]]+\.[[:digit:]]+$ ]]; then
-    v_kernel_version=$(find_latest_kernel_version "$v_kernel_version")
-  fi
 }
 
 function cache_sudo {
@@ -783,7 +779,15 @@ function main {
   local building_kernel_version
 
   if [[ -z $v_bisect ]]; then
-    building_kernel_version=${v_kernel_version:-"$(find_latest_kernel_version "$running_kernel_version")"}
+    # Using this structure for clarity.
+    #
+    if [[ -z $v_kernel_version ]]; then
+      building_kernel_version=$(find_latest_kernel_version "$running_kernel_version")
+    elif [[ $v_kernel_version =~ ^[[:digit:]]+\.[[:digit:]]+$ ]]; then
+      building_kernel_version=$(find_latest_kernel_version "$v_kernel_version")
+    else
+      building_kernel_version=$v_kernel_version
+    fi
 
     check_if_version_already_packaged "$building_kernel_version"
 
