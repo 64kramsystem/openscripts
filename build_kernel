@@ -314,6 +314,8 @@ function find_latest_ppa_config_module_link {
     if [[ -n $amd64_modules_package_link ]]; then
       echo -n "$amd64_modules_package_link"
       return
+    else
+      >&2 echo "Module package not found for version v$candidate_version! Searching the previous version..."
     fi
   done
 
