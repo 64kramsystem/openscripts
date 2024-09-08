@@ -286,12 +286,10 @@ function find_latest_ppa_config_module_link {
   local target_version
   target_version=$(short_kernel_version "$1" no_rc)
 
-  local builds_url=${c_mainline_ppa_url}v$target_version
-
   declare -x target_version_regex=${target_version//./\\.}
 
   local mainline_ppa_page_content
-  mainline_ppa_page_content=$(wget --quiet "$builds_url" --output-document -)
+  mainline_ppa_page_content=$(wget --quiet "$c_mainline_ppa_url" --output-document -)
 
   # Examples:
   #
