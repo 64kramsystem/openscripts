@@ -388,7 +388,7 @@ function download_and_extract_config_file_from_modules_package {
   local local_package_name=
   local_package_name=$(dirname "$(mktemp --dry-run)")/${amd64_modules_package_link##*/}
 
-  wget "$amd64_modules_package_link" --output-document "$local_package_name"
+  curl -L "$amd64_modules_package_link" --output "$local_package_name"
 
   # Examples:
   #
