@@ -459,6 +459,11 @@ function same_major_minor_version {
 function print_sorted_commits_diff {
   local upstream=$1 head=$2
 
+  # Strip the .0 patch version from the GA releases if present, since it's not present it the tags.
+  #
+  upstream=$(short_kernel_version "$upstream" with_rc)
+  head=$(short_kernel_version "$head" with_rc)
+
   git cherry -v "v$upstream" "v$head" | sort -k3
 }
 
