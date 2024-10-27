@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_default_appended_ext=.mkv
+c_default_preset=slower
+# Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
+declare -A c_procs_mapping=(
+  [32]=2
+  [4]=1
+)
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-p|--preset <preset>] [-x|--append-extension <.ext>] <input> {<input>, ...}
+
+Encodes video files to h265 (slower+optimizations), in parallel; copies the audio. The number of parallel procs is based on an internal table.
+
+Video filters:
+
+- deinterlace (performed via yadif)
+- convert to square pixels (DAR ratio, e.g. '4/3')
+- resize (new height in pixels)
+
+The output container is always Matroska.
+
+If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
+
+In batch mode, output files are not printed, and the alarm program is not invoked.
+
+The default x265 preset is '$c_default_preset'.
+
+By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exists before encoding any file.
+"
+
+v_input_files=()
+v_output_files=()
+v_appended_ext=$c_default_appended_ext
+v_parallel_procs=         # numeric
+v_batch_mode=             # boolean; false=blank, true=anything else
+v_deinterlace=            # boolean; false=blank, true=anything else
+v_dar_ratio=              # string
+v_resize=                 # numeric; vertical size
+v_preset=$c_default_preset
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hbds:r:p:x: --long help,batch,deinterlace,square:,resize:,preset:,append-extension: --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -b|--batch)
+        v_batch_mode=1
+        shift ;;
+      -v|--deinterlace)
+        v_deinterlace=1
+        shift ;;
+      -s|--square)
+        v_dar_ratio=$2
+        shift 2 ;;
+      -r|--resize)
+        v_resize=$2
+        shift 2 ;;
+      -p|--preset)
+        v_preset=$2
+        shift 2 ;;
+      -x|--append-extension)
+        v_appended_ext=$2
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -lt 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  if [[ -n $v_dar_ratio && ! $v_dar_ratio =~ ^[[:digit:]]{1,2}/[[:digit:]]{1,2}$ ]]; then
+    >&2 echo "Unexpected DAR ratio."
+    echo "$c_help"
+    exit 1
+  fi
+
+  if [[ -n $v_dar_ratio && $v_resize ]]; then
+    # There's nothing preventing this, but want to avoid accidents, as typically only one of the two
+    # needs to be performed.
+    #
+    >&2 echo "Changing ratio and resizing can't be performed together"
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_input_files=("$@")
+
+  for file in "${v_input_files[@]}"; do
+    v_output_files+=("$file$v_appended_ext")
+  done
+
+  local processors_count
+  processors_count=$(nproc)
+  if [[ -v c_procs_mapping[$processors_count] ]]; then
+    v_parallel_procs=${c_procs_mapping[$processors_count]}
+  else
+    >&2 echo "Procs count mapping not found for $processors_count processors."
+    exit 1
+  fi
+}
+
+function perform_checks {
+  for file in "${v_input_files[@]}"; do
+    if [[ $file == *$'\n'* || $file == *\"* ]]; then
+      >&2 echo "File '$file' includes a newline/double quote!"
+      exit 1
+    fi
+  done
+
+  for file in "${v_output_files[@]}"; do
+    if [[ -f $file ]]; then
+      >&2 echo "File '$file' exists!"
+      exit 1
+    fi
+  done
+}
+
+function encode_files {
+  local video_filters=()
+
+  if [[ -n $v_deinterlace ]]; then
+    video_filters+=("yadif=mode=0")
+  fi
+
+  if [[ -n $v_dar_ratio ]]; then
+    video_filters+=("scale='min(iw,ih*$dar_wh)':'min(ih,iw*$dar_hw)'")
+  fi
+
+  if [[ -n $v_resize ]]; then
+    video_filters+=("scale=-1:$v_resize")
+  fi
+
+  local video_filters_par=""
+  if [[ ${#video_filters[@]} -gt 0 ]]; then
+    video_filters_par=$(IFS=,; echo -n "-vf \"${video_filters[*]}\"")
+  fi
+
+  # Using xargs doesn't make any concrete difference (also in terms of progress display).
+  #
+  # Specify the output container format, as the appended extension may not necessarily be valid.
+  #
+  echo "$(IFS=$'\n'; echo "${v_input_files[*]}")" \
+    | parallel --max-procs "$v_parallel_procs" --line-buffer \
+      "  ffmpeg \
+        -i {} \
+        -c:a copy \
+        $video_filters_par \
+        -c:v libx265 -crf 25 -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
+        -f matroska {}$v_appended_ext
+      "
+}
+
+function list_files {
+  ls -lh "${v_input_files[@]}" "${v_output_files[@]}"
+}
+
+function main {
+  perform_checks
+  encode_files
+  if [[ -z $v_batch_mode ]]; then
+    list_files
+    if [[ -n $SCRIPTING_ALARM_PROGRAM ]]; then
+      "$SCRIPTING_ALARM_PROGRAM" || true
+    fi
+  fi
+}
+
+decode_cmdline_args "$@"
+main

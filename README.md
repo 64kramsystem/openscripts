@@ -17,6 +17,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `convert_video_to_animated_gif`: convert a video to animated gid (via FFmpeg)
   - `control_music_player`: performs actions on a music player running in the background (supports Clementine, MPV, GMusicBrowser...)
   - `encode_to_m4a`: encodes and normalizes input files to m4a, using ffmpeg/libsdk_aac
+  - `encode_to_h265`: encodes to h265 format, with conveniences, using ffmpeg/libx265
   - `fill_dhl_packet_slip`: fills a DHL packet slip, and opens an OpenDocument page with it
   - `fill_labels`: prepares an OpenDocument page with addresses, to be printed on a standard A4 page with 96x50.8mm labels
   - `mk_invoice`: prepares a generic (software engineering) invoice in Office Open XML format, using a template, and the data provided in the configuration file
