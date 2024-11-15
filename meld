@@ -1,10 +1,16 @@
 #!/bin/bash
 
+if [[ ${WSL_DISTRO_NAME:-} != "" ]]; then
+  c_meld_binary="/mnt/c/Program Files/Meld//Meld.exe"
+else
+  c_meld_binary=/usr/bin/meld
+fi
+
 # If meld is opened without params, it opens with the user dialog; since opening two blank panels is
 # a common use case, this wrapper starts this way by default.
 
 if [[ $# -eq 0 ]]; then
-  /usr/bin/meld /dev/null /dev/null
+  "$c_meld_binary" /dev/null /dev/null
 else
-  /usr/bin/meld "$@"
+  "$c_meld_binary" "$@"
 fi
