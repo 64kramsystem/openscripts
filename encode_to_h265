@@ -8,6 +8,7 @@ shopt -s inherit_errexit
 
 c_default_appended_ext=.mkv
 c_default_preset=slower
+c_crf=25
 # Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
 declare -A c_procs_mapping=(
   [32]=2
@@ -29,7 +30,7 @@ If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 
 In batch mode, output files are not printed, and the alarm program is not invoked.
 
-The default x265 preset is '$c_default_preset'.
+The default x265 preset is '$c_default_preset'; CRF is always set to $c_crf.
 
 By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exists before encoding any file.
 "
@@ -161,7 +162,7 @@ function encode_files {
         -i {} \
         -c:a copy \
         $video_filters_par \
-        -c:v libx265 -crf 25 -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
+        -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
         -f matroska {}$v_appended_ext
       "
 }
