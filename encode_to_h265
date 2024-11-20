@@ -14,7 +14,7 @@ declare -A c_procs_mapping=(
   [32]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-p|--preset <preset>] [-x|--append-extension <.ext>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-p|--preset <preset>] [-x|--append-extension <.ext>] [-o|--output-dir <path>] <input> {<input>, ...}
 
 Encodes video files to h265 (slower+optimizations), in parallel; copies the audio. The number of parallel procs is based on an internal table.
 
@@ -33,6 +33,8 @@ In batch mode, output files are not printed, and the alarm program is not invoke
 The default x265 preset is '$c_default_preset'; CRF is always set to $c_crf.
 
 By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exits before encoding any file.
+
+The appended extension can be set to blank (typically, when using '--output-dir').
 "
 
 v_input_files=()
@@ -44,10 +46,11 @@ v_deinterlace=            # boolean; false=blank, true=anything else
 v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
 v_preset=$c_default_preset
+v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:p:x: --long help,batch,deinterlace,square:,resize:,preset:,append-extension: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:p:x:o: --long help,batch,deinterlace,square:,resize:,preset:,append-extension:,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -73,6 +76,9 @@ function decode_cmdline_args {
         shift 2 ;;
       -x|--append-extension)
         v_appended_ext=$2
+        shift 2 ;;
+      -o|--output-dir)
+        v_output_dir=$2
         shift 2 ;;
       --)
         shift
@@ -100,9 +106,12 @@ function decode_cmdline_args {
     exit 1
   fi
 
+  v_output_dir=${v_output_dir%/}
+
   v_input_files=("$@")
 
   for file in "${v_input_files[@]}"; do
+    [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
     v_output_files+=("$file$v_appended_ext")
   done
 
@@ -117,6 +126,11 @@ function decode_cmdline_args {
 }
 
 function perform_checks {
+  if [[ -n $v_output_dir && ! -d $v_output_dir ]]; then
+    >&2 echo "The specified output directory doesn't exist!"
+    exit 1
+  fi
+
   for file in "${v_input_files[@]}"; do
     if [[ $file == *$'\n'* || $file == *\"* ]]; then
       >&2 echo "File '$file' includes a newline/double quote!"
@@ -153,6 +167,14 @@ function encode_files {
     video_filters_par=$(IFS=,; echo -n "-vf \"${video_filters[*]}\"")
   fi
 
+  # Can be merged, but it gets a bit confusing.
+  #
+  if [[ -n $v_output_dir ]]; then
+    local output_template="$v_output_dir/{/}"
+  else
+    local output_template="{}"
+  fi
+
   # Using xargs doesn't make any concrete difference (also in terms of progress display).
   #
   # Specify the output container format, as the appended extension may not necessarily be valid.
@@ -164,7 +186,7 @@ function encode_files {
         -c:a copy \
         $video_filters_par \
         -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
-        -f matroska {}$v_appended_ext
+        -f matroska $output_template$v_appended_ext
       "
 }
 
