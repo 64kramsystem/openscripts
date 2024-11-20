@@ -21,7 +21,7 @@ Encodes video files to h265 (slower+optimizations), in parallel; copies the audi
 Video filters:
 
 - deinterlace (performed via yadif)
-- convert to square pixels (DAR ratio, e.g. '4/3')
+- convert to square pixels (DAR ratio, e.g. '4/3'); sets SAR to 1
 - resize (new height in pixels)
 
 The output container is always Matroska.
@@ -155,7 +155,7 @@ function encode_files {
 
   if [[ -n $v_dar_ratio ]]; then
     local dar_wh=$v_dar_ratio dar_hw=${v_dar_ratio#*/}/${v_dar_ratio%/*}
-    video_filters+=("scale='min(iw,ih*$dar_wh)':'round(min(ih,iw*$dar_hw)/2)*2'")
+    video_filters+=("scale='min(iw,ih*$dar_wh)':'round(min(ih,iw*$dar_hw)/2)*2',setsar=1")
   fi
 
   if [[ -n $v_resize ]]; then
