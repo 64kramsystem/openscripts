@@ -141,7 +141,7 @@ function encode_files {
 
   if [[ -n $v_dar_ratio ]]; then
     local dar_wh=$v_dar_ratio dar_hw=${v_dar_ratio#*/}/${v_dar_ratio%/*}
-    video_filters+=("scale='min(iw,ih*$dar_wh)':'floor(min(ih,iw*$dar_hw)/2)*2'")
+    video_filters+=("scale='min(iw,ih*$dar_wh)':'round(min(ih,iw*$dar_hw)/2)*2'")
   fi
 
   if [[ -n $v_resize ]]; then
