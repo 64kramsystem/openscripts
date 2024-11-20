@@ -32,7 +32,7 @@ In batch mode, output files are not printed, and the alarm program is not invoke
 
 The default x265 preset is '$c_default_preset'; CRF is always set to $c_crf.
 
-By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exists before encoding any file.
+By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exits before encoding any file.
 "
 
 v_input_files=()
