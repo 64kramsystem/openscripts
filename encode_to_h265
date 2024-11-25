@@ -199,9 +199,7 @@ function main {
   encode_files
   if [[ -z $v_batch_mode ]]; then
     list_files
-    if [[ -n $SCRIPTING_ALARM_PROGRAM ]]; then
-      "$SCRIPTING_ALARM_PROGRAM" || true
-    fi
+    "${SCRIPTING_ALARM_PROGRAM:-true}"
   fi
 }
 
