@@ -6,13 +6,16 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
+c_remote=origin
 c_help="Usage: $(basename "$0") [-h|--help] [branch]
 
 Deletes the specified branch locally and remotely.
 
 If no branch is specified, the current branch is deleted, unless it's the development branch (in this case, an error is raised).
 
-If the branch doesn't exist remotely, the script doesn't fail."
+If the branch doesn't exist remotely, or the user doesn't have the necessary permissions, the script doesn't fail.
+
+For simplicity, the remote is assumed to be '$c_remote'".
 
 v_delete_branch=
 
@@ -53,10 +56,7 @@ function set_delete_branch_if_empty {
 }
 
 function find_development_branch {
-  local remote
-
-  remote=$(git remote show)
-  git remote show "$remote" | awk '/^  HEAD branch:/ {print $NF}'
+  git remote show "$c_remote" | awk '/^  HEAD branch:/ {print $NF}'
 }
 
 function check_branch {
@@ -81,7 +81,7 @@ function delete_local_branch {
 # Doesn't fail if branch doesn't exist on remote.
 #
 function delete_remote_branch {
-  git push origin :"$v_delete_branch" || true
+  git push "$c_remote" :"$v_delete_branch" || true
 }
 
 function main {
