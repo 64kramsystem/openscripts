@@ -187,6 +187,8 @@ function normalize_kernel_version {
 # $1: version, or `-` (read from stdin)
 # $2: `with_rc` or `no_rc`
 #
+# For convenience, a leading `v` is supported.
+#
 # Multiple versions can be passed, one per line.
 #
 function short_kernel_version {
@@ -196,10 +198,10 @@ function short_kernel_version {
 
   case $2 in
   with_rc)
-    echo -n "$raw_format" | perl -pe 's/^\d+\.\d+\K\.0//'
+    echo -n "$raw_format" | perl -pe 's/^v?\d+\.\d+\K\.0//'
     ;;
   no_rc)
-    echo -n "$raw_format" | perl -ne 'print /^(\d+\.\d+)/'
+    echo -n "$raw_format" | perl -ne 'print /^(v?\d+\.\d+)/'
     ;;
   *)
     >&2 echo "Invalid short version mode: $2"
