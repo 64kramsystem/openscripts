@@ -269,20 +269,38 @@ function find_branch_kernel_version {
     | perl -pe 's/^v//'
 }
 
+function find_most_recent_ppa_config_for_version {
+  local building_kernel_version=$1
+
+  # Package operations condensed for readability purposes.
+
+  local amd64_modules_package_link
+  amd64_modules_package_link=$(find_amd64_modules_package_link "$building_kernel_version")
+
+  if [[ -z $amd64_modules_package_link ]]; then
+    # If the matching version is not found on the PPA, search the latest config for the given short version.
+    # We could search from the precise version backwards, but it's not worth.
+
+    local amd64_modules_package_link
+    amd64_modules_package_link=$(find_latest_ppa_config_module_link "$building_kernel_version")
+  fi
+
+  download_and_extract_config_file_from_modules_package "$amd64_modules_package_link"
+}
+
 # See remove_destination_old_version_files() for the filenames format.
 #
 # Returns the config file full path.
 #
-function find_config_file_for_version {
+function find_local_config_file_for_version {
   local kernel_version=$1
 
   find "$v_packages_destination" -name "config-$kernel_version" -printf "%p"
 }
 
-# Find the link of the module package corresponding to the latest PPA config available for the (short)
-# version of the given kernel.
+# Print the candidate versions, one per line, with .0 patch version.
 #
-function find_latest_ppa_config_module_link {
+function find_module_candidate_versions {
   local target_version
   target_version=$(short_kernel_version "$1" no_rc)
 
@@ -299,15 +317,20 @@ function find_latest_ppa_config_module_link {
   #
   # Append a zero to GA releases, otherwise, `sort -V` places it before the RCs.
   #
-  local candidate_versions
-  mapfile -t candidate_versions < <(
-    echo "$mainline_ppa_page_content" \
-    | perl -lne 'print $1 if />v($ENV{target_version_regex}(\.\d+|-rc\d+)?)\/</' \
-    | perl -pe 's/^\d+\.\d+\K$/.0/' \
-    | sort --version-sort --reverse
-  )
+  echo "$mainline_ppa_page_content" \
+  | perl -lne 'print $1 if />v($ENV{target_version_regex}(\.\d+|-rc\d+)?)\/</' \
+  | perl -pe 's/^\d+\.\d+\K$/.0/' \
+  | sort --version-sort --reverse
+}
 
-  for candidate_version in "${candidate_versions[@]}"; do
+# Find the link of the module package corresponding to the latest PPA config available for the (short)
+# version of the given kernel.
+#
+function find_latest_ppa_config_module_link {
+  local candidate_versions
+  candidate_versions=$(find_module_candidate_versions "$1")
+
+  for candidate_version in $candidate_versions; do
     local amd64_modules_package_link
     amd64_modules_package_link=$(find_amd64_modules_package_link "$candidate_version")
 
@@ -807,25 +830,12 @@ function main {
   fi
 
   local source_config_file
-  source_config_file=$(find_config_file_for_version "$building_kernel_version")
+  source_config_file=$(find_local_config_file_for_version "$building_kernel_version")
 
   # If the matching version is not found locally, search it on the mainline PPA.
   #
   if [[ -z $source_config_file ]]; then
-    # Package operations condensed for readability purposes.
-
-    local amd64_modules_package_link
-    amd64_modules_package_link=$(find_amd64_modules_package_link "$building_kernel_version")
-
-    if [[ -z $amd64_modules_package_link ]]; then
-      # If the matching version is not found on the PPA, search the latest config for the given short version.
-      # We could search from the precise version backwards, but it's not worth.
-
-      local amd64_modules_package_link
-      amd64_modules_package_link=$(find_latest_ppa_config_module_link "$building_kernel_version")
-    fi
-
-    source_config_file=$(download_and_extract_config_file_from_modules_package "$amd64_modules_package_link")
+    source_config_file=$(find_most_recent_ppa_config_for_version "$building_kernel_version")
   fi
 
   import_config_file "$source_config_file"
