@@ -429,10 +429,7 @@ function download_and_extract_config_file_from_modules_package {
 #
 function create_if_required_and_switch_branch {
   local building_kernel_version=$1
-
-  if [[ $building_kernel_version =~ \.0$ ]]; then
-    building_kernel_version=${building_kernel_version%.0}
-  fi
+  building_kernel_version=$(short_kernel_version "$building_kernel_version" with_rc)
 
   local branch_working_copy=bv"$building_kernel_version"
 
