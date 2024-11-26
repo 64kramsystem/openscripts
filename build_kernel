@@ -269,25 +269,6 @@ function find_branch_kernel_version {
     | perl -pe 's/^v//'
 }
 
-function find_most_recent_ppa_config_for_version {
-  local building_kernel_version=$1
-
-  # Package operations condensed for readability purposes.
-
-  local amd64_modules_package_link
-  amd64_modules_package_link=$(find_amd64_modules_package_link "$building_kernel_version")
-
-  if [[ -z $amd64_modules_package_link ]]; then
-    # If the matching version is not found on the PPA, search the latest config for the given short version.
-    # We could search from the precise version backwards, but it's not worth.
-
-    local amd64_modules_package_link
-    amd64_modules_package_link=$(find_latest_ppa_config_module_link "$building_kernel_version")
-  fi
-
-  download_and_extract_config_file_from_modules_package "$amd64_modules_package_link"
-}
-
 # See remove_destination_old_version_files() for the filenames format.
 #
 # Returns the config file full path.
@@ -296,6 +277,50 @@ function find_local_config_file_for_version {
   local kernel_version=$1
 
   find "$v_packages_destination" -name "config-$kernel_version" -printf "%p"
+}
+
+# Search the most recent patch version config for the given kernel, both in the PPA and the local
+# directory.
+#
+function find_most_recent_config_version_available {
+  local building_kernel_version=$1
+
+  local candidate_versions
+  candidate_versions=$(find_module_candidate_versions "$1")
+
+  # When operating, the PPA includes all the version as directories, including failed builds.
+  #
+  # It doesn't always operate though, and based on the logic below, if a config file is present,
+  # but the version is not included in the PPA, is ignored.
+  #
+  # Since the config files come from the PPA anyway, this doesn't matter.
+  #
+  for candidate_version in $candidate_versions; do
+    # WATCH OUT! Versioning on the PPA/packages is slightly different, so try to keep versions
+    # as normalized as possible.
+    #
+    local source_config_file short_candidate_version
+    short_candidate_version=$(short_kernel_version "$candidate_version" with_rc)
+    source_config_file=$(find_local_config_file_for_version "$short_candidate_version")
+
+    if [[ -n $source_config_file ]]; then
+      echo "$source_config_file"
+      return
+    fi
+
+    local amd64_modules_package_link
+    amd64_modules_package_link=$(find_amd64_modules_package_link "$candidate_version")
+
+    if [[ -n $amd64_modules_package_link ]]; then
+      download_and_extract_config_file_from_modules_package "$amd64_modules_package_link"
+      return
+    else
+      >&2 echo "Module package not found for version v$candidate_version! Searching the previous version..."
+    fi
+  done
+
+  >&2 echo "No config (module package) found for version $target_version"
+  exit 1
 }
 
 # Print the candidate versions, one per line, with .0 patch version.
@@ -321,68 +346,6 @@ function find_module_candidate_versions {
   | perl -lne 'print $1 if />v($ENV{target_version_regex}(\.\d+|-rc\d+)?)\/</' \
   | perl -pe 's/^\d+\.\d+\K$/.0/' \
   | sort --version-sort --reverse
-}
-
-# Find the link of the module package corresponding to the latest PPA config available for the (short)
-# version of the given kernel.
-#
-function find_latest_ppa_config_module_link {
-  local candidate_versions
-  candidate_versions=$(find_module_candidate_versions "$1")
-
-  for candidate_version in $candidate_versions; do
-    local amd64_modules_package_link
-    amd64_modules_package_link=$(find_amd64_modules_package_link "$candidate_version")
-
-    if [[ -n $amd64_modules_package_link ]]; then
-      echo -n "$amd64_modules_package_link"
-      return
-    else
-      >&2 echo "Module package not found for version v$candidate_version! Searching the previous version..."
-    fi
-  done
-
-  >&2 echo "No config (module package) found for version $target_version"
-  exit 1
-}
-
-function check_if_version_already_packaged {
-  local building_kernel_version=$1
-
-  # Format: `M.m.p` or or `M.m-rcN`.
-  #
-  local latest_packaged_version
-  latest_packaged_version=$(find_latest_packaged_version "$building_kernel_version")
-
-  if [[ $building_kernel_version == "$latest_packaged_version" ]]; then
-    echo "No new version! Latest packaged/available: $building_kernel_version"
-    exit 0
-  fi
-}
-
-# Assumes that there are no multiple builds for the same version.
-#
-# Return format: normalized version.
-#
-function find_latest_packaged_version {
-  local kernel_version=$1
-
-  if [[ $kernel_version =~ ^([0-9]+\.[0-9]+)($|-rc) ]]; then
-    kernel_version=${BASH_REMATCH[1]}.0
-  fi
-
-  # Use the image package for reference.
-  #
-  # See remove_destination_old_version_files() for the filenames format.
-  #
-  # We can't use short_kernel_version() because this is not the standard format.
-  #
-  find "$v_packages_destination" -printf "%P\n" |
-    perl -ne 'print $1 if /^linux-image-('"$kernel_version"'(-rc\d+)?)/' |
-    sort -V |
-    tail -n 1 |
-    perl -pe 's/\.0(?=-rc)//' ||
-    true
 }
 
 function find_amd64_modules_package_link {
@@ -448,6 +411,45 @@ function download_and_extract_config_file_from_modules_package {
   mv "$v_packages_destination/$raw_config_file" "$v_packages_destination/$config_file"
 
   echo -n "$v_packages_destination/$config_file"
+}
+
+function check_if_version_already_packaged {
+  local building_kernel_version=$1
+
+  # Format: `M.m.p` or or `M.m-rcN`.
+  #
+  local latest_packaged_version
+  latest_packaged_version=$(find_latest_packaged_version "$building_kernel_version")
+
+  if [[ $building_kernel_version == "$latest_packaged_version" ]]; then
+    echo "No new version! Latest packaged/available: $building_kernel_version"
+    exit 0
+  fi
+}
+
+# Assumes that there are no multiple builds for the same version.
+#
+# Return format: normalized version.
+#
+function find_latest_packaged_version {
+  local kernel_version=$1
+
+  if [[ $kernel_version =~ ^([0-9]+\.[0-9]+)($|-rc) ]]; then
+    kernel_version=${BASH_REMATCH[1]}.0
+  fi
+
+  # Use the image package for reference.
+  #
+  # See remove_destination_old_version_files() for the filenames format.
+  #
+  # We can't use short_kernel_version() because this is not the standard format.
+  #
+  find "$v_packages_destination" -printf "%P\n" |
+    perl -ne 'print $1 if /^linux-image-('"$kernel_version"'(-rc\d+)?)/' |
+    sort -V |
+    tail -n 1 |
+    perl -pe 's/\.0(?=-rc)//' ||
+    true
 }
 
 # `M.m.0` versions are stored without the patch version.
@@ -835,7 +837,7 @@ function main {
   # If the matching version is not found locally, search it on the mainline PPA.
   #
   if [[ -z $source_config_file ]]; then
-    source_config_file=$(find_most_recent_ppa_config_for_version "$building_kernel_version")
+    source_config_file=$(find_most_recent_config_version_available "$building_kernel_version")
   fi
 
   import_config_file "$source_config_file"
