@@ -460,8 +460,8 @@ function print_sorted_commits_diff {
 
   # Strip the .0 patch version from the GA releases if present, since it's not present it the tags.
   #
-  upstream=$(echo -n "$upstream" | perl -pe 's/^v\d+\.\d+\K\.0//')
-  head=$(echo -n "$head" | perl -pe 's/^v\d+\.\d+\K\.0//')
+  upstream=$(short_kernel_version "$upstream" with_rc)
+  head=$(short_kernel_version "$head" with_rc)
 
   git cherry -v "v$upstream" "v$head" | sort -k3
 }
