@@ -352,6 +352,8 @@ function find_latest_packaged_version {
   #
   # See remove_destination_old_version_files() for the filenames format.
   #
+  # We can't use short_kernel_version() because this is not the standard format.
+  #
   find "$v_packages_destination" -printf "%P\n" |
     perl -ne 'print $1 if /^linux-image-('"$kernel_version"'(-rc\d+)?)/' |
     sort -V |
