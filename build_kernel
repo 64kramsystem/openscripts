@@ -179,20 +179,27 @@ function normalize_kernel_version {
   fi
 }
 
-# Shorten the kernel version:
+# Shorten the kernel version(s):
 #
 # - `with_rc`: remove the patch `0` version (present in GA versions), but keep the RC (if present)
 # - `no_rc`  : remove both the patch `0` and RC versions
 #
+# $1: version, or `-` (read from stdin)
 # $2: `with_rc` or `no_rc`
 #
+# Multiple versions can be passed, one per line.
+#
 function short_kernel_version {
+  local raw_format=$1
+
+  [[ $1 == - ]] && raw_format=$(cat)
+
   case $2 in
   with_rc)
-    echo "$1" | perl -pe 's/^\d+\.\d+\K\.0//'
+    echo -n "$raw_format" | perl -pe 's/^\d+\.\d+\K\.0//'
     ;;
   no_rc)
-    echo "$1" | perl -ne 'print /^(\d+\.\d+)/'
+    echo -n "$raw_format" | perl -ne 'print /^(\d+\.\d+)/'
     ;;
   *)
     >&2 echo "Invalid short version mode: $2"
