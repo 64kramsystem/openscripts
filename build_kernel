@@ -203,9 +203,7 @@ function short_kernel_version {
 
 function register_exit_hook {
   function _exit_hook {
-    if [[ -n $SCRIPTING_ALARM_PROGRAM ]]; then
-      "$SCRIPTING_ALARM_PROGRAM" || true
-    fi
+    "${SCRIPTING_ALARM_PROGRAM:-true}"
 
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
