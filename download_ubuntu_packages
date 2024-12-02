@@ -122,7 +122,11 @@ class DownloadUbuntuPackages
     retries = 0
 
     begin
-      URI.open(package_download_address, ssl_verify_mode: ssl_verify_mode).read
+      # Search errors yield an error page, but with HTTP error status 🤦
+      #
+      URI
+        .open(package_download_address, ssl_verify_mode: ssl_verify_mode).read
+        .tap { |content| raise "Package search yielded error page" if content =~ %r{<title>Ubuntu.+Error</title>} }
     rescue OpenURI::HTTPError
       raise if retries >= DOWNLOAD_PAGE_MAX_RETRIES
       retries += 1
