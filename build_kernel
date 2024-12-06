@@ -302,7 +302,7 @@ function find_most_recent_config_version_available {
     source_config_file=$(find_local_config_file_for_version "$short_candidate_version")
 
     if [[ -n $source_config_file ]]; then
-      >&2 echo "Found local older config version $candidate_version."
+      >&2 echo "Found local config version $candidate_version."
       echo "$source_config_file"
       return
     fi
@@ -311,7 +311,7 @@ function find_most_recent_config_version_available {
     amd64_modules_package_link=$(find_amd64_modules_package_link "$candidate_version")
 
     if [[ -n $amd64_modules_package_link ]]; then
-      >&2 echo "Found packaged older config version ($candidate_version) in the PPA; downloading and extracting..."
+      >&2 echo "Found packaged config version ($candidate_version) in the PPA; downloading and extracting..."
       download_and_extract_config_file_from_modules_package "$amd64_modules_package_link"
       return
     else
