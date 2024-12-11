@@ -63,6 +63,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `mysql_collect_stats`: collects MySQL server statistics over a session (global status values), in a convenient structure for processing
   - `mysql_plot_diagrams`: plots diagrams (via GNU Plot), with the stats collected via `mysql_collect_stats`
   - `mystart`/`mystop`: start/stop MySQL, automatically switching between version, and preparing the data
+  - `nv-switch`: switch between `nvidia-persistenced` and `vfio` card drivers; not currently maintained
   - `ownsync`: command line sync script for Owncloud/Nextcloud, with conflicts handling
   - `patch_acpi_s3_support`: patch and hook the DSDT tables with S3 support (see [article](https://saveriomiroddi.github.io/Enabling-the-S3-sleep-suspend-on-the-Lenovo-Yoga-7-AMD-Gen-7-and-possibly-others/))
   - `purge_trash`: purge the trash files trashed before a certain threashold

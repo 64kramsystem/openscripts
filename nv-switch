@@ -1,0 +1,224 @@
+#!/bin/bash
+# shellcheck disable=SC2016 # single quote expansion
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_gpu_bus_id="0000:2b:00.0"
+declare -A c_gpu_device_drivers=(
+  [$c_gpu_bus_id]=nvidia
+  [${c_gpu_bus_id%?}1]=snd_hda_intel
+  [${c_gpu_bus_id%?}2]=xhci_hcd
+  [${c_gpu_bus_id%?}3]=nvidia-gpu
+)
+# The pstate only is not sufficient, as in some cases, the temperature doesn't reach acceptable values
+# (eg. stays at 20W).
+#
+c_target_pstate=P8
+c_target_power_draw=15 # Around 11 is optimal, but avoid trying hard (which sometimes just doesn't happen)
+c_persistenced_restart_interval=25 # typically takes between 15 and 20"; 25 are enough to draw the conclusion
+c_attempts=4 # Includes the first; a couple are generally required
+c_polling_interval=5 # Seconds between pollings
+c_help="Usage: $(basename "$0") [-h|--help] [-s|--sleep SECS] (nvidia|vfio|list)
+
+Sleep waits at the beginning and end; required when running as unit."
+
+v_mode= # on/off/list
+v_sleep=
+v_debug= # boolean; blank=false, anything else=true
+
+t_pstate=
+t_power_draw= # int
+
+################################################################################
+# HELPERS
+################################################################################
+
+function switch_driver {
+  local bus_id=$1
+  local new_driver=$2
+
+  # Without override, an odd error can be raised ("No such device").
+  #
+  echo "$bus_id" > /sys/bus/pci/devices/"$bus_id"/driver/unbind
+  echo "$new_driver" > /sys/bus/pci/devices/"$bus_id"/driver_override
+  echo "$bus_id" > /sys/bus/pci/drivers/"$new_driver"/bind
+}
+
+function set_dev_permissions {
+  local permissions=$1
+
+  chmod "$permissions" /dev/nvidia1
+}
+
+function set_card_data {
+  local raw_data
+  raw_data=$(nvidia-smi -i 1 --format=csv,noheader --query-gpu=pstate,power.draw)
+
+  t_pstate=${raw_data%,*}
+  t_power_draw=$(perl -ne "print /(\d+)\.\d+ W/" <<< "$raw_data")
+
+  if [[ -n $v_debug ]]; then
+    >&2 echo "$raw_data/$t_pstate/$t_power_draw"
+  fi
+}
+
+function target_reached {
+  [[ $t_pstate == "$c_target_pstate" && $t_power_draw -le "$c_target_power_draw" ]]
+}
+
+# The processlist is very important! See permissions not in switch_nvidia().
+#
+function list {
+  local pattern=${c_gpu_bus_id%?}
+  pattern=${pattern:5}
+
+  lspci -v | grep -P '^\w\w:\w\w|in use' | perl -ne "if (/^$pattern/) { print; print scalar(readline) }"
+
+  echo
+
+  lsof /dev/nvidia? 2> /dev/null | tail -n+2 | awk '{print $NF,$0}' | sort | cut -f2- -d' '
+}
+
+################################################################################
+# SWITCHERS
+################################################################################
+
+function switch_nvidia {
+  for device in "${!c_gpu_device_drivers[@]}"; do
+    local driver=${c_gpu_device_drivers[$device]}
+
+    switch_driver "$device" "$driver"
+  done
+
+  local message
+
+  for ((attempt=0; attempt < c_attempts; attempt++)); do
+    echo "Restarting persistenced ($t_pstate/$t_power_draw)..."
+
+    # This is very important. `nvidia-smi` changes, on execution, /dev/nvidia1 permissions to 666; this
+    # allows programs to use the GPU, e.g. Visual Studio Code.
+    #
+    # Restricting permissions (eg. to 664) after each `nvidia-smi` invocation would be a reasonable solution,
+    # but unfortunately it drives the card crazy, making it not going to P8, in addition to causing `nvidia-smi`
+    # to return invalid values.
+    #
+    # Changing the permissions at the points below worked, possibly because nvidia-persistenced writes
+    # as `other` user.
+    #
+    # If the cause if nvidia-persistenced, this can potentially cause a race condition; in such case,
+    # the only solution is probably to wait bit before restarsting persistenced, although this increases
+    # the window of opportunity for other programs to interfere.
+    #
+    systemctl stop nvidia-persistenced
+    set_dev_permissions 666
+    systemctl start nvidia-persistenced
+
+    for ((SECONDS=0; SECONDS < c_persistenced_restart_interval; )); do
+      set_dev_permissions 666
+      set_card_data
+      set_dev_permissions 664
+
+      if target_reached; then
+        message="State/Power draw reached ($t_pstate/$t_power_draw)!"
+        echo "$message"
+        notify-send "$message"
+        return
+      fi
+
+      sleep "$c_polling_interval"
+    done
+  done
+
+  message="Couldn't reach target state after $c_attempts attempts ($t_pstate/$t_power_draw)."
+  >&2 echo "$message"
+  notify-send "$message"
+}
+
+# For a more sophisticated approach (using the same strategy), see https://raw.githubusercontent.com/andre-richter/vfio-pci-bind/master/vfio-pci-bind.sh.
+#
+function switch_vfio {
+  systemctl stop nvidia-persistenced
+
+  for device in "${!c_gpu_device_drivers[@]}"; do
+    switch_driver "$device" "vfio-pci"
+  done
+
+  # This has no access at this stage to the vfio card, so no need to set the permissions.
+
+  systemctl start nvidia-persistenced
+}
+
+################################################################################
+# MAIN STAGES
+################################################################################
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hos:d --long help,other-target,sleep:,debug --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -s|--sleep)
+        v_sleep=$2
+        shift 2 ;;
+      -d|--debug)
+        v_debug=1
+        shift ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  else
+    # Check is performed in main()
+    v_mode=$1
+  fi
+}
+
+function switch_to_root {
+  if [[ $(id -u) -ne 0 ]]; then
+    sudo "$0" "$@"
+    exit $?
+  fi
+}
+
+function main {
+  if [[ -n $v_sleep ]]; then
+    sleep "$v_sleep"
+  fi
+
+  case $v_mode in
+  nvidia)
+    switch_nvidia
+    ;;
+  vfio)
+    switch_vfio
+    ;;
+  list)
+    list
+    ;;
+  *)
+    >&2 echo 'The only valid params are `nvidia`, `vfio` and `list`.'
+    exit 1
+  esac
+
+  if [[ -n $v_sleep ]]; then
+    sleep "$v_sleep"
+  fi
+}
+
+decode_cmdline_args "$@"
+switch_to_root "$@"
+main
