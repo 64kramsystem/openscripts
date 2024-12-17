@@ -61,7 +61,9 @@ function find_usb_storage_devices {
 
     usb_storages_info=$(udevadm info --query=property --path="$device")
 
-    if echo "$usb_storages_info" | grep -q ^ID_BUS=usb; then
+    # Devices like the Kingston DataTraveler Max have an ATA bus.
+    #
+    if echo "$usb_storages_info" | grep -qP '^ID_BUS=(usb|ata)'; then
       device_name=$(echo "$usb_storages_info" | perl -ne 'print $1 if /^DEVNAME=(.*)/')
       v_devices+=("$device_name")
     fi
