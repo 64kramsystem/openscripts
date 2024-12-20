@@ -7,6 +7,7 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_binary_path=.WINETEMPLATE_BINARY_PATH
+c_wine_path=.WINETEMPLATE_WINE_PATH
 export WINEPREFIX=${WINEPREFIX:-$HOME/.wine}
 c_help="Usage: $(basename "$0") [-h|--help] [<branch>]
 
@@ -64,7 +65,9 @@ function run_branch {
   local binary_path
   binary_path=$(<"$c_binary_path")
 
-  wine "$binary_path"
+  local wine_path
+  wine_path=$(cat "$c_wine_path" 2> /dev/null || echo -n wine)
+  "$wine_path" "$binary_path"
 }
 
 function wait_for_wine_to_exit {
