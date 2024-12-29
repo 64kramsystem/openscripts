@@ -74,5 +74,6 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `winetemplate`: conveniently run Wine programs, stored in a Git repository with per-program branches
   - `winetmp`: conveniently run Wine applications in a temporary, sandboxed, environment
   - `xcalib_safe`: wrapper around xcalib, which detects error states, and warns the user (and exits with error code)
+  - `xi`: copies stdin or file to clipboard, WSL-compatible
 
 I keep adding new content/update old ones.
