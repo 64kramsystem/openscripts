@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_default_appended_ext=.mkv
+c_outfile_ext=mkv
 c_default_preset=slower
 c_crf=25
 # Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
@@ -14,9 +14,11 @@ declare -A c_procs_mapping=(
   [32]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-p|--preset <preset>] [-x|--append-extension <.ext>] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-f|--force] [-o|--output-dir <path>] <input> {<input>, ...}
 
-Encodes video files to h265 (slower+optimizations), in parallel; copies the audio. The number of parallel procs is based on an internal table.
+Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
+The default x265 preset is '$c_default_preset', with CRF=$c_crf.
+The file extension is replaced with '$c_outfile_ext'. If an output file exists already and --force is not specified, the script exits before encoding any file.
 
 Video filters:
 
@@ -24,33 +26,28 @@ Video filters:
 - convert to square pixels (DAR ratio, e.g. '4/3'); sets SAR to 1
 - resize (new height in pixels)
 
-The output container is always Matroska.
+The <start> and <end> options of '--cut' are timestamps in the '[[hh:]mm:]ss[.sss]' format.
 
 If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 
 In batch mode, output files are not printed, and the alarm program is not invoked.
-
-The default x265 preset is '$c_default_preset'; CRF is always set to $c_crf.
-
-By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exits before encoding any file.
-
-The appended extension can be set to blank (typically, when using '--output-dir').
 "
 
 v_input_files=()
 v_output_files=()
-v_appended_ext=$c_default_appended_ext
 v_parallel_procs=         # numeric
 v_batch_mode=             # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
 v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
+v_segment=                # string '<start>-<end>' (see help).
 v_preset=$c_default_preset
+v_overwrite=              # boolean; false=blank, true=anything else
 v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:p:x:o: --long help,batch,deinterlace,square:,resize:,preset:,append-extension:,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:c:p:fo: --long help,batch,deinterlace,square:,resize:,cut:,preset:,force,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -71,12 +68,15 @@ function decode_cmdline_args {
       -r|--resize)
         v_resize=$2
         shift 2 ;;
+      -c|--cut)
+        v_segment=$2
+        shift 2 ;;
       -p|--preset)
         v_preset=$2
         shift 2 ;;
-      -x|--append-extension)
-        v_appended_ext=$2
-        shift 2 ;;
+      -f|--force)
+        v_overwrite=1
+        shift ;;
       -o|--output-dir)
         v_output_dir=$2
         shift 2 ;;
@@ -106,13 +106,19 @@ function decode_cmdline_args {
     exit 1
   fi
 
+  if [[ -n $v_segment ]] && ! grep -qP '^(\d{1,2}:)?(\d{1,2}:)?\d{1,2}(\.\d+)?-(\d{1,2}:)?(\d{1,2}:)?\d{1,2}(\.\d+)?$' <<< "$v_segment"; then
+    >&2 echo "Invalid segment format."
+    echo "$c_help"
+    exit 1
+  fi
+
   v_output_dir=${v_output_dir%/}
 
   v_input_files=("$@")
 
   for file in "${v_input_files[@]}"; do
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
-    v_output_files+=("$file$v_appended_ext")
+    v_output_files+=("${file%.*}.$c_outfile_ext")
   done
 
   local processors_count
@@ -138,15 +144,29 @@ function perform_checks {
     fi
   done
 
-  for file in "${v_output_files[@]}"; do
-    if [[ -f $file ]]; then
-      >&2 echo "File '$file' exists!"
-      exit 1
-    fi
-  done
+  if [[ -z $v_overwrite ]]; then
+    for file in "${v_output_files[@]}"; do
+      if [[ -f $file ]]; then
+        >&2 echo "File '$file' exists!"
+        exit 1
+      fi
+    done
+  fi
 }
 
 function encode_files {
+  local global_options=()
+
+  if [[ -n $v_overwrite ]]; then
+    global_options+=("-y")
+  fi
+
+  local video_options=()
+
+  if [[ -n $v_segment ]]; then
+    video_options+=("-ss ${v_segment%-*} -to ${v_segment#*-}")
+  fi
+
   local video_filters=()
 
   if [[ -n $v_deinterlace ]]; then
@@ -167,27 +187,19 @@ function encode_files {
     video_filters_par=$(IFS=,; echo -n "-vf \"${video_filters[*]}\"")
   fi
 
-  # Can be merged, but it gets a bit confusing.
-  #
-  if [[ -n $v_output_dir ]]; then
-    local output_template="$v_output_dir/{/}"
-  else
-    local output_template="{}"
-  fi
+  local ffmpeg_command="\
+ffmpeg \
+  ${global_options[*]} \
+  -i {1} \
+  ${video_options[*]} \
+  -c:a copy \
+  $video_filters_par \
+  -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
+  {2}
+"
 
-  # Using xargs doesn't make any concrete difference (also in terms of progress display).
-  #
-  # Specify the output container format, as the appended extension may not necessarily be valid.
-  #
   echo "$(IFS=$'\n'; echo "${v_input_files[*]}")" \
-    | parallel --max-procs "$v_parallel_procs" --line-buffer \
-      "  ffmpeg \
-        -i {} \
-        -c:a copy \
-        $video_filters_par \
-        -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
-        -f matroska $output_template$v_appended_ext
-      "
+    | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_input_files[@]}" ::: "${v_output_files[@]}"
 }
 
 function list_files {
