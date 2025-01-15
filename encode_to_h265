@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_default_appended_ext=.mkv
+c_outfile_ext=mkv
 c_default_preset=slower
 c_crf=25
 # Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
@@ -14,20 +14,17 @@ declare -A c_procs_mapping=(
   [32]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-p|--preset <preset>] [-x|--append-extension <.ext>] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-p|--preset <preset>] [-o|--output-dir <path>] <input> {<input>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
-By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exits before encoding any file.
-The appended extension can be set to blank (typically, when using '--output-dir').
+The file extension is replaced with '$c_outfile_ext'. If an output file exists already, the script exits before encoding any file.
 
 Video filters:
 
 - deinterlace (performed via yadif)
 - convert to square pixels (DAR ratio, e.g. '4/3'); sets SAR to 1
 - resize (new height in pixels)
-
-The output container is always Matroska.
 
 If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 
@@ -36,7 +33,6 @@ In batch mode, output files are not printed, and the alarm program is not invoke
 
 v_input_files=()
 v_output_files=()
-v_appended_ext=$c_default_appended_ext
 v_parallel_procs=         # numeric
 v_batch_mode=             # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
@@ -47,7 +43,7 @@ v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:p:x:o: --long help,batch,deinterlace,square:,resize:,preset:,append-extension:,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:p:o: --long help,batch,deinterlace,square:,resize:,preset:,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -70,9 +66,6 @@ function decode_cmdline_args {
         shift 2 ;;
       -p|--preset)
         v_preset=$2
-        shift 2 ;;
-      -x|--append-extension)
-        v_appended_ext=$2
         shift 2 ;;
       -o|--output-dir)
         v_output_dir=$2
@@ -109,7 +102,7 @@ function decode_cmdline_args {
 
   for file in "${v_input_files[@]}"; do
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
-    v_output_files+=("$file$v_appended_ext")
+    v_output_files+=("${file%.*}.$c_outfile_ext")
   done
 
   local processors_count
@@ -164,15 +157,13 @@ function encode_files {
     video_filters_par=$(IFS=,; echo -n "-vf \"${video_filters[*]}\"")
   fi
 
-  # Specify the output container format, as the appended extension may not necessarily be valid.
-  #
   local ffmpeg_command="\
 ffmpeg \
   -i {1} \
   -c:a copy \
   $video_filters_par \
   -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
-  -f matroska {2}
+  {2}
 "
 
   echo "$(IFS=$'\n'; echo "${v_input_files[*]}")" \
