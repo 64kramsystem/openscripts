@@ -14,7 +14,7 @@ declare -A c_procs_mapping=(
   [32]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-p|--preset <preset>] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-o|--output-dir <path>] <input> {<input>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
@@ -25,6 +25,8 @@ Video filters:
 - deinterlace (performed via yadif)
 - convert to square pixels (DAR ratio, e.g. '4/3'); sets SAR to 1
 - resize (new height in pixels)
+
+The <start> and <end> options of '--cut' are timestamps in the '[[hh:]mm:]ss[.sss]' format.
 
 If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 
@@ -38,12 +40,13 @@ v_batch_mode=             # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
 v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
+v_segment=                # string '<start>-<end>' (see help).
 v_preset=$c_default_preset
 v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:p:o: --long help,batch,deinterlace,square:,resize:,preset:,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:c:p:o: --long help,batch,deinterlace,square:,resize:,cut:,preset:,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -63,6 +66,9 @@ function decode_cmdline_args {
         shift 2 ;;
       -r|--resize)
         v_resize=$2
+        shift 2 ;;
+      -c|--cut)
+        v_segment=$2
         shift 2 ;;
       -p|--preset)
         v_preset=$2
@@ -92,6 +98,12 @@ function decode_cmdline_args {
     # needs to be performed.
     #
     >&2 echo "Changing ratio and resizing can't be performed together"
+    echo "$c_help"
+    exit 1
+  fi
+
+  if [[ -n $v_segment ]] && ! grep -qP '^(\d{1,2}:)?(\d{1,2}:)?\d{1,2}(\.\d+)?-(\d{1,2}:)?(\d{1,2}:)?\d{1,2}(\.\d+)?$' <<< "$v_segment"; then
+    >&2 echo "Invalid segment format."
     echo "$c_help"
     exit 1
   fi
@@ -137,6 +149,12 @@ function perform_checks {
 }
 
 function encode_files {
+  local video_options=()
+
+  if [[ -n $v_segment ]]; then
+    video_options+=("-ss ${v_segment%-*} -to ${v_segment#*-}")
+  fi
+
   local video_filters=()
 
   if [[ -n $v_deinterlace ]]; then
@@ -160,6 +178,7 @@ function encode_files {
   local ffmpeg_command="\
 ffmpeg \
   -i {1} \
+  ${video_options[*]} \
   -c:a copy \
   $video_filters_par \
   -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
