@@ -164,27 +164,19 @@ function encode_files {
     video_filters_par=$(IFS=,; echo -n "-vf \"${video_filters[*]}\"")
   fi
 
-  # Can be merged, but it gets a bit confusing.
-  #
-  if [[ -n $v_output_dir ]]; then
-    local output_template="$v_output_dir/{/}"
-  else
-    local output_template="{}"
-  fi
-
-  # Using xargs doesn't make any concrete difference (also in terms of progress display).
-  #
   # Specify the output container format, as the appended extension may not necessarily be valid.
   #
+  local ffmpeg_command="\
+ffmpeg \
+  -i {1} \
+  -c:a copy \
+  $video_filters_par \
+  -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
+  -f matroska {2}
+"
+
   echo "$(IFS=$'\n'; echo "${v_input_files[*]}")" \
-    | parallel --max-procs "$v_parallel_procs" --line-buffer \
-      "  ffmpeg \
-        -i {} \
-        -c:a copy \
-        $video_filters_par \
-        -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
-        -f matroska $output_template$v_appended_ext
-      "
+    | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_input_files[@]}" ::: "${v_output_files[@]}"
 }
 
 function list_files {
