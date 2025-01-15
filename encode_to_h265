@@ -16,7 +16,10 @@ declare -A c_procs_mapping=(
 )
 c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-p|--preset <preset>] [-x|--append-extension <.ext>] [-o|--output-dir <path>] <input> {<input>, ...}
 
-Encodes video files to h265 (slower+optimizations), in parallel; copies the audio. The number of parallel procs is based on an internal table.
+Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
+The default x265 preset is '$c_default_preset', with CRF=$c_crf.
+By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exits before encoding any file.
+The appended extension can be set to blank (typically, when using '--output-dir').
 
 Video filters:
 
@@ -29,12 +32,6 @@ The output container is always Matroska.
 If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 
 In batch mode, output files are not printed, and the alarm program is not invoked.
-
-The default x265 preset is '$c_default_preset'; CRF is always set to $c_crf.
-
-By default, the appended extension is '$c_default_appended_ext'. If an output file exists already, the script exits before encoding any file.
-
-The appended extension can be set to blank (typically, when using '--output-dir').
 "
 
 v_input_files=()
