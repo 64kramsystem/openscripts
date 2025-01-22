@@ -26,7 +26,7 @@ Video filters:
 - convert to square pixels (DAR ratio, e.g. '4/3'); sets SAR to 1
 - resize (new height in pixels)
 
-The <start> and <end> options of '--cut' are timestamps in the '[[hh:]mm:]ss[.sss]' format.
+The <start> and <end> options of '--cut' are timestamps in the '[[hh:]mm:]ss[.sss]' format. The ends can be omitted.
 
 If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 
@@ -106,7 +106,7 @@ function decode_cmdline_args {
     exit 1
   fi
 
-  if [[ -n $v_segment ]] && ! grep -qP '^(\d{1,2}:)?(\d{1,2}:)?\d{1,2}(\.\d+)?-(\d{1,2}:)?(\d{1,2}:)?\d{1,2}(\.\d+)?$' <<< "$v_segment"; then
+  if [[ -n $v_segment ]] && ! grep -qP '^((\d{1,2}:)?(\d{1,2}:)?\d{1,2}(\.\d+)?)?-((\d{1,2}:)?(\d{1,2}:)?\d{1,2}(\.\d+)?)?$' <<< "$v_segment"; then
     >&2 echo "Invalid segment format."
     echo "$c_help"
     exit 1
@@ -163,8 +163,14 @@ function encode_files {
 
   local video_options=()
 
-  if [[ -n $v_segment ]]; then
-    video_options+=("-ss ${v_segment%-*} -to ${v_segment#*-}")
+  local start_segment=${v_segment%-*}
+  local end_segment=${v_segment#*-}
+
+  if [[ -n $start_segment ]]; then
+    video_options+=("-ss $start_segment")
+  fi
+  if [[ -n $end_segment ]]; then
+    video_options+=("-to $end_segment")
   fi
 
   local video_filters=()
