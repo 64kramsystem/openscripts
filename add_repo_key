@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] <source> <local_name> [<local_key_name>]
+
+Adds a repository key, storing it according to the parameters passed.
+
+Examples:
+
+    add_repo_key https://dl.winehq.org/wine-builds/winehq.key wine-builds /etc/apt/keyrings/winehq-archive.key
+    add_repo_key https://packages.microsoft.com/keys/microsoft.asc vscode
+    add_repo_key 15CF4D18AF4F7421 llvm-toolchain
+"
+
+v_source=
+v_local_name=
+v_local_key_name=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -lt 2 || $# -gt 3 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_source=$1
+  v_local_name=$2
+  v_local_key_name=${3:-}
+}
+
+function ensure_sudo_invocation {
+  if [[ $(id -u) -ne 0 ]]; then
+    sudo "$0" "$@"
+    exit $?
+  fi
+}
+
+function main {
+  if [[ -n $v_local_key_name ]]; then
+    mkdir -p "$(dirname "$v_local_key_name")"
+    wget -O "$v_local_key_name" "$v_source"
+  elif [[ $v_source == http* ]]; then
+    # Turn the source HTTP address into the (imported) key id; import dearmors automatically, if needed.
+    #
+    v_source=$(wget "$v_source" -qO- | gpg --import 2>&1 | perl -ne 'print $1 if /key (\w+)/')
+    gpg --export "$v_source" > /etc/apt/trusted.gpg.d/"$v_local_name".gpg
+  else
+    gpg --recv-keys --keyserver keyserver.ubuntu.com "$v_source"
+    gpg --export "$v_source" > /etc/apt/trusted.gpg.d/"$v_local_name".gpg
+  fi
+}
+
+ensure_sudo_invocation "$@"
+decode_cmdline_args "$@"
+main
