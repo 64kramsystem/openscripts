@@ -11,7 +11,7 @@ set -o nounset
 
 c_default_quality=4
 # shellcheck disable=SC2016
-c_help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-r|--remove] <input1> {<inputN>, ...}
+c_help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-t|--trash-input] <input1> {<inputN>, ...}
 
 Encodes to m4a and applies gain; by default, outputs to the current directory.
 
@@ -32,7 +32,7 @@ The codec used is libfdk_aac, in VBR, with a default quality of $c_default_quali
 - 3: 115
 - 2:  99
 
-Requires aacgain, a recompiled FFmpeg, and GNU Parallel.
+Requires aacgain, trash, a recompiled FFmpeg, and GNU Parallel.
 
 Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
 "
@@ -40,10 +40,10 @@ Please note that not all the input/quality combinations work (see https://hydrog
 input_files=
 destination=.
 quality=$c_default_quality
-remove_file=
+trash_input=                # boolean; false=blank, true=anything else
 
 function decode_commandline_params {
-  eval set -- "$(getopt --options hd:q:ar --long help,destination:,quality:,album,remove -- "$@")"
+  eval set -- "$(getopt --options hd:q:at --long help,destination:,quality:,album,trash-input -- "$@")"
 
   while true ; do
     case "$1" in
@@ -56,8 +56,8 @@ function decode_commandline_params {
       -q|--quality)
         quality="$2"
         shift 2 ;;
-      -r|--remove)
-        remove_file=1
+      -t|--trash-input)
+        trash_input=1
         shift ;;
       --)
         shift
@@ -82,6 +82,9 @@ function activate_debug {
 function check_prerequisites {
   if ! [[ -x "$(command -v parallel)" ]]; then
     >&2 echo "The 'parallel' binary is not in \$PATH."
+    exit 1
+  elif ! [[ -x "$(command -v trash)" ]]; then
+    >&2 echo "The 'trash' binary is not in \$PATH."
     exit 1
   elif [[ ! -d "$destination" ]]; then
     >&2 echo "The specified destination doesn't exist."
@@ -163,8 +166,8 @@ function encode_file {
 
   mv "$intermediate_file" "$destination_file"
 
-  if [[ $remove_file == 1 ]]; then
-    rm -f "$source_file"
+  if [[ -n $trash_input ]]; then
+    trash "$source_file"
   fi
 }
 
@@ -180,8 +183,8 @@ function encode_directory {
   intermediate_subdir="$(mktemp -d)"
   parallel_commands_list_file=$(mktemp)
 
-  if [[ "$(readlink -f "$1")" == "$(readlink -f "$destination_subdir")" && $remove_file != 1 ]]; then
-    echo "Destination matches the source \`$1\`; this is only allowed when \`--remove\` is specified."
+  if [[ "$(readlink -f "$1")" == "$(readlink -f "$destination_subdir")" && -z $trash_input ]]; then
+    echo "Destination matches the source \`$1\`; this is only allowed when \`--trash-input\` is specified."
     exit 1
   fi
 
@@ -239,8 +242,8 @@ function encode_directory {
   # Removing the source before moving is less clean than the reverse, but it simplifies the case of
   # the source directory being encoded in-place.
   #
-  if [[ $remove_file == "1" ]]; then
-    rm -r "$1"
+  if [[ -n $trash_input ]]; then
+    trash "$1"
   fi
 
   mv "$intermediate_subdir" "$destination_subdir"
