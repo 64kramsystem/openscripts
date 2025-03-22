@@ -12,6 +12,7 @@ c_crf=25
 # Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
 declare -A c_procs_mapping=(
   [32]=2
+  [16]=2
   [4]=1
 )
 c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-f|--force] [-o|--output-dir <path>] <input> {<input>, ...}
