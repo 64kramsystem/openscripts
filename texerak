@@ -7,7 +7,7 @@ set -o pipefail
 shopt -s nocasematch
 
 c_help="\
-Usage: $(basename "$0") [-h|--help] [-l|--language] files...
+Usage: $(basename "$0") [-h|--help] [-l|--language] [-j|--jpeg] files...
 
 OCRs the files using tesseract, using intermediate files when necessary (ie. pdf).
 The output files have the same name as the input ones, with the extension replaced with \`txt\`.
@@ -16,6 +16,8 @@ Requires Tesseract and ImageMagick to be installed.
 
 The language can also be specified via the \`\$TEXERAK_LANGUAGE\` environment variable (the parameter has higher priority).
 See \`tesseract --list-langs\` for the available languages.
+
+In --jpeg mode, the output files are JPEG images instead of text files (no OCR performed); valid only for PDF files.
 
 Example:
 
@@ -26,9 +28,10 @@ c_tmpfiles_dir=$(mktemp -d --suffix "-texerak")
 v_language=${TEXERAK_LANGUAGE:-}
 v_files=
 v_language_option=()
+v_jpeg_mode=           # boolean; false=blank, true=anything else
 
 function prepare_parameters {
-  eval set -- "$(getopt --options hl: --long help,language: --name "$(basename "$0")" -- "$@")"
+  eval set -- "$(getopt --options hl:j --long help,language:,jpeg --name "$(basename "$0")" -- "$@")"
 
   while true ; do
     case "$1" in
@@ -38,6 +41,9 @@ function prepare_parameters {
       -l|--language)
         v_language="$2"
         shift 2 ;;
+      -j|--jpeg)
+        v_jpeg_mode=1
+        shift ;;
       --)
         shift
         break ;;
@@ -47,22 +53,34 @@ function prepare_parameters {
   v_files=("$@")
 }
 
+function convert_source_to_jpg {
+  local source=$1
+
+  echo "Converting $source to JPEG..."
+
+  if [[ "$source" == *".pdf" ]]; then
+    convert_pdf_to_image "$source" "${source%pdf}jpg"
+  else
+    >&2 echo "ERROR: JPEG mode is only valid for PDF files."
+    exit 1
+  fi
+}
+
 function ocr_source {
-  source=$1
+  local source=$1
 
-  echo "OCRing $source..."
+  echo "OCRing $source (lang.: ${v_language:-(default)})..."
 
-  bare_destination=${source%.*}
+  local bare_destination=${source%.*}
 
   if [[ "$source" == *".pdf" ]]; then
     local intermediate_file
     intermediate_file=$(mktemp --tmpdir="$c_tmpfiles_dir" --suffix ".tiff")
 
-    echo "- converting to intermediate format ($intermediate_file)..."
+    echo "- converting to intermediate format..."
 
-    # See https://diging.atlassian.net/wiki/spaces/DCH/pages/5275668/Tutorial+Text+Extraction+and+OCR+with+Tesseract+and+ImageMagick.
-    #
-    convert -density 300 "$source" -depth 8 -strip -background white -alpha off "$intermediate_file"
+    convert_pdf_to_image "$source" "$intermediate_file"
+
     source=$intermediate_file
   fi
 
@@ -75,13 +93,25 @@ function ocr_source {
   { tesseract "${v_language_option[@]}" "$source" "$bare_destination" 3>&2 2>&1 1>&3 | perl -ne 'print unless /^(Tesseract Open Source|Page )/' >&3; } 3>&2 2>&1
 }
 
+function convert_pdf_to_image {
+  local source=$1 dest=$2
+
+  # See https://diging.atlassian.net/wiki/spaces/DCH/pages/5275668/Tutorial+Text+Extraction+and+OCR+with+Tesseract+and+ImageMagick.
+  #
+  convert -density 300 "$source" -depth 8 -strip -background white -alpha off "$dest"
+}
+
 function remove_tmpfiles_dir {
   rm -rf "$c_tmpfiles_dir"
 }
 
-function ocr_sources {
+function convert_sources {
   for source in "${v_files[@]}"; do
-    ocr_source "$source"
+    if [[ -n $v_jpeg_mode ]]; then
+      convert_source_to_jpg "$source"
+    else
+      ocr_source "$source"
+    fi
   done
 }
 
@@ -93,6 +123,4 @@ prepare_parameters "$@"
 
 trap remove_tmpfiles_dir EXIT
 
-echo "OCR'ing with language: ${v_language:-(default)}"
-
-ocr_sources
+convert_sources
