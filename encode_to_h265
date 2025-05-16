@@ -15,7 +15,7 @@ declare -A c_procs_mapping=(
   [16]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-f|--force] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-f|--force] [-o|--output-dir <path>] <input[:output]> {<input[:output]>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
@@ -28,6 +28,8 @@ Video filters:
 - resize (new height in pixels)
 
 The <start> and <end> options of '--cut' are timestamps in the '[[hh:]mm:]ss[.sss]' format. The ends can be omitted.
+
+The 'output-dir' option is incompatible with ':output' specs.
 
 If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 
@@ -115,11 +117,15 @@ function decode_cmdline_args {
 
   v_output_dir=${v_output_dir%/}
 
-  v_input_files=("$@")
+  local files_spec=("$@")
 
-  for file in "${v_input_files[@]}"; do
-    [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
-    v_output_files+=("${file%.*}.$c_outfile_ext")
+#   v_input_files=("$@")
+#
+  for file_spec in "${files_spec[@]}"; do
+    local input_file=${file_spec%:*}
+    local output_file=
+#     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
+#     v_output_files+=("${file%.*}.$c_outfile_ext")
   done
 
   local processors_count
