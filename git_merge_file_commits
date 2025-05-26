@@ -8,7 +8,7 @@ shopt -s inherit_errexit
 
 c_rebase_commands_file=$(mktemp)
 export c_commits_count_regex='have (\d+) and (\d+) different commits'
-c_help="Usage: $(basename "$0") [-h|--help] <filename> [subject_suffix]
+c_help="Usage: $(basename "$0") [-h|--help] [--non-interactive] <filename> [subject_suffix]
 
 Rewrites the history of a repository, merging the commits including a given file into a single commit; this is useful when one wants to keep only the latest version of a file.
 
@@ -18,11 +18,11 @@ Currently, the script assumes that there are two commits involving the file, not
 
 v_filename=
 v_subject_suffix=
+v_interactive=1      # boolean; false=blank, true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
-
+  params=$(getopt --options h --long help,non-interactive --name "$(basename "$0")" -- "$@")
   eval set -- "$params"
 
   while true; do
@@ -30,6 +30,9 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
+      --non-interactive)
+        v_interactive=;
+        shift ;;
       --)
         shift
         break ;;
@@ -160,7 +163,9 @@ function main {
 
   print_rebase_commands
 
-  ask_keypress
+  if [[ -n $v_interactive ]]; then
+    ask_keypress
+  fi
 
   perform_rebase "$first_addition_hash"
 
