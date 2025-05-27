@@ -47,7 +47,7 @@ Examples, using the above structure, of switch+run:
 
 Requires:
 
-- $MYSTART_MYSQL_VERSIONS_ROOT, $MYSTART_DATA_LOCATION, $MYSTART_LOGS_LOCATION.
+- $MYSTART_MYSQL_VERSIONS_ROOT
 - `mystop` to be in $PATH
 - `$MYSTART_MYSQL_VERSIONS_ROOT/mysql/bin` to be in $PATH'
 
@@ -101,7 +101,26 @@ function switch_symlink {
 }
 
 function create_directories {
-  mkdir -p "$MYSTART_DATA_LOCATION" "$MYSTART_LOGS_LOCATION"
+  local data_location
+  data_location=$(my_print_defaults mysqld | perl -ne 'print $1 if /^--datadir=(.+)'/)
+
+  if [[ -z $data_location ]]; then
+    echo "Error: Could not determine the data directory locations."
+    exit 1
+  fi
+
+  echo "Creating data dir: $data_location..."
+  mkdir -p "$data_location"
+
+  local logs_location
+  logs_location=$(my_print_defaults mysqld | perl -ne 'print $1 if /^--innodb_log_group_home_dir=(.+)'/)
+
+  # Can be empty; if so, the data dir is used, so no handling is needed.
+  #
+  if [[ -n $logs_location ]]; then
+    echo "Creating logs dir: $logs_location..."
+    mkdir -p "$logs_location"
+  fi
 }
 
 function initialize_and_start_mysql {
