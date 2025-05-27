@@ -31,7 +31,26 @@ function kill_mysqld {
 }
 
 function delete_directories {
-  rm -rf "$MYSTART_LOGS_LOCATION" "$MYSTART_DATA_LOCATION"
+  local data_location
+  data_location=$(my_print_defaults mysqld | perl -ne 'print $1 if /^--datadir=(.+)'/)
+
+  if [[ -z $data_location ]]; then
+    echo "Error: Could not determine the data directory locations."
+    exit 1
+  fi
+
+  echo "Removing data dir: $data_location..."
+  rm -rf "$data_location"
+
+  local logs_location
+  logs_location=$(my_print_defaults mysqld | perl -ne 'print $1 if /^--innodb_log_group_home_dir=(.+)'/)
+
+  # Can be empty; if so, the data dir is used, so no handling is needed.
+  #
+  if [[ -n $logs_location ]]; then
+    echo "Removing logs dir: $logs_location..."
+    rm -rf "$logs_location"
+  fi
 }
 
 decode_cmdline_args "$@"
