@@ -23,8 +23,8 @@ function decode_cmdline_args {
 }
 
 function kill_mysqld {
-  if pkill mysqld; then
-    while pgrep mysqld > /dev/null; do
+  if pkill --exact mysqld; then
+    while pgrep --exact mysqld > /dev/null; do
       sleep 0.1
     done
   fi
