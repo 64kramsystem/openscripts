@@ -57,7 +57,7 @@ set -x
 
 v_configfile=
 v_mysql_version=
-v_create_and_connect_to_tmp_schema=
+v_create_and_connect_to_tmp_schema=    # Boolean; false:blank, true:anything else
 v_erase_dirs=                          # Boolean; false:blank, true:anything else
 
 function prepare_parameters {
@@ -148,6 +148,6 @@ fi
 create_directories
 initialize_and_start_mysql
 
-if [[ "$v_create_and_connect_to_tmp_schema" == "1" ]]; then
+if [[ -n $v_create_and_connect_to_tmp_schema ]]; then
   create_and_connect_to_tmp_schema
 fi
