@@ -57,7 +57,7 @@ set -x
 
 v_configfile=
 v_mysql_version=
-v_create_and_connect_to_tmp_schema=
+v_create_and_connect_to_tmp_schema=    # Boolean; false:blank, true:anything else
 
 function prepare_parameters {
   eval set -- "$(getopt --options hc:t --long help,config:,tmp --name "$(basename "$0")" -- "$@")"
@@ -101,11 +101,7 @@ function switch_symlink {
 }
 
 function create_directories {
-  mkdir -p "$MYSTART_DATA_LOCATION"
-
-  # Won't have any effect if it's the same as the previous.
-  #
-  mkdir -p "$MYSTART_LOGS_LOCATION"
+  mkdir -p "$MYSTART_DATA_LOCATION" "$MYSTART_LOGS_LOCATION"
 }
 
 function initialize_and_start_mysql {
@@ -137,6 +133,6 @@ switch_symlink
 create_directories
 initialize_and_start_mysql
 
-if [[ "$v_create_and_connect_to_tmp_schema" == "1" ]]; then
+if [[ -n $v_create_and_connect_to_tmp_schema ]]; then
   create_and_connect_to_tmp_schema
 fi
