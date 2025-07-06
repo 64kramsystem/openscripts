@@ -210,7 +210,10 @@ ffmpeg \
 }
 
 function list_files {
-  ls -lh "${v_input_files[@]}" "${v_output_files[@]}"
+  # shellcheck disable=2012 # find has no advantage here
+  # shellcheck disable=2016 # $ in the single quotes are not expressions
+  ls -lh "${v_input_files[@]}" "${v_output_files[@]}" \
+  | ruby -ane 'puts "#{$F[4]}\t #{File.basename($F[8..].join(" "))}"'
 }
 
 function main {
