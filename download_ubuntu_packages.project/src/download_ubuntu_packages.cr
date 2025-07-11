@@ -7,17 +7,14 @@ require "option_parser"
 require "file_utils"
 require "progress_bar"
 
-# Ubuntu's packages website is disgracefully unstable.
 DOWNLOAD_PAGE_MAX_RETRIES = 3
 
-# Specify this to download the current development version.
 DEV_UBUNTU_VERSION_PARAM = "devel"
 
 class DownloadWithProgress
   def execute(address : String, destination_file : String)
     uri = URI.parse(address)
 
-    # HEAD to get size first
     head_response = HTTP::Client.head(address)
     raise "File not found!" if head_response.status_code == 404
 
@@ -31,7 +28,6 @@ class DownloadWithProgress
       format: "%t |%B| %p%% %e"
     )
 
-    # Stream GET so we can update progress bar
     HTTP::Client.get(address) do |response|
       File.open(destination_file, "wb") do |file|
         buffer = Bytes.new(32_768)
@@ -55,6 +51,8 @@ class DownloadUbuntuPackages
   RELEASES_ADDRESS    = "https://releases.ubuntu.com"
   DAILY_BUILD_ADDRESS = "https://cdimage.ubuntu.com/daily-live/current"
 
+  # Keep parse_commandline_arguments()'s defaults in sync with these.
+  #
   def execute(
     packages : Array(String),
     download_to : String = Dir.current,
@@ -62,25 +60,26 @@ class DownloadUbuntuPackages
     release : String? = nil,
     address_only : Bool = false,
   )
-    OpenSSL::SSL.default_context.verify_mode = skip_ssl_verification ? OpenSSL::SSL::VerifyMode::NONE : OpenSSL::SSL::VerifyMode::PEER
+    abort
+    # OpenSSL::SSL.default_context.verify_mode = skip_ssl_verification ? OpenSSL::SSL::VerifyMode::NONE : OpenSSL::SSL::VerifyMode::PEER
 
     rel = resolve_release(release)
 
     packages.each do |package|
-      package_download_page = find_and_open_package_download_page(rel, package)
-      package_address = find_package_address(package_download_page, package)
-
-      if address_only
-        puts package_address
-      else
-        destination_file = compose_destination_file(package_address, download_to)
-
-        if File.exists?(destination_file)
-          puts ">>> File #{destination_file} exists; not downloading"
-        else
-          DownloadWithProgress.new.execute(package_address, destination_file)
-        end
-      end
+      #       package_download_page = find_and_open_package_download_page(rel, package)
+      #       package_address = find_package_address(package_download_page, package)
+      #
+      #       if address_only
+      #         puts package_address
+      #       else
+      #         destination_file = compose_destination_file(package_address, download_to)
+      #
+      #         if File.exists?(destination_file)
+      #           puts ">>> File #{destination_file} exists; not downloading"
+      #         else
+      #           DownloadWithProgress.new.execute(package_address, destination_file)
+      #         end
+      #       end
     end
   end
 
@@ -97,64 +96,69 @@ class DownloadUbuntuPackages
 
   private def find_latest_release : String
     releases_page = HTTP::Client.get(RELEASES_ADDRESS).body
-    # e.g. <img src="/icons/folder.gif" alt="[DIR]"> <a href="22.04/">22.04/</a> ... Ubuntu 22.04 LTS (Jammy Jellyfish)
     entries = releases_page.scan(/alt="\[DIR\]">\s*<a href="(\d{2}\.\d{2})[^>]*>[^<]+<\/a>.*?Ubuntu[\s\S]*?\(([A-Za-z]+)\s+[A-Za-z]+\)/)
     raise "Release not found!" if entries.empty?
-    entries.max_by { |numeric, _| numeric }.last.downcase
+    entries.max_by { |entry| entry[0] }[1].downcase
   end
 
   private def find_latest_dev_release : String
-    images_page = HTTP::Client.get(DAILY_BUILD_ADDRESS).body
-    # e.g. <a href="mantic-desktop-amd64.iso">64-bit PC (AMD64) desktop image</a>
-    dev = images_page[/"([a-z]+)-desktop-amd64\.iso"/, 1]
-    raise "Development release not found!" unless dev
-    dev
+    abort
+    #     images_page = HTTP::Client.get(DAILY_BUILD_ADDRESS).body
+    #     # e.g. <a href="mantic-desktop-amd64.iso">64-bit PC (AMD64) desktop image</a>
+    #     dev = images_page[/"([a-z]+)-desktop-amd64\.iso"/, 1]
+    #     raise "Development release not found!" unless dev
+    #     dev
   end
 
-  # Tries the default architecture first; if not found, tries the `all` architecture.
-  private def find_and_open_package_download_page(release : String, package : String) : String
-    package_download_address = download_address(release, DEFAULT_ARCHITECTURE, package)
-
-    retries = 0
-    begin
-      response = HTTP::Client.get(package_download_address)
-      html = response.body
-      if html =~ /<title>Ubuntu.+Error<\/title>/
-        raise "Package search yielded error page"
-      end
-      html
-    rescue ex : HTTP::Client::Error
-      raise ex if retries >= DOWNLOAD_PAGE_MAX_RETRIES
-      retries += 1
-      STDERR.puts "Error opening package download page, retrying (#{retries})..."
-      sleep 1
-      retry
-    end
-  end
-
-  private def download_address(release : String, architecture : String, package : String) : String
-    "#{INDEX_SERVER_ADDRESS}/#{release}/#{architecture}/#{package}/download"
-  end
-
-  # Locate the .deb URL inside the download page
-  private def find_package_address(package_download_page : String, package : String) : String
-    [PACKAGE_SERVER_ADDRESS, ALTERNATE_PACKAGE_SERVER_ADDRESS].each do |server_address|
-      regex = /#{server_address}\/ubuntu\/pool\/\w+\/\w+\/.*?#{Regexp.escape(package)}_[^\s"']+\.deb/
-      if match = package_download_page.match(regex)
-        return match[0]
-      end
-    end
-    raise "Package link match not found for #{package}"
-  end
-
-  private def compose_destination_file(package_address : String, destination_directory : String) : String
-    file_basename = File.basename(package_address)
-    File.join(destination_directory, file_basename)
-  end
+  #   # Tries the default architecture first; if not found, tries the `all` architecture.
+  #   private def find_and_open_package_download_page(release : String, package : String) : String
+  #     package_download_address = download_address(release, DEFAULT_ARCHITECTURE, package)
+  #
+  #     retries = 0
+  #     begin
+  #       response = HTTP::Client.get(package_download_address)
+  #       html = response.body
+  #       if html =~ /<title>Ubuntu.+Error<\/title>/
+  #         raise "Package search yielded error page"
+  #       end
+  #       html
+  #     rescue ex : HTTP::Client::Error
+  #       raise ex if retries >= DOWNLOAD_PAGE_MAX_RETRIES
+  #       retries += 1
+  #       STDERR.puts "Error opening package download page, retrying (#{retries})..."
+  #       sleep 1
+  #       retry
+  #     end
+  #   end
+  #
+  #   private def download_address(release : String, architecture : String, package : String) : String
+  #     "#{INDEX_SERVER_ADDRESS}/#{release}/#{architecture}/#{package}/download"
+  #   end
+  #
+  #   # Locate the .deb URL inside the download page
+  #   private def find_package_address(package_download_page : String, package : String) : String
+  #     [PACKAGE_SERVER_ADDRESS, ALTERNATE_PACKAGE_SERVER_ADDRESS].each do |server_address|
+  #       regex = /#{server_address}\/ubuntu\/pool\/\w+\/\w+\/.*?#{Regexp.escape(package)}_[^\s"']+\.deb/
+  #       if match = package_download_page.match(regex)
+  #         return match[0]
+  #       end
+  #     end
+  #     raise "Package link match not found for #{package}"
+  #   end
+  #
+  #   private def compose_destination_file(package_address : String, destination_directory : String) : String
+  #     file_basename = File.basename(package_address)
+  #     File.join(destination_directory, file_basename)
+  #   end
 end
 
 private def parse_commandline_arguments
-  args = NamedTuple.new
+  args = {
+    download_to:           Dir.current,
+    skip_ssl_verification: false,
+    release:               nil.as(String?),
+    address_only:          false,
+  }
 
   parser = OptionParser.parse do |parser|
     parser.banner =
@@ -207,7 +211,6 @@ end
 def main
   packages, args = parse_commandline_arguments
 
-  # BROKEN - can't splat union NTs
   DownloadUbuntuPackages.new.execute(packages, **args)
 end
 
