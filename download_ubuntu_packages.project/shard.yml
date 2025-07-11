@@ -6,7 +6,7 @@ authors:
   - Saverio Miroddi <saverio.pub2@gmail.com>
 
 targets:
-  ../../download_ubuntu_packages:
+  ../../download_ubuntu_packages-cr:
     main: src/download_ubuntu_packages.cr
 
 crystal: '>= 1.16.3'
