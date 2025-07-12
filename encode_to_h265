@@ -15,11 +15,16 @@ declare -A c_procs_mapping=(
   [16]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-f|--force] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-o|--output-dir <path>] <input> {<input>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
-The file extension is replaced with '$c_outfile_ext'. If an output file exists already and --force is not specified, the script exits before encoding any file.
+The file extension is replaced with '$c_outfile_ext'.
+
+Files workflow:
+
+- if an output file exists already, the script exits before encoding any file
+- in case of error/termination, the output files are deleted
 
 Video filters:
 
@@ -43,12 +48,11 @@ v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
 v_segment=                # string '<start>-<end>' (see help).
 v_preset=$c_default_preset
-v_overwrite=              # boolean; false=blank, true=anything else
 v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:c:p:fo: --long help,batch,deinterlace,square:,resize:,cut:,preset:,force,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:c:p:o: --long help,batch,deinterlace,square:,resize:,cut:,preset:,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -75,9 +79,6 @@ function decode_cmdline_args {
       -p|--preset)
         v_preset=$2
         shift 2 ;;
-      -f|--force)
-        v_overwrite=1
-        shift ;;
       -o|--output-dir)
         v_output_dir=$2
         shift 2 ;;
@@ -145,22 +146,29 @@ function perform_checks {
     fi
   done
 
-  if [[ -z $v_overwrite ]]; then
+  for file in "${v_output_files[@]}"; do
+    if [[ -f $file ]]; then
+      >&2 echo "File '$file' exists!"
+      exit 1
+    fi
+  done
+}
+
+# Delete output files in case of interruption/error.
+#
+function register_premature_exit_hook {
+  function _premature_exit_hook {
     for file in "${v_output_files[@]}"; do
-      if [[ -f $file ]]; then
-        >&2 echo "File '$file' exists!"
-        exit 1
-      fi
+      echo "Deleting $file..."
+      rm -f "$file"
     done
-  fi
+  }
+
+  trap _premature_exit_hook ERR INT
 }
 
 function encode_files {
   local global_options=()
-
-  if [[ -n $v_overwrite ]]; then
-    global_options+=("-y")
-  fi
 
   local video_options=()
 
@@ -218,6 +226,7 @@ function list_files {
 
 function main {
   perform_checks
+  register_premature_exit_hook
   encode_files
   if [[ -z $v_batch_mode ]]; then
     list_files
