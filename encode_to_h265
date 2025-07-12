@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_outfile_ext=mkv
+c_default_extension=mkv
 c_default_preset=slower
 c_crf=25
 c_temp_dir=$(mktemp --directory "${TMPDIR:-/tmp}/$(basename "$0")-XXXXX")
@@ -20,7 +20,7 @@ c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
-The file extension is replaced with '$c_outfile_ext'.
+The file extension is replaced with '$c_default_extension'.
 
 Files workflow:
 
@@ -131,7 +131,7 @@ function decode_cmdline_args {
     v_temp_input_files+=("$c_temp_dir"/"$(basename "$file")")
 
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
-    v_output_files+=("${file%.*}.$c_outfile_ext")
+    v_output_files+=("${file%.*}.$c_default_extension")
   done
 
   local processors_count
