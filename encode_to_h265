@@ -16,11 +16,11 @@ declare -A c_procs_mapping=(
   [16]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] <input> {<input>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
-The file extension is replaced with '$c_default_extension'.
+The file extension is replaced with '$c_default_extension' (or '--extension', when provided).
 
 Files workflow:
 
@@ -57,11 +57,12 @@ v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
 v_segment=                # string '<start>-<end>' (see help).
 v_preset=$c_default_preset
+v_extension=$c_default_extension
 v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:c:p:o: --long help,batch,deinterlace,square:,resize:,cut:,preset:,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:c:p:e:o: --long help,batch,deinterlace,square:,resize:,cut:,preset:,extension:,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -87,6 +88,9 @@ function decode_cmdline_args {
         shift 2 ;;
       -p|--preset)
         v_preset=$2
+        shift 2 ;;
+      -e|--extension)
+        v_extension=$2
         shift 2 ;;
       -o|--output-dir)
         v_output_dir=$2
@@ -131,7 +135,7 @@ function decode_cmdline_args {
     v_temp_input_files+=("$c_temp_dir"/"$(basename "$file")")
 
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
-    v_output_files+=("${file%.*}.$c_default_extension")
+    v_output_files+=("${file%.*}.$v_extension")
   done
 
   local processors_count
