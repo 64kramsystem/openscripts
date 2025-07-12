@@ -9,17 +9,28 @@ shopt -s inherit_errexit
 c_outfile_ext=mkv
 c_default_preset=slower
 c_crf=25
+c_temp_dir=$(mktemp --directory "${TMPDIR:-/tmp}/$(basename "$0")-XXXXX")
 # Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
 declare -A c_procs_mapping=(
   [32]=2
   [16]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-f|--force] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-o|--output-dir <path>] <input> {<input>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
-The file extension is replaced with '$c_outfile_ext'. If an output file exists already and --force is not specified, the script exits before encoding any file.
+The file extension is replaced with '$c_outfile_ext'.
+
+Files workflow:
+
+- if an output file exists already, the script exits before encoding any file
+- input files are moved to a temp dir
+- in case of error/termination
+  - output files are deleted
+  - input files are moved back
+- in case of success
+  - input files are left in the temp dir
 
 Video filters:
 
@@ -34,8 +45,11 @@ If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 In batch mode, output files are not printed, and the alarm program is not invoked.
 "
 
-v_input_files=()
+# For simplicity, temp input and output files are in the same order as the orig input files.
+v_orig_input_files=()
+v_temp_input_files=()
 v_output_files=()
+
 v_parallel_procs=         # numeric
 v_batch_mode=             # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
@@ -43,12 +57,11 @@ v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
 v_segment=                # string '<start>-<end>' (see help).
 v_preset=$c_default_preset
-v_overwrite=              # boolean; false=blank, true=anything else
 v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:c:p:fo: --long help,batch,deinterlace,square:,resize:,cut:,preset:,force,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:c:p:o: --long help,batch,deinterlace,square:,resize:,cut:,preset:,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -75,9 +88,6 @@ function decode_cmdline_args {
       -p|--preset)
         v_preset=$2
         shift 2 ;;
-      -f|--force)
-        v_overwrite=1
-        shift ;;
       -o|--output-dir)
         v_output_dir=$2
         shift 2 ;;
@@ -115,9 +125,11 @@ function decode_cmdline_args {
 
   v_output_dir=${v_output_dir%/}
 
-  v_input_files=("$@")
+  v_orig_input_files=("$@")
 
-  for file in "${v_input_files[@]}"; do
+  for file in "${v_orig_input_files[@]}"; do
+    v_temp_input_files+=("$c_temp_dir"/"$(basename "$file")")
+
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
     v_output_files+=("${file%.*}.$c_outfile_ext")
   done
@@ -132,35 +144,51 @@ function decode_cmdline_args {
   fi
 }
 
+function move_input_files_to_tmp_dir {
+  for (( i = 0; i < "${#v_orig_input_files[@]}"; i++ )); do
+    mv "${v_orig_input_files[$i]}" "${v_temp_input_files[$i]}"
+  done
+}
+
 function perform_checks {
   if [[ -n $v_output_dir && ! -d $v_output_dir ]]; then
     >&2 echo "The specified output directory doesn't exist!"
     exit 1
   fi
 
-  for file in "${v_input_files[@]}"; do
+  for file in "${v_orig_input_files[@]}"; do
     if [[ $file == *$'\n'* || $file == *\"* ]]; then
       >&2 echo "File '$file' includes a newline/double quote!"
       exit 1
     fi
   done
 
-  if [[ -z $v_overwrite ]]; then
+  for file in "${v_output_files[@]}"; do
+    if [[ -f $file ]]; then
+      >&2 echo "File '$file' exists!"
+      exit 1
+    fi
+  done
+}
+
+# Delete output files in case of interruption/error.
+#
+function register_premature_exit_hook {
+  function _premature_exit_hook {
     for file in "${v_output_files[@]}"; do
-      if [[ -f $file ]]; then
-        >&2 echo "File '$file' exists!"
-        exit 1
-      fi
+      rm -f "$file"
     done
-  fi
+
+    for (( i = 0; i < "${#v_orig_input_files[@]}"; i++ )); do
+      mv "${v_temp_input_files[$i]}" "${v_orig_input_files[$i]}"
+    done
+  }
+
+  trap _premature_exit_hook ERR INT
 }
 
 function encode_files {
   local global_options=()
-
-  if [[ -n $v_overwrite ]]; then
-    global_options+=("-y")
-  fi
 
   local video_options=()
 
@@ -205,24 +233,31 @@ ffmpeg \
   {2}
 "
 
-  echo "$(IFS=$'\n'; echo "${v_input_files[*]}")" \
-    | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_input_files[@]}" ::: "${v_output_files[@]}"
+  echo "$(IFS=$'\n'; echo "${v_temp_input_files[*]}")" \
+    | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_temp_input_files[@]}" ::: "${v_output_files[@]}"
 }
 
 function list_files {
   # shellcheck disable=2012 # find has no advantage here
   # shellcheck disable=2016 # $ in the single quotes are not expressions
-  ls -lh "${v_input_files[@]}" "${v_output_files[@]}" \
+  ls -lh "${v_temp_input_files[@]}" "${v_output_files[@]}" \
   | ruby -ane 'puts "#{$F[4]}\t #{File.basename($F[8..].join(" "))}"'
 }
 
+function print_exit_message {
+  echo "Temp dir: $c_temp_dir"
+}
+
 function main {
+  register_premature_exit_hook
+  move_input_files_to_tmp_dir
   perform_checks
   encode_files
   if [[ -z $v_batch_mode ]]; then
     list_files
     "${SCRIPTING_ALARM_PROGRAM:-true}"
   fi
+  print_exit_message
 }
 
 decode_cmdline_args "$@"
