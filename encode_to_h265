@@ -9,6 +9,7 @@ shopt -s inherit_errexit
 c_outfile_ext=mkv
 c_default_preset=slower
 c_crf=25
+c_temp_dir=$(mktemp --directory "${TMPDIR:-/tmp}/$(basename "$0")-XXXXX")
 # Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
 declare -A c_procs_mapping=(
   [32]=2
@@ -24,7 +25,12 @@ The file extension is replaced with '$c_outfile_ext'.
 Files workflow:
 
 - if an output file exists already, the script exits before encoding any file
-- in case of error/termination, the output files are deleted
+- input files are moved to a temp dir
+- in case of error/termination
+  - output files are deleted
+  - input files are moved back
+- in case of success
+  - input files are left in the temp dir
 
 Video filters:
 
@@ -39,8 +45,11 @@ If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 In batch mode, output files are not printed, and the alarm program is not invoked.
 "
 
+# For simplicity, temp input and output files are in the same order as the orig input files.
 v_orig_input_files=()
+v_temp_input_files=()
 v_output_files=()
+
 v_parallel_procs=         # numeric
 v_batch_mode=             # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
@@ -119,6 +128,8 @@ function decode_cmdline_args {
   v_orig_input_files=("$@")
 
   for file in "${v_orig_input_files[@]}"; do
+    v_temp_input_files+=("$c_temp_dir"/"$(basename "$file")")
+
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
     v_output_files+=("${file%.*}.$c_outfile_ext")
   done
@@ -131,6 +142,12 @@ function decode_cmdline_args {
     >&2 echo "Procs count mapping not found for $processors_count processors."
     exit 1
   fi
+}
+
+function move_input_files_to_tmp_dir {
+  for (( i = 0; i < "${#v_orig_input_files[@]}"; i++ )); do
+    mv "${v_orig_input_files[$i]}" "${v_temp_input_files[$i]}"
+  done
 }
 
 function perform_checks {
@@ -159,8 +176,11 @@ function perform_checks {
 function register_premature_exit_hook {
   function _premature_exit_hook {
     for file in "${v_output_files[@]}"; do
-      echo "Deleting $file..."
       rm -f "$file"
+    done
+
+    for (( i = 0; i < "${#v_orig_input_files[@]}"; i++ )); do
+      mv "${v_temp_input_files[$i]}" "${v_orig_input_files[$i]}"
     done
   }
 
@@ -213,25 +233,31 @@ ffmpeg \
   {2}
 "
 
-  echo "$(IFS=$'\n'; echo "${v_orig_input_files[*]}")" \
-    | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_orig_input_files[@]}" ::: "${v_output_files[@]}"
+  echo "$(IFS=$'\n'; echo "${v_temp_input_files[*]}")" \
+    | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_temp_input_files[@]}" ::: "${v_output_files[@]}"
 }
 
 function list_files {
   # shellcheck disable=2012 # find has no advantage here
   # shellcheck disable=2016 # $ in the single quotes are not expressions
-  ls -lh "${v_orig_input_files[@]}" "${v_output_files[@]}" \
+  ls -lh "${v_temp_input_files[@]}" "${v_output_files[@]}" \
   | ruby -ane 'puts "#{$F[4]}\t #{File.basename($F[8..].join(" "))}"'
 }
 
+function print_exit_message {
+  echo "Temp dir: $c_temp_dir"
+}
+
 function main {
-  perform_checks
   register_premature_exit_hook
+  move_input_files_to_tmp_dir
+  perform_checks
   encode_files
   if [[ -z $v_batch_mode ]]; then
     list_files
     "${SCRIPTING_ALARM_PROGRAM:-true}"
   fi
+  print_exit_message
 }
 
 decode_cmdline_args "$@"
