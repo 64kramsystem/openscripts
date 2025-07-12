@@ -39,7 +39,7 @@ If \$SCRIPTING_ALARM_PROGRAM is defined, it's executed after encoding.
 In batch mode, output files are not printed, and the alarm program is not invoked.
 "
 
-v_input_files=()
+v_orig_input_files=()
 v_output_files=()
 v_parallel_procs=         # numeric
 v_batch_mode=             # boolean; false=blank, true=anything else
@@ -116,9 +116,9 @@ function decode_cmdline_args {
 
   v_output_dir=${v_output_dir%/}
 
-  v_input_files=("$@")
+  v_orig_input_files=("$@")
 
-  for file in "${v_input_files[@]}"; do
+  for file in "${v_orig_input_files[@]}"; do
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
     v_output_files+=("${file%.*}.$c_outfile_ext")
   done
@@ -139,7 +139,7 @@ function perform_checks {
     exit 1
   fi
 
-  for file in "${v_input_files[@]}"; do
+  for file in "${v_orig_input_files[@]}"; do
     if [[ $file == *$'\n'* || $file == *\"* ]]; then
       >&2 echo "File '$file' includes a newline/double quote!"
       exit 1
@@ -213,14 +213,14 @@ ffmpeg \
   {2}
 "
 
-  echo "$(IFS=$'\n'; echo "${v_input_files[*]}")" \
-    | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_input_files[@]}" ::: "${v_output_files[@]}"
+  echo "$(IFS=$'\n'; echo "${v_orig_input_files[*]}")" \
+    | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_orig_input_files[@]}" ::: "${v_output_files[@]}"
 }
 
 function list_files {
   # shellcheck disable=2012 # find has no advantage here
   # shellcheck disable=2016 # $ in the single quotes are not expressions
-  ls -lh "${v_input_files[@]}" "${v_output_files[@]}" \
+  ls -lh "${v_orig_input_files[@]}" "${v_output_files[@]}" \
   | ruby -ane 'puts "#{$F[4]}\t #{File.basename($F[8..].join(" "))}"'
 }
 
