@@ -177,18 +177,30 @@ function perform_checks {
 
 # Delete output files in case of interruption/error.
 #
-function register_premature_exit_hook {
-  function _premature_exit_hook {
+function register_exit_hooks {
+  function _error_exit_hook {
     for file in "${v_output_files[@]}"; do
       rm -f "$file"
     done
 
     for (( i = 0; i < "${#v_orig_input_files[@]}"; i++ )); do
-      mv "${v_temp_input_files[$i]}" "${v_orig_input_files[$i]}"
+      if [[ -f "${v_temp_input_files[$i]}" ]]; then
+        mv "${v_temp_input_files[$i]}" "${v_orig_input_files[$i]}"
+      fi
     done
   }
 
-  trap _premature_exit_hook ERR INT
+  function _clean_exit_hook {
+    print_exit_message
+  }
+
+  trap '
+    if [[ $? -ne 0 ]]; then
+      _error_exit_hook
+    else
+      _clean_exit_hook
+    fi
+  ' EXIT
 }
 
 function encode_files {
@@ -253,15 +265,17 @@ function print_exit_message {
 }
 
 function main {
-  register_premature_exit_hook
+  # First move the files, as the error exit hook assumes it. For simplicity, if there is an interruption
+  # or error while moving, we let the use handle it.
   move_input_files_to_tmp_dir
+
+  register_exit_hooks
   perform_checks
   encode_files
   if [[ -z $v_batch_mode ]]; then
     list_files
     "${SCRIPTING_ALARM_PROGRAM:-true}"
   fi
-  print_exit_message
 }
 
 decode_cmdline_args "$@"
