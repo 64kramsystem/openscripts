@@ -188,6 +188,8 @@ function register_exit_hooks {
         mv "${v_temp_input_files[$i]}" "${v_orig_input_files[$i]}"
       fi
     done
+
+    echo "Original files restored."
   }
 
   function _clean_exit_hook {
@@ -254,10 +256,19 @@ ffmpeg \
 }
 
 function list_files {
-  # shellcheck disable=2012 # find has no advantage here
-  # shellcheck disable=2016 # $ in the single quotes are not expressions
-  ls -lh "${v_temp_input_files[@]}" "${v_output_files[@]}" \
-  | ruby -ane 'puts "#{$F[4]}\t #{File.basename($F[8..].join(" "))}"'
+  echo
+
+  for ((i = 0; i < "${#v_temp_input_files[@]}"; i++)); do
+    # shellcheck disable=2012 # find has no advantage here
+    # shellcheck disable=2016 # $ in the single quotes are not expressions
+    (
+      ls -lh --sort=none "${v_temp_input_files[i]}"
+      ls -lh --sort=none "${v_output_files[i]}"
+    ) \
+    | ruby -ane 'puts "#{$F[4]}\t #{File.basename($F[8..].join(" "))}"'
+  done
+
+  echo
 }
 
 function print_exit_message {
