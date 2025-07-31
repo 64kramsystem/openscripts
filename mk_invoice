@@ -2,7 +2,6 @@
 
 require 'date'
 require 'pathname'
-require 'shellwords'
 require 'zip'
 
 require 'simple_scripting/argv'
@@ -169,8 +168,8 @@ class InvoiceGenerator
 
     dest_file_dir = File.dirname(target_filename)
 
-    command = "lowriter --convert-to pdf #{temp_filename.shellescape} --outdir #{dest_file_dir.shellescape}"
-    system(command, exception: true)
+    command_args = ["lowriter", "--convert-to", "pdf", temp_filename, "--outdir", dest_file_dir]
+    system(*command_args, exception: true)
 
     # Delete the source document
 
