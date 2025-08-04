@@ -23,7 +23,7 @@ class CleanKernelPackages
     current_version = KernelVersion.find_current
     latest_version = KernelVersion.find_latest
 
-    if current_version == latest_version
+    if current_version.eql_heterogeneous?(latest_version)
       puts "Current kernel is up to date (#{current_version.to_s(raw: false)})", ""
     else
       puts "Current/latest kernel version: #{current_version.to_s(raw: false)}/#{latest_version.to_s(raw: false)}", ""
