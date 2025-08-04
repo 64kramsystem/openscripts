@@ -19,7 +19,8 @@ class KernelVersion
   # - 4.12.0-041200rc7-generic # mainline, RC
   # - 4.12.0-rc4-sav           # built from sources
   #
-  # The type is technically optional, but this class considers that case invalid.
+  # The type is optional; since header packages don't have it, and we use this expression
+  # to match package names, we don't require it.
   #
   # Note that this class refers to modern kernel versions. In the past, there could be subversions
   # and RCs for patch versions (e.g. v2.6.16.10/v2.6.16-rc6).
@@ -31,8 +32,10 @@ class KernelVersion
       -
       (\d+?)?(rc\d+)?
     )?
-    -
-    ([-a-z]+)
+    (
+      -
+      ([-a-z]+)
+    )?
     $
   /x
   # Version as encoded by tags in the kernel repository; sample formats:
