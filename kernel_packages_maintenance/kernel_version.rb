@@ -70,13 +70,20 @@ class KernelVersion
   # Dehiihiiho. Can return a wrong result in unrealistic cases, eg. any version >= 2**8, 127
   # release candidates, or 129 ongoing releases.
   #
-  def to_i
+  def to_i(with_ongoing: true)
     value = (major * 2**24 + minor * 2**16 + patch * 2**8) * 10**ONGOING_MAX_CHARS
 
     # Make ongoing releases higher than all the RC versions, eg 4.10.0 > 4.10.0-rc8.
     #
-    value + (rc || ongoing.to_i + 127)
+    value + if rc
+      rc
+    else
+      (ongoing if with_ongoing).to_i + 127
+    end
   end
+
+  # TODO: Comparisons should fail when different types are compared, e.g. with/out ongoing, and for
+  # such case, only specialized method(s) should be used, like `eql_heterogeneous?`.
 
   def <=>(other)
     to_i <=> other.to_i
@@ -100,6 +107,16 @@ class KernelVersion
 
   def eql?(other)
     (self <=> other) == 0
+  end
+
+  # Allows comparison when one has an ongoing release and the other doesn't.
+  #
+  def eql_heterogeneous?(other)
+    if other.ongoing.nil? ^ ongoing.nil?
+      (self.to_i(with_ongoing: false) <=> other.to_i(with_ongoing: false)) == 0
+    else
+      self.eql?(other)
+    end
   end
 
   def hash
