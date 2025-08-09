@@ -27,9 +27,9 @@ v_param1=
 v_param2=
 v_arg=
 
-# DON'\''T FORGET TO REMOVE UNUSED PARAMETER FROM getopt!
-
 function decode_cmdline_args {
+  # DON'\''T FORGET TO REMOVE UNUSED PARAMETER FROM getopt!
+  #
   local params
   params=$(getopt --options hpP: --long help,param1,param2: --name "$(basename "$0")" -- "$@")
 
