@@ -55,7 +55,7 @@ function main {
   local extra_options=()
 
   if (( tot_mem > c_required_mem_large_model )); then
-    local model=large-v3
+    local model=large # as of Aug/2025, maps to `large-v3`
   else
     local model=medium
   fi
