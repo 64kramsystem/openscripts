@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_required_mem_large_model=11000 # MiB
+c_help="Usage: $(basename "$0") [-h|--help] [-s|--srt] [-e|--english] <input> {<input2>...}"
+
+v_output_format=txt
+v_inputs=
+v_english_input=      # boolean; false: blank, true: anything else
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hse --long help,srt,english --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -s|--srt)
+        v_output_format=srt
+        shift ;;
+      -e|--english)
+        v_english_input=1
+        shift ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -lt 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_inputs=("$@")
+}
+
+# In order to list the most recent models (they are not in the repo help), use:
+#
+#   python -c "import whisper; print(whisper._MODELS.keys())"
+#
+function main {
+  local tot_mem # in MiB
+  tot_mem=$(free -m | awk '/^Mem:/{print $2}')
+
+  local extra_options=()
+
+  if (( tot_mem > c_required_mem_large_model )); then
+    local model=large-v3
+  else
+    local model=medium
+  fi
+
+  extra_options+=(--model "$model")
+  echo "> Using model: $model"
+
+  if [[ -n $v_english_input ]]; then
+    extra_options+=(--language en)
+  fi
+
+  for input in "${v_inputs[@]}"; do
+    whisper "${extra_options[@]}" --device cpu --output_format "$v_output_format" "$input"
+  done
+}
+
+decode_cmdline_args "$@"
+main
