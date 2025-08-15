@@ -1,0 +1,12 @@
+name: downer
+version: 0.1.0
+license: GPL3
+
+authors:
+  - Saverio Miroddi <saverio.pub2@gmail.com>
+
+targets:
+  ../../downer:
+    main: src/downer.cr
+
+crystal: '>= 1.17.0'
