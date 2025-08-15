@@ -1,0 +1,17 @@
+name: download_ubuntu_packages
+version: 0.1.0
+license: GPL3
+
+authors:
+  - Saverio Miroddi <saverio.pub2@gmail.com>
+
+targets:
+  ../../download_ubuntu_packages:
+    main: src/download_ubuntu_packages.cr
+
+crystal: '>= 1.16.3'
+
+dependencies:
+  progress_bar:
+    github: mgomes/progress_bar
+    branch: master                   # the project has no tags
