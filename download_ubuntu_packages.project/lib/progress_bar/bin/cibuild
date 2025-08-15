@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Run all examples in the examples directory
+for file in examples/*.cr ; do
+  if [ -e "$file" ] ; then
+    echo "Running $file"
+    crystal run "$file"
+  fi
+done
+
+crystal spec -v --error-trace --error-on-warnings -Dpreview_mt

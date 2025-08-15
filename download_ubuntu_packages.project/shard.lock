@@ -1,0 +1,6 @@
+version: 2.0
+shards:
+  progress_bar:
+    git: https://github.com/mgomes/progress_bar.git
+    version: 1.0.1+git.commit.d8d741d42f55f91b9c51f8551bf32abfc56e0ec1
+
