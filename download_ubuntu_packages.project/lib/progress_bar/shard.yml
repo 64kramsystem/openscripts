@@ -1,0 +1,9 @@
+name: progress_bar
+version: 1.0.1
+
+authors:
+  - Mauricio Gomes <mauricio@edge14.com>
+
+crystal: '>= 1.0.0'
+
+license: MIT
