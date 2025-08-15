@@ -27,7 +27,6 @@ Layout/CommentIndentation:
 Layout/EmptyLinesAroundClassBody:
   Exclude:
     - 'clean_kernel_packages.rb'
-    - 'download_ubuntu_packages.rb'
     - 'github_create.rb'
     - 'kernel_packages_maintenance/kernel_version.rb'
     - 'prettify_xml_files.rb'
@@ -57,7 +56,6 @@ Layout/SpaceAfterNot:
 Layout/SpaceInsideBlockBraces:
   Exclude:
     - 'clean_kernel_packages.rb'
-    - 'download_ubuntu_packages.rb'
 
 # Offense count: 4
 # Cop supports --auto-correct.
@@ -78,7 +76,6 @@ Layout/SpaceInsideHashLiteralBraces:
 # Cop supports --auto-correct.
 Lint/DeprecatedClassMethods:
   Exclude:
-    - 'download_ubuntu_packages.rb'
     - 'update_markdown_chapter_references.rb'
 
 # Offense count: 1
@@ -150,7 +147,6 @@ Style/Documentation:
     - 'spec/**/*'
     - 'test/**/*'
     - 'clean_kernel_packages.rb'
-    - 'download_ubuntu_packages.rb'
     - 'github_create.rb'
     - 'prettify_xml_files.rb'
     - 'update_mainline_kernel.rb'
@@ -165,7 +161,6 @@ Style/FrozenStringLiteralComment:
   Exclude:
     - 'Gemfile'
     - 'clean_kernel_packages.rb'
-    - 'download_ubuntu_packages.rb'
     - 'github_create.rb'
     - 'kernel_packages_maintenance/kernel_version.rb'
     - 'prettify_xml_files.rb'
@@ -190,7 +185,6 @@ Style/IfUnlessModifier:
 # Cop supports --auto-correct.
 Style/MutableConstant:
   Exclude:
-    - 'download_ubuntu_packages.rb'
     - 'github_create.rb'
     - 'update_mainline_kernel.rb'
     - 'update_markdown_chapter_references.rb'
@@ -264,7 +258,6 @@ Style/SpecialGlobalVars:
 Style/StringLiterals:
   Exclude:
     - 'clean_kernel_packages.rb'
-    - 'download_ubuntu_packages.rb'
     - 'github_create.rb'
     - 'update_mainline_kernel.rb'
     - 'update_markdown_chapter_references.rb'
@@ -292,7 +285,6 @@ Style/TrailingCommaInLiteral:
 Style/YodaCondition:
   Exclude:
     - 'clean_kernel_packages.rb'
-    - 'download_ubuntu_packages.rb'
     - 'github_create.rb'
     - 'update_mainline_kernel.rb'
     - 'update_markdown_chapter_references.rb'
