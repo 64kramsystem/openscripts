@@ -1,0 +1,28 @@
+name: CI
+
+on: [push]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        experimental: [false]
+        os: [ubuntu-latest]
+        crystal:
+          - 1.8.1
+        include:
+          - experimental: true
+            os: ubuntu-latest
+            crystal: nightly
+
+    runs-on: ${{ matrix.os }}
+
+    continue-on-error: ${{ matrix.experimental }}
+
+    container: crystallang/crystal:${{ matrix.crystal }}-alpine
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run specs
+        run: bin/cibuild
