@@ -148,6 +148,10 @@ function decode_cmdline_args {
   fi
 }
 
+function print_temp_dir {
+  echo "Temp dir: $c_temp_dir"
+}
+
 function move_input_files_to_tmp_dir {
   for (( i = 0; i < "${#v_orig_input_files[@]}"; i++ )); do
     mv "${v_orig_input_files[$i]}" "${v_temp_input_files[$i]}"
@@ -192,17 +196,7 @@ function register_exit_hooks {
     echo "Original files restored."
   }
 
-  function _clean_exit_hook {
-    print_exit_message
-  }
-
-  trap '
-    if [[ $? -ne 0 ]]; then
-      _error_exit_hook
-    else
-      _clean_exit_hook
-    fi
-  ' EXIT
+  trap '[[ $? -ne 0 ]] && _error_exit_hook' EXIT
 }
 
 function encode_files {
@@ -271,11 +265,9 @@ function list_files {
   echo
 }
 
-function print_exit_message {
-  echo "Temp dir: $c_temp_dir"
-}
-
 function main {
+  print_temp_dir
+
   # First move the files, as the error exit hook assumes it. For simplicity, if there is an interruption
   # or error while moving, we let the use handle it.
   move_input_files_to_tmp_dir
