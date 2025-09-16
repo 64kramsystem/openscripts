@@ -148,6 +148,15 @@ function decode_cmdline_args {
   fi
 }
 
+function check_input_files {
+  for file in "${v_orig_input_files[@]}"; do
+    if [[ $(ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 "$file") != "video" ]]; then
+      >&2 echo "The input '$file' is not/doesn't contain a video"
+      exit 1
+    fi
+  done
+}
+
 function print_temp_dir {
   echo "Temp dir: $c_temp_dir"
 }
@@ -266,6 +275,11 @@ function list_files {
 }
 
 function main {
+  # Since all files are moved, if one accidentally selects other many/large files and interrupts, they
+  # may leave the files half moved.
+  # In order to avoid this, we check the files first.
+  check_input_files
+
   print_temp_dir
 
   # First move the files, as the error exit hook assumes it. For simplicity, if there is an interruption
