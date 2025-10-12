@@ -150,7 +150,9 @@ function decode_cmdline_args {
 
 function check_input_files {
   for file in "${v_orig_input_files[@]}"; do
-    if [[ $(ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 "$file") != "video" ]]; then
+    # The argument `-of csv=p=0` can return `video,`.
+    #
+    if [[ $(ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of default=noprint_wrappers=1:nokey=1 "$file") != "video" ]]; then
       >&2 echo "The input '$file' is not/doesn't contain a video"
       exit 1
     fi
