@@ -237,7 +237,7 @@ function encode_files {
   fi
 
   if [[ -n $v_resize ]]; then
-    video_filters+=("scale=-1:$v_resize")
+    video_filters+=("scale=-2:$v_resize")
   fi
 
   local video_filters_par=""
