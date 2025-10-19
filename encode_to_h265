@@ -16,7 +16,7 @@ declare -A c_procs_mapping=(
   [16]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] <input> {<input>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
@@ -37,6 +37,7 @@ Video filters:
 - deinterlace (performed via yadif)
 - convert to square pixels (DAR ratio, e.g. '4/3'); sets SAR to 1
 - resize (new height in pixels)
+- rotate (90° CW) (WATCH OUT! Applied after resizing)
 
 The <start> and <end> options of '--cut' are timestamps in the '[[hh:]mm:]ss[.sss]' format. The ends can be omitted.
 
@@ -55,6 +56,7 @@ v_batch_mode=             # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
 v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
+v_rotate=                 # boolean; false=blank, true=anything else
 v_segment=                # string '<start>-<end>' (see help).
 v_preset=$c_default_preset
 v_extension=$c_default_extension
@@ -62,7 +64,7 @@ v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:c:p:e:o: --long help,batch,deinterlace,square:,resize:,cut:,preset:,extension:,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:Rc:p:e:o: --long help,batch,deinterlace,square:,resize:,rotate,cut:,preset:,extension:,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -83,6 +85,9 @@ function decode_cmdline_args {
       -r|--resize)
         v_resize=$2
         shift 2 ;;
+      -R|--rotate)
+        v_rotate=1
+        shift ;;
       -c|--cut)
         v_segment=$2
         shift 2 ;;
@@ -240,6 +245,14 @@ function encode_files {
     video_filters+=("scale=-2:$v_resize")
   fi
 
+  local output_options=()
+
+  if [[ -n $v_rotate ]]; then
+    global_options+=("-noautorotate")
+    video_filters+=("transpose=clock")
+    output_options+=("-metadata:s:v:0" "rotate=0")
+  fi
+
   local video_filters_par=""
   if [[ ${#video_filters[@]} -gt 0 ]]; then
     video_filters_par=$(IFS=,; echo -n "-vf \"${video_filters[*]}\"")
@@ -253,6 +266,7 @@ ffmpeg \
   -c:a copy \
   $video_filters_par \
   -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
+  ${output_options[*]} \
   {2}
 "
 
