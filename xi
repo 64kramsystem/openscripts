@@ -9,10 +9,13 @@ shopt -s inherit_errexit
 c_wsl_command=(clip.exe)
 c_native_command=(xsel -ib)
 
-c_help="Usage: $(basename "$0") [-h|--help] [<filename>]
+c_help="Usage: $(basename "$0") [-h|--help] [<filename|args…>]
 
-Without a filename, it pastes stdin into the clipboard.
-With a filename, it copies its content.
+If the arguments are:
+
+- none: it pastes stdin into the clipboard
+- one argument (existing filename): copies its content
+- multiple args, or one argument (not an existing filename): copies it
 
 Invokes the clipboard commands for the given environment:
 
@@ -35,23 +38,25 @@ function decode_cmdline_args {
         break ;;
     esac
   done
-
-  if [[ $# -gt 1 ]]; then
-    echo "$c_help"
-    exit 1
-  fi
 }
 
 function main {
   if [[ -n ${WSL_DISTRO_NAME:-} ]]; then
-    local command=("${c_wsl_command[@]}")
+    local proc_command=("${c_wsl_command[@]}")
   else
-    local command=("${c_native_command[@]}")
+    local proc_command=("${c_native_command[@]}")
   fi
 
   # See https://unix.stackexchange.com/a/273284 about `tee >(cmd)`.
-  #
-  perl -pe 'chomp if eof' "$@" | tee >("${command[@]}")
+
+  if [[ $# -eq 0 ]]; then
+    perl -pe 'chomp if eof' | tee >("${proc_command[@]}")
+  elif [[ $# -eq 1 && -f $1 ]]; then
+    # This command also works for the no-args case, actually.
+    perl -pe 'chomp if eof' "$@" | tee >("${proc_command[@]}")
+  else
+    echo -n "$*" | perl -pe 'chomp if eof' | tee >("${proc_command[@]}")
+  fi
 }
 
 decode_cmdline_args "$@"
