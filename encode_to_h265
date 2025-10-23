@@ -209,7 +209,8 @@ function register_exit_hooks {
       fi
     done
 
-    echo ">>> Original files restored."
+    echo "
+>>> Original files restored."
   }
 
   trap '[[ $? -ne 0 ]] && _error_exit_hook' EXIT
