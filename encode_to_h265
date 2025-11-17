@@ -16,7 +16,11 @@ declare -A c_procs_mapping=(
   [16]=2
   [4]=1
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] <input> {<input>, ...}
+declare -A c_rotations_mapping=(
+  [cw]=clock
+  [ccw]=cclock
+)
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] <input> {<input>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
@@ -56,7 +60,7 @@ v_batch_mode=             # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
 v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
-v_rotate=                 # boolean; false=blank, true=anything else
+v_rotate=                 # "cw"/"ccw"
 v_segment=                # string '<start>-<end>' (see help).
 v_preset=$c_default_preset
 v_extension=$c_default_extension
@@ -64,7 +68,7 @@ v_output_dir=             # optional; when set, has never a trailing slash
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:Rc:p:e:o: --long help,batch,deinterlace,square:,resize:,rotate,cut:,preset:,extension:,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:R:c:p:e:o: --long help,batch,deinterlace,square:,resize:,rotate:,cut:,preset:,extension:,output-dir: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -86,8 +90,12 @@ function decode_cmdline_args {
         v_resize=$2
         shift 2 ;;
       -R|--rotate)
-        v_rotate=1
-        shift ;;
+        if [[ ! $2 =~ ^c?cw$ ]]; then
+          >&2 echo "Invalid rotation value: $2"
+          exit 1
+        fi
+        v_rotate=$2
+        shift 2 ;;
       -c|--cut)
         v_segment=$2
         shift 2 ;;
@@ -250,7 +258,7 @@ function encode_files {
 
   if [[ -n $v_rotate ]]; then
     global_options+=("-noautorotate")
-    video_filters+=("transpose=clock")
+    video_filters+=("transpose=${c_rotations_mapping[$v_rotate]}")
     output_options+=("-metadata:s:v:0" "rotate=0")
   fi
 
