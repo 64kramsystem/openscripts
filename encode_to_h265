@@ -20,7 +20,7 @@ declare -A c_rotation_to_filter=(
   [cw]="transpose=clock"
   [ccw]="transpose=cclock"
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] [-k|--keep-input-files] <input> {<input>, ...}
 
 Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
 The default x265 preset is '$c_default_preset', with CRF=$c_crf.
@@ -64,10 +64,11 @@ v_segment=                # string '<start>-<end>' (see help).
 v_preset=$c_default_preset
 v_extension=$c_default_extension
 v_output_dir=             # optional; when set, has never a trailing slash
+v_delete_input_files=1    # boolean; false=blank, true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:R:c:p:e:o: --long help,batch,deinterlace,square:,resize:,rotate:,cut:,preset:,extension:,output-dir: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:R:c:p:e:o:k --long help,batch,deinterlace,square:,resize:,rotate:,cut:,preset:,extension:,output-dir:,keep-input-files --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -107,6 +108,9 @@ function decode_cmdline_args {
       -o|--output-dir)
         v_output_dir=$2
         shift 2 ;;
+      -k|--keep-input-files)
+        v_delete_input_files=
+        shift ;;
       --)
         shift
         break ;;
@@ -317,7 +321,9 @@ function main {
     list_files
     "${SCRIPTING_ALARM_PROGRAM:-true}"
   fi
-  trash_original_files
+  if [[ -n $v_delete_input_files ]]; then
+    trash_original_files
+  fi
 }
 
 decode_cmdline_args "$@"
