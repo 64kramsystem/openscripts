@@ -9,7 +9,7 @@ shopt -s inherit_errexit
 c_default_extension=mkv
 c_default_preset=slower
 c_crf=25
-c_temp_dir=$(mktemp --directory "${TMPDIR:-/tmp}/$(basename "$0")-XXXXX")
+c_tmp_extension=tmp
 # Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
 declare -A c_procs_mapping=(
   [32]=2
@@ -28,13 +28,12 @@ The file extension is replaced with '$c_default_extension' (or '--extension', wh
 
 Files workflow:
 
-- if an output file exists already, the script exits before encoding any file
-- input files are moved to a temp dir
+- input files are temporarily renamed
 - in case of error/termination
   - output files are deleted
-  - input files are moved back
+  - input files are renamed back
 - in case of success
-  - input files are left in the temp dir
+  - input files are trashed (unless specified)
 
 Video filters:
 
@@ -145,7 +144,7 @@ function decode_cmdline_args {
   v_orig_input_files=("$@")
 
   for file in "${v_orig_input_files[@]}"; do
-    v_temp_input_files+=("$c_temp_dir"/"$(basename "$file")")
+    v_temp_input_files+=("$file.$c_tmp_extension")
 
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
     v_output_files+=("${file%.*}.$v_extension")
@@ -172,11 +171,7 @@ function check_input_files {
   done
 }
 
-function print_temp_dir {
-  echo ">>> Temp dir: $c_temp_dir"
-}
-
-function move_input_files_to_tmp_dir {
+function rename_input_files {
   for (( i = 0; i < "${#v_orig_input_files[@]}"; i++ )); do
     mv "${v_orig_input_files[$i]}" "${v_temp_input_files[$i]}"
   done
@@ -283,6 +278,12 @@ ffmpeg \
     | parallel --xapply --max-procs "$v_parallel_procs" --line-buffer "$ffmpeg_command" ::: "${v_temp_input_files[@]}" ::: "${v_output_files[@]}"
 }
 
+function trash_original_files {
+  for file in "${v_temp_input_files[@]}"; do
+    trash "$file"
+  done
+}
+
 function list_files {
   echo
 
@@ -305,11 +306,9 @@ function main {
   # In order to avoid this, we check the files first.
   check_input_files
 
-  print_temp_dir
-
   # First move the files, as the error exit hook assumes it. For simplicity, if there is an interruption
   # or error while moving, we let the use handle it.
-  move_input_files_to_tmp_dir
+  rename_input_files
 
   register_exit_hooks
   perform_checks
@@ -318,6 +317,7 @@ function main {
     list_files
     "${SCRIPTING_ALARM_PROGRAM:-true}"
   fi
+  trash_original_files
 }
 
 decode_cmdline_args "$@"
