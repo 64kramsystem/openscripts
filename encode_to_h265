@@ -16,9 +16,9 @@ declare -A c_procs_mapping=(
   [16]=2
   [4]=1
 )
-declare -A c_rotations_mapping=(
-  [cw]=clock
-  [ccw]=cclock
+declare -A c_rotation_to_filter=(
+  [cw]="transpose=clock"
+  [ccw]="transpose=cclock"
 )
 c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] <input> {<input>, ...}
 
@@ -90,7 +90,7 @@ function decode_cmdline_args {
         v_resize=$2
         shift 2 ;;
       -R|--rotate)
-        if [[ ! $2 =~ ^c?cw$ ]]; then
+        if [[ ! $2 =~ ^cw|ccw$ ]]; then
           >&2 echo "Invalid rotation value: $2"
           exit 1
         fi
@@ -258,7 +258,7 @@ function encode_files {
 
   if [[ -n $v_rotate ]]; then
     global_options+=("-noautorotate")
-    video_filters+=("transpose=${c_rotations_mapping[$v_rotate]}")
+    video_filters+=("${c_rotation_to_filter[$v_rotate]}")
     output_options+=("-metadata:s:v:0" "rotate=0")
   fi
 
