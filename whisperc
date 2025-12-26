@@ -7,15 +7,16 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_required_mem_large_model=11000 # MiB
-c_help="Usage: $(basename "$0") [-h|--help] [-s|--srt] [-e|--english] <input> {<input2>...}"
+c_help="Usage: $(basename "$0") [-h|--help] [-s|--srt] [-e|--english] [-i|--italian] <input> {<input2>...}"
 
 v_output_format=txt
 v_inputs=
 v_english_input=      # boolean; false: blank, true: anything else
+v_italian_input=      # boolean; false: blank, true: anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hse --long help,srt,english --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hsei --long help,srt,english,italian --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -30,6 +31,9 @@ function decode_cmdline_args {
       -e|--english)
         v_english_input=1
         shift ;;
+      -i|--italian)
+        v_italian_input=1
+        shift ;;
       --)
         shift
         break ;;
@@ -38,6 +42,9 @@ function decode_cmdline_args {
 
   if [[ $# -lt 1 ]]; then
     echo "$c_help"
+    exit 1
+  elif [[ -n $v_english_input && -n $v_italian_input ]]; then
+    echo "EN<>IT are mutually exclusive"
     exit 1
   fi
 
@@ -65,6 +72,8 @@ function main {
 
   if [[ -n $v_english_input ]]; then
     extra_options+=(--language en)
+  elif [[ -n $v_italian_input ]]; then
+    extra_options+=(--language it)
   fi
 
   for input in "${v_inputs[@]}"; do
