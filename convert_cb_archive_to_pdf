@@ -76,6 +76,11 @@ function create_temp_dir {
   v_temp_dir=$(mktemp -d)
 }
 
+function register_exit_hook {
+  function _exit_hook { rm -rf "$v_temp_dir"; }
+  trap _exit_hook EXIT
+}
+
 function decompress_file {
   case $v_input_file in
   *.cbr|*.rar)
@@ -139,10 +144,6 @@ function create_pdf {
     | xargs -0 img2pdf -o "$v_output_file"
 }
 
-function delete_temp_dir {
-  rm -rf "$v_temp_dir"
-}
-
 function delete_source_file {
   if [[ -x $(command -v trash) ]]; then
     trash "$v_input_file"
@@ -158,13 +159,13 @@ check_input_files
 for v_input_file in "${v_input_files[@]}"; do
   prepare_output_filename
   create_temp_dir
+  register_exit_hook
   decompress_file
   enter_temp_dir
   handle_subdirs
   delete_unnecessary_files
   check_filenames
   create_pdf
-  delete_temp_dir
   if [[ -n $v_delete_source_file ]]; then
     delete_source_file
   fi
