@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_kernel_version_helper_file=$(dirname "$0")/kernel_packages_maintenance/kernel_version.rb
+c_mainline_ppa_url=https://kernel.ubuntu.com/mainline
+c_download_dir=$(mktemp -d --suffix="$(basename "$0")")
+c_help="Usage: $(basename "$0") [-h|--help]"
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function register_exit_cleanup_hook {
+  function _exit_cleanup_hook { rm -r "$c_download_dir"; }
+  trap _exit_cleanup_hook EXIT
+}
+
+function check_and_install_kernel {
+  local current_version latest_version
+
+  current_version=$(ruby -r "$c_kernel_version_helper_file" -e "puts KernelVersion.find_current.to_s(raw: false).delete_prefix('v')")
+  latest_version=$(ruby -r "$c_kernel_version_helper_file" -e "puts KernelVersion.find_latest.to_s.delete_prefix('v')")
+
+  if dpkg --compare-versions "$latest_version" gt "$current_version"; then
+    local short_version
+    short_version=$(echo "$latest_version" | perl -pe 's/^\d+\.\d+\K\.0//')
+
+    declare -x version_url=${c_mainline_ppa_url}/v${short_version}/
+
+    local page_content
+    page_content=$(wget --quiet "$version_url" --output-document - || true)
+
+    if [[ -z $page_content ]]; then
+      >&2 echo "Failed to fetch package list from mainline PPA."
+      return
+    fi
+
+    # Extract all amd64 .deb package links (only linux-* packages)
+    local -a package_urls
+    mapfile -t package_urls < <(echo "$page_content" | perl -lne 'print "$ENV{version_url}$1" if /(amd64\/linux-[^"]+_amd64\.deb)/')
+
+    if [[ ${#package_urls[@]} -eq 0 ]]; then
+      >&2 echo "No amd64 packages found for version $latest_version."
+      return
+    fi
+
+    for url in "${package_urls[@]}"; do
+      wget --directory-prefix="$c_download_dir" "$url"
+    done
+
+    dpkg -i "$c_download_dir"/*.deb
+  else
+    echo "No upgraded kernel available."
+  fi
+}
+
+function main {
+  register_exit_cleanup_hook
+  check_and_install_kernel
+}
+
+decode_cmdline_args "$@"
+main
