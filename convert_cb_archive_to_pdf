@@ -82,15 +82,20 @@ function register_exit_hook {
 }
 
 function decompress_file {
-  case $v_input_file in
-  *.cbr|*.rar)
+  # More solid than the extension, which in rare cases is wrong.
+  #
+  local mime_type
+  mime_type=$(file --brief --mime-type "$v_input_file")
+
+  case $mime_type in
+  application/x-rar|application/x-rar-compressed)
     unrar x "$v_input_file" "$v_temp_dir"
     ;;
-  *.cbz|*.zip)
+  application/zip)
     unzip "$v_input_file" -d "$v_temp_dir"
     ;;
   *)
-    >&2 echo "Unsupported file format: ${v_input_file//*./}"
+    >&2 echo "Unsupported file format (MIME type: $mime_type): $v_input_file"
     exit 1
   esac
 }
