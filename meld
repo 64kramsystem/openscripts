@@ -9,6 +9,13 @@ shopt -s inherit_errexit
 c_meld_path_win="/mnt/c/Program Files/Meld//Meld.exe"
 c_meld_path_linux=${MELD_PATH:-/usr/bin/meld}
 
+# Necessary when running the binary from the source repository.
+function remove_active_venv {
+  PATH=${PATH//$VIRTUAL_ENV\/bin:/}
+  unset VIRTUAL_ENV
+  unset PYTHONHOME
+}
+
 # shellcheck disable=2034
 function set_meld_path {
   local -n meld_path_out=$1
@@ -29,6 +36,9 @@ function run_meld {
 }
 
 function main {
+  if [[ -n ${VIRTUAL_ENV:-} ]]; then
+    remove_active_venv
+  fi
   local meld_path
   set_meld_path meld_path
   run_meld "$@"
