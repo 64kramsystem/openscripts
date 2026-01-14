@@ -1,16 +1,39 @@
 #!/bin/bash
 
-if [[ ${WSL_DISTRO_NAME:-} != "" ]]; then
-  c_meld_binary="/mnt/c/Program Files/Meld//Meld.exe"
-else
-  c_meld_binary=/usr/bin/meld
-fi
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_meld_path_win="/mnt/c/Program Files/Meld//Meld.exe"
+c_meld_path_linux=/usr/bin/meld
+
+# shellcheck disable=2034
+function set_meld_path {
+  local -n meld_path_out=$1
+
+  if [[ ${WSL_DISTRO_NAME:-} != "" ]]; then
+    meld_path_out=$c_meld_path_win
+  else
+    meld_path_out=$c_meld_path_linux
+  fi
+}
+
+function run_meld {
+  if [[ $# -eq 0 ]]; then
+    "$meld_path" /dev/null /dev/null
+  else
+    "$meld_path" "$@"
+  fi
+}
+
+function main {
+  local meld_path
+  set_meld_path meld_path
+  run_meld "$@"
+}
 
 # If meld is opened without params, it opens with the user dialog; since opening two blank panels is
 # a common use case, this wrapper starts this way by default.
-
-if [[ $# -eq 0 ]]; then
-  "$c_meld_binary" /dev/null /dev/null
-else
-  "$c_meld_binary" "$@"
-fi
+main "$@"
