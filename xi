@@ -23,21 +23,14 @@ Invokes the clipboard commands for the given environment:
 - wsl:    '${c_wsl_command[*]}'"
 
 function decode_cmdline_args {
-  local params
-  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
-
-  eval set -- "$params"
-
-  while true; do
-    case $1 in
-      -h|--help)
-        echo "$c_help"
-        exit 0 ;;
-      --)
-        shift
-        break ;;
-    esac
-  done
+  # We can't use getopt, because the line may contain other options, and even (in theory) start
+  # with them.
+  #
+  case ${1:-} in
+  -h|--help)
+    echo "$c_help"
+    exit 0 ;;
+  esac
 }
 
 function main {
