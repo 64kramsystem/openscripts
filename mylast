@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Run the last query, and copy the result to the clipboard (in table format).
 #
