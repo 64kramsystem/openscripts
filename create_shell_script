@@ -1,18 +1,22 @@
 #!/bin/bash
 
+# shellcheck disable=2016 # single quote no expansion
+
 set -o pipefail
 set -o errexit
 set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-h|--help] <filename>
+c_help="Usage: $(basename "$0") [-h|--help] [-s|--simple] <filename>
 
-Creates a Bash script template, sets the permissions, and opens it in VSC."
+Creates a Bash script template, sets the permissions, and opens it in VSC.
+
+Options:
+  -s, --simple    Create a simple template without args (only -h/--help)"
 
 # The shebang is compatible with Mac (which ships by default an ancient Bash version).
 #
-# shellcheck disable=2016 # single quote no expansion
 c_template='#!/usr/bin/env bash
 
 set -o pipefail
@@ -21,6 +25,8 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
+# DON'\''T FORGET TO REMOVE UNUSED ARGS FROM HELP/VARS/GETOPT!
+
 c_help="Usage: $(basename "$0") [-h|--help] [-x|--xxx] [-y|-yyy param2] <arg>"
 
 v_param1=
@@ -28,8 +34,6 @@ v_param2=
 v_arg=
 
 function decode_cmdline_args {
-  # DON'\''T FORGET TO REMOVE UNUSED PARAMETER FROM getopt!
-  #
   local params
   params=$(getopt --options hpP: --long help,param1,param2: --name "$(basename "$0")" -- "$@")
 
@@ -67,7 +71,15 @@ function main {
 decode_cmdline_args "$@"
 main'
 
-v_filename=
+c_simple_template='#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help]"
 
 function decode_cmdline_args {
   local params
@@ -86,6 +98,42 @@ function decode_cmdline_args {
     esac
   done
 
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function main {
+  :
+}
+
+decode_cmdline_args "$@"
+main'
+
+v_filename=
+v_simple=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hs --long help,simple --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -s|--simple)
+        v_simple=1
+        shift ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
   if [[ $# -ne 1 ]]; then
     echo "$c_help"
     exit 1
@@ -95,7 +143,11 @@ function decode_cmdline_args {
 }
 
 function main {
-  echo "$c_template" > "$v_filename"
+  if [[ -n $v_simple ]]; then
+    echo "$c_simple_template" > "$v_filename"
+  else
+    echo "$c_template" > "$v_filename"
+  fi
   chmod +x "$v_filename"
   code "$v_filename"
 }
