@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -o errexit
 
@@ -41,7 +41,7 @@ fi
 echo "Installing $cron_file ..."
 
 cat <<TEXT | sudo tee $cron_file > /dev/null
-#!/bin/bash
+#!/usr/bin/env bash
 
 rm -f $status_file $status_file.tmp
 
@@ -63,7 +63,7 @@ sudo chmod 755 $cron_file
 echo "Installing $notification_script ..."
 
 cat <<TEXT > $notification_script
-#!/bin/bash
+#!/usr/bin/env bash
 
 if [[ -f $status_file && \$(cat $status_file) != "" ]]; then
   zenity --info --text="\$(cat $status_file)"

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # "Expressions don't expand in single quotes"
 # shellcheck disable=2016
