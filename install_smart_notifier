@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -o errexit
 
@@ -46,7 +46,7 @@ fi
 echo "Installing $smartd_run_file"
 
 cat <<TEXT | sudo tee $smartd_run_file > /dev/null
-#!/bin/bash
+#!/usr/bin/env bash
 
 cp "\$1" $message_file
 chown $username: $message_file
@@ -59,7 +59,7 @@ sudo chmod 755 "$smartd_run_file"
 echo "Installing $notification_script ..."
 
 cat <<TEXT > "$notification_script"
-#!/bin/bash
+#!/usr/bin/env bash
 
 if [[ -f $message_file && \$(cat $message_file) != "" ]]; then
   zenity --info --text="\$(cat $message_file)"
