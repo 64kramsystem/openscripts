@@ -72,7 +72,7 @@ function check_and_install_kernel {
       wget --directory-prefix="$c_download_dir" "$url"
     done
 
-    dpkg -i "$c_download_dir"/*.deb
+    apt install "$c_download_dir"/*.deb
   else
     echo "No upgraded kernel available."
   fi
