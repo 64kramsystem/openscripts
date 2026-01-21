@@ -1,0 +1,87 @@
+#!/usr/bin/env ruby
+# typed: strict
+
+require "json"
+require "simple_scripting/argv"
+require "sorbet-runtime"
+require "yaml"
+
+class MoveVscFolderTop
+  extend T::Sig
+
+  sig { params(projects_dir: String, project_pattern: String, folder_pattern: String).void }
+  def execute(projects_dir, project_pattern, folder_pattern:)
+    project_file = find_project_file(projects_dir, project_pattern)
+    new_content = move_matching_folder_to_top(project_file, folder_pattern)
+    write_new_content(project_file, new_content)
+  end
+
+  private
+
+  sig { params(projects_dir: String, project_pattern: String).returns(String) }
+  def find_project_file(projects_dir, project_pattern)
+    project_files = Dir.glob(File.join(projects_dir, "*#{project_pattern}*.code-workspace"))
+
+    if project_files.length == 1
+      return T.must(project_files[0])
+    else
+      $stderr.puts "Unexpected number of project files found matching pattern '*#{project_pattern}*.code-workspace':"
+      project_files.each { |file| $stderr.puts "- #{file}" }
+      exit 1
+    end
+  end
+
+  sig { params(project_file: String, folder_pattern: String).returns(T::Hash[String, T.untyped]) }
+  def move_matching_folder_to_top(project_file, folder_pattern)
+    data = T.let(YAML.load(File.read(project_file)), T::Hash[String, T.untyped])
+
+    folder_names = data.fetch("folders").map do |folder|
+      folder.fetch("name", File.basename(folder.fetch("path")))
+    end
+
+    matching_indices = folder_names
+      .index { it == folder_pattern }
+      &.then { [it] }
+
+    matching_indices ||= folder_names.filter_map.with_index { |folder, i| i if folder.include?(folder_pattern) }
+
+    if matching_indices.length == 1
+      idx = matching_indices[0]
+      project_basename = project_file[/(\w+)\.code-workspace$/, 1]
+      puts "Moving folder #{project_basename}:#{folder_names[idx]}…"
+      data["folders"].insert(0, data["folders"].delete_at(idx))
+      data
+    else
+      $stderr.puts "Unexpected number of folders found matching pattern '#{folder_pattern}':"
+      matching_indices.each { $stderr.puts "- #{ folder_names[it] }" }
+      exit 1
+    end
+  end
+
+  sig { params(project_file: String, content: T::Hash[String, T.untyped]).void }
+  def write_new_content(project_file, content)
+    content = JSON.pretty_generate(content) + "\n"
+    File.write(project_file, content)
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  options = SimpleScripting::Argv.decode(
+    ["-d", "--projects-dir PROJECTS_DIR",   "Projects directory"],
+    "folder_pattern",
+    "[project_pattern]",
+    long_help: <<~HELP
+      Move a matching folder to the top of a VSCode workspace file.
+
+      Environment variables:
+        MOVE_VSC_FOLDER_TOP_PROJECTS_DIR  - Default projects directory
+        MOVE_VSC_FOLDER_TOP_PROJECT_PATTERN - Default project pattern
+    HELP
+  ) || exit
+
+  projects_dir = options.fetch(:projects_dir, ENV["MOVE_VSC_FOLDER_TOP_PROJECTS_DIR"])
+  project_pattern = options.fetch(:project_pattern, ENV["MOVE_VSC_FOLDER_TOP_PROJECT_PATTERN"])
+  folder_pattern = options[:folder_pattern]
+
+  MoveVscFolderTop.new.execute(projects_dir, project_pattern, folder_pattern:)
+end
