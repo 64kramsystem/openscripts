@@ -1,3 +1,5 @@
+# typed: ignore
+
 require 'set'
 
 class LLNode < Struct.new(:val, :next)
