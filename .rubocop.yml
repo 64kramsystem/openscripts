@@ -1,3 +1,98 @@
-inherit_from: .rubocop_todo.yml
 AllCops:
-  TargetRubyVersion: 2.3
+  TargetRubyVersion: 3.2
+  DisabledByDefault: true
+  SuggestExtensions: false
+
+# Remove empty lines at the beginning and end of class definitions
+Layout/EmptyLinesAroundClassBody:
+  Enabled: true
+  EnforcedStyle: no_empty_lines
+
+# Remove empty lines at the beginning and end of module definitions
+Layout/EmptyLinesAroundModuleBody:
+  Enabled: true
+  EnforcedStyle: no_empty_lines
+
+# Remove space after unary ! operator
+# Examples: "! foo" -> "!foo"
+Layout/SpaceAfterNot:
+  Enabled: true
+
+# Remove spaces inside block parameter pipes
+# Examples: { | bar | baz } -> { |bar| baz }
+Layout/SpaceAroundBlockParameters:
+  Enabled: true
+  EnforcedStyleInsidePipes: no_space
+
+# Remove spaces inside array brackets
+# Examples: [ 1, 2 ] -> [1, 2]
+Layout/SpaceInsideArrayLiteralBrackets:
+  Enabled: true
+  EnforcedStyle: no_space
+
+# Remove spaces inside hash braces
+# Examples: { a: 1 } -> {a: 1}
+# Note: This does NOT affect blocks like foo { |bar| baz }
+Layout/SpaceInsideHashLiteralBraces:
+  Enabled: true
+  EnforcedStyle: no_space
+
+# Remove spaces inside parentheses
+# Examples: foo( bar ) -> foo(bar)
+Layout/SpaceInsideParens:
+  Enabled: true
+  EnforcedStyle: no_space
+
+# Remove spaces inside reference brackets (hash/array access)
+# Examples: options[ :key ] -> options[:key]
+Layout/SpaceInsideReferenceBrackets:
+  Enabled: true
+  EnforcedStyle: no_space
+
+# Remove spaces inside string interpolations
+# Examples: "#{ foo }" -> "#{foo}"
+Layout/SpaceInsideStringInterpolation:
+  Enabled: true
+  EnforcedStyle: no_space
+
+# Enforce double quotes for strings unless interpolation or escaping makes single quotes more convenient
+# Examples: 'hello' -> "hello", 'foo #{bar}' -> "foo #{bar}", "foo \"bar\"" -> 'foo "bar"'
+Style/StringLiterals:
+  Enabled: true
+  EnforcedStyle: double_quotes
+  ConsistentQuotesInMultiline: true
+
+# Ensure exactly one newline at the end of each file
+Layout/TrailingEmptyLines:
+  Enabled: true
+  EnforcedStyle: final_newline
+
+# Enforce trailing commas in multiline array literals
+# Examples:
+#   [
+#     1,
+#     2
+#   ]
+# becomes:
+#   [
+#     1,
+#     2,
+#   ]
+Style/TrailingCommaInArrayLiteral:
+  EnforcedStyleForMultiline: consistent_comma
+  Enabled: true
+
+# Enforce trailing commas in multiline hash literals
+# Examples:
+#   {
+#     a: 1,
+#     b: 2
+#   }
+# becomes:
+#   {
+#     a: 1,
+#     b: 2,
+#   }
+Style/TrailingCommaInHashLiteral:
+  EnforcedStyleForMultiline: consistent_comma
+  Enabled: true
