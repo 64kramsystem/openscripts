@@ -7,5 +7,6 @@ gem 'activesupport', '~> 6.1.4'     # rename_variables
 gem 'sorbet', '= 0.6.12894'
 
 group :development do
+  gem 'rubocop', '~> 1.82.1', require: false
   gem 'tapioca', '>= 0.17.0', require: false
 end
