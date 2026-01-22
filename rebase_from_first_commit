@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] <file>"
+
+v_file=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_file=$1
+}
+
+function find_first_commit {
+  git log --oneline -- "$v_file" | awk 'END{ print $1 }'
+}
+
+function main {
+  local first_commit
+  first_commit=$(find_first_commit)
+  git rebase --interactive "$first_commit~"
+}
+
+decode_cmdline_args "$@"
+main
