@@ -34,6 +34,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `git_find_default_branch`: finds and prints the default branch; if 'origin/HEAD' is not present, it sets it
   - `git_maintain_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in the main branch; also syncs with upstream
   - `git_rename_commits`: rename git commits, using the old git (`filter-branch`) method
+  - `rebase_from_first_commit`: start an interactive rebase from the first commit of a given file
 - programming
   - `build_kernel`: builds the Linux kernel, with some automations
   - `git_full_delete_branch`: checked deletion of branch (local and remote)
