@@ -8,6 +8,7 @@ shopt -s inherit_errexit
 
 c_wsl_command=(clip.exe)
 c_native_command=(xsel -ib)
+c_mac_command=(pbcopy)
 
 c_help="Usage: $(basename "$0") [-h|--help] [<filename|args…>]
 
@@ -20,7 +21,8 @@ If the arguments are:
 Invokes the clipboard commands for the given environment:
 
 - native: '${c_native_command[*]}'
-- wsl:    '${c_wsl_command[*]}'"
+- wsl:    '${c_wsl_command[*]}'
+- mac:    '${c_mac_command[*]}'"
 
 function decode_cmdline_args {
   # We can't use getopt, because the line may contain other options, and even (in theory) start
@@ -36,6 +38,8 @@ function decode_cmdline_args {
 function main {
   if [[ -n ${WSL_DISTRO_NAME:-} ]]; then
     local proc_command=("${c_wsl_command[@]}")
+  elif [[ $(uname) == "Darwin" ]]; then
+    local proc_command=("${c_mac_command[@]}")
   else
     local proc_command=("${c_native_command[@]}")
   fi
