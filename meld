@@ -8,6 +8,7 @@ shopt -s inherit_errexit
 
 c_meld_path_win="/mnt/c/Program Files/Meld//Meld.exe"
 c_meld_path_linux=${MELD_PATH:-/usr/bin/meld}
+c_meld_path_mac=${MELD_PATH:-/opt/homebrew/bin/meld}
 
 # Necessary when running the binary from the source repository.
 function remove_active_venv {
@@ -22,6 +23,8 @@ function set_meld_path {
 
   if [[ ${WSL_DISTRO_NAME:-} != "" ]]; then
     meld_path_out=$c_meld_path_win
+  elif [[ $(uname) == "Darwin" ]]; then
+    meld_path_out=$c_meld_path_mac
   else
     meld_path_out=$c_meld_path_linux
   fi
