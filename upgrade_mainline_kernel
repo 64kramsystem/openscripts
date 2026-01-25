@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_kernel_version_helper_file=$(dirname "$0")/kernel_packages_maintenance/kernel_version.rb
+c_kernel_version_helper_file=$(dirname "$(readlink -f "$0")")/kernel_packages_maintenance/kernel_version.rb
 c_mainline_ppa_url=https://kernel.ubuntu.com/mainline
 c_download_dir=$(mktemp -d --suffix="$(basename "$0")")
 c_help="Usage: $(basename "$0") [-h|--help]"
