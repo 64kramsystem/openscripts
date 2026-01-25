@@ -39,13 +39,29 @@ function register_exit_cleanup_hook {
   trap _exit_cleanup_hook EXIT
 }
 
-function check_and_install_kernel {
-  local current_version latest_available_version
+function find_latest_installed_minor_version {
+  local running_kernel
+  running_kernel=$(uname -r)
 
-  current_version=$(ruby -r "$c_kernel_version_helper_file" -e "puts KernelVersion.find_current.to_s(raw: false).delete_prefix('v')")
+  local major_minor
+  major_minor=$(echo "$running_kernel" | perl -pe 's/^(\d+\.\d+).*/\1/')
+
+  # Detect the package prefix dynamically
+  local package_prefix
+  package_prefix=$(dpkg -S /boot/vmlinuz-"$running_kernel" | perl -nle 'print $1 if /^(linux-image.*?)(?=-\d)/')
+
+  aptitude search "~i ^${package_prefix}-${major_minor//./\\.}\." -F "%p" \
+  | perl -lne "print \$1 if /${package_prefix}-([\d.]+)/" \
+  | sort -V \
+  | tail -n 1
+}
+
+function check_and_install_kernel {
+  local latest_installed_minor_version latest_available_version
+  latest_installed_minor_version=$(find_latest_installed_minor_version)
   latest_available_version=$(ruby -r "$c_kernel_version_helper_file" -e "puts KernelVersion.find_latest_available.to_s.delete_prefix('v')")
 
-  if dpkg --compare-versions "$latest_available_version" gt "$current_version"; then
+  if dpkg --compare-versions "$latest_available_version" gt "$latest_installed_minor_version"; then
     local short_version
     short_version=$(echo "$latest_available_version" | perl -pe 's/^\d+\.\d+\K\.0//')
 
