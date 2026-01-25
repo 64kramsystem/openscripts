@@ -141,7 +141,7 @@ class KernelVersion
 
   # Returns a KernelVersion instance.
   #
-  def self.find_latest
+  def self.find_latest_available
     current_version = find_current.to_s[/^\d+\.\d+/]
 
     kernel_branches, child_status = KERNEL_REPOSITORY_ADDRESSES
