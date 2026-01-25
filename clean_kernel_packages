@@ -21,7 +21,7 @@ class CleanKernelPackages
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
 
     current_version = KernelVersion.find_current
-    latest_version = KernelVersion.find_latest
+    latest_version = KernelVersion.find_latest_available
 
     if current_version.eql_heterogeneous?(latest_version)
       puts "Current kernel is up to date (#{current_version.to_s(raw: false)})", ""

@@ -40,14 +40,14 @@ function register_exit_cleanup_hook {
 }
 
 function check_and_install_kernel {
-  local current_version latest_version
+  local current_version latest_available_version
 
   current_version=$(ruby -r "$c_kernel_version_helper_file" -e "puts KernelVersion.find_current.to_s(raw: false).delete_prefix('v')")
-  latest_version=$(ruby -r "$c_kernel_version_helper_file" -e "puts KernelVersion.find_latest.to_s.delete_prefix('v')")
+  latest_available_version=$(ruby -r "$c_kernel_version_helper_file" -e "puts KernelVersion.find_latest_available.to_s.delete_prefix('v')")
 
-  if dpkg --compare-versions "$latest_version" gt "$current_version"; then
+  if dpkg --compare-versions "$latest_available_version" gt "$current_version"; then
     local short_version
-    short_version=$(echo "$latest_version" | perl -pe 's/^\d+\.\d+\K\.0//')
+    short_version=$(echo "$latest_available_version" | perl -pe 's/^\d+\.\d+\K\.0//')
 
     declare -x version_url=${c_mainline_ppa_url}/v${short_version}/
 
@@ -64,7 +64,7 @@ function check_and_install_kernel {
     mapfile -t package_urls < <(echo "$page_content" | perl -lne 'print "$ENV{version_url}$1" if /(amd64\/linux-[^"]+_amd64\.deb)/')
 
     if [[ ${#package_urls[@]} -eq 0 ]]; then
-      >&2 echo "No amd64 packages found for version $latest_version."
+      >&2 echo "No amd64 packages found for version $latest_available_version."
       return
     fi
 
