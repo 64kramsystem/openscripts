@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_required_mem_large_model=11000 # MiB
+c_model=large # as of Aug/2025, maps to `large-v3`
 c_help="Usage: $(basename "$0") [-h|--help] [-s|--srt] [-e|--english] [-i|--italian] <input> {<input2>...}"
 
 v_output_format=txt
@@ -51,33 +51,39 @@ function decode_cmdline_args {
   v_inputs=("$@")
 }
 
+function set_device {
+  declare -x device_out=$1
+
+  if [[ $(uname) == Darwin ]]; then
+    device_out=mps
+  else
+    device_out=cpu
+  fi
+}
+
 # In order to list the most recent models (they are not in the repo help), use:
 #
 #   python -c "import whisper; print(whisper._MODELS.keys())"
 #
 function main {
-  local tot_mem # in MiB
-  tot_mem=$(free -m | awk '/^Mem:/{print $2}')
+  local device
 
-  local extra_options=()
+  set_device device
 
-  if (( tot_mem > c_required_mem_large_model )); then
-    local model=large # as of Aug/2025, maps to `large-v3`
-  else
-    local model=medium
-  fi
-
-  extra_options+=(--model "$model")
-  echo "> Using model: $model"
+  local options=(
+    --model "$c_model"
+    --device "$device"
+    --output_format "$v_output_format"
+  )
 
   if [[ -n $v_english_input ]]; then
-    extra_options+=(--language en)
+    options+=(--language en)
   elif [[ -n $v_italian_input ]]; then
-    extra_options+=(--language it)
+    options+=(--language it)
   fi
 
   for input in "${v_inputs[@]}"; do
-    whisper "${extra_options[@]}" --device cpu --output_format "$v_output_format" "$input"
+    whisper "${options[@]}" "$input"
   done
 }
 
