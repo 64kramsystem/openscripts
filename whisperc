@@ -6,17 +6,28 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_model=large # as of Aug/2025, maps to `large-v3`
-c_help="Usage: $(basename "$0") [-h|--help] [-s|--srt] [-e|--english] [-i|--italian] <input> {<input2>...}"
+c_help="Usage: $(basename "$0") [-h|--help] [-m|--model <filename>] [-l|--language <code>] [-s|--srt] <input> {<input2>...}"
 
-v_output_format=txt
+v_model="${WHISPER_MODEL:-}"
+v_language=               # two-letter language code (e.g., en, it, es)
+v_output_srt=             # boolean; false: blank, true: anything else
 v_inputs=
-v_english_input=      # boolean; false: blank, true: anything else
-v_italian_input=      # boolean; false: blank, true: anything else
+v_temp_files=()           # array to track temp files for cleanup
+
+# Cleanup function for exit trap
+function cleanup {
+  for temp_file in "${v_temp_files[@]}"; do
+    if [[ -f "$temp_file" ]]; then
+      rm -f "$temp_file"
+    fi
+  done
+}
+
+trap cleanup EXIT
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hsei --long help,srt,english,italian --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hm:l:s --long help,model:,language:,srt --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -25,14 +36,14 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
+      -m|--model)
+        v_model="$2"
+        shift 2 ;;
+      -l|--language)
+        v_language="$2"
+        shift 2 ;;
       -s|--srt)
-        v_output_format=srt
-        shift ;;
-      -e|--english)
-        v_english_input=1
-        shift ;;
-      -i|--italian)
-        v_italian_input=1
+        v_output_srt=1
         shift ;;
       --)
         shift
@@ -43,47 +54,53 @@ function decode_cmdline_args {
   if [[ $# -lt 1 ]]; then
     echo "$c_help"
     exit 1
-  elif [[ -n $v_english_input && -n $v_italian_input ]]; then
-    echo "EN<>IT are mutually exclusive"
+  elif [[ -z $v_model ]]; then
+    echo "Error: Model not specified. Use -m/--model or set \$WHISPER_MODEL"
     exit 1
   fi
 
   v_inputs=("$@")
 }
 
-function set_device {
-  declare -x device_out=$1
+function convert_input_file_to_wav {
+  echo "Converting $(basename "$input_file") to WAV format..." >&2
+  ffmpeg -i "$input_file" -ar 16000 -ac 1 -c:a pcm_s16le "$temp_file" -y -loglevel error
 
-  if [[ $(uname) == Darwin ]]; then
-    device_out=mps
-  else
-    device_out=cpu
+  if [[ $? -ne 0 ]]; then
+    echo "Error: Failed to convert audio file" >&2
+    return 1
   fi
 }
 
-# In order to list the most recent models (they are not in the repo help), use:
-#
-#   python -c "import whisper; print(whisper._MODELS.keys())"
-#
 function main {
-  local device
-
-  set_device device
-
   local options=(
-    --model "$c_model"
-    --device "$device"
-    --output_format "$v_output_format"
+    -m "$v_model"
   )
 
-  if [[ -n $v_english_input ]]; then
-    options+=(--language en)
-  elif [[ -n $v_italian_input ]]; then
-    options+=(--language it)
+  if [[ -n $v_output_srt ]]; then
+    options+=(-osrt)
+  else
+    options+=(-otxt)
   fi
 
-  for input in "${v_inputs[@]}"; do
-    whisper "${options[@]}" "$input"
+  if [[ -n $v_language ]]; then
+    options+=(-l "$v_language")
+  fi
+
+  for input_file in "${v_inputs[@]}"; do
+    local output_base="${input_file%.*}"
+
+    if [[ $input_file == *.m4a ]]; then
+      local temp_file
+      temp_file=$(mktemp --tmpdir --suffix="-$(basename "$input_file" .m4a).wav" "whisper-XXXXXX")
+
+      convert_input_file_to_wav
+
+      v_temp_files+=("$temp_file")
+      input_file=$temp_file
+    fi
+
+    whisper-cli "${options[@]}" -f "$input_file" -of "$output_base"
   done
 }
 
