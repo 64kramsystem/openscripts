@@ -10,11 +10,10 @@ c_default_extension=mkv
 c_default_preset=slower
 c_crf=25
 c_tmp_extension=tmp
-# Very roughly tested. 3 processes saturate a 7950x; 2 leave some room (~2700/2900% used).
+# Very roughly tested; set 1 process less than the amount saturating the given CPU.
 declare -A c_procs_mapping=(
-  [32]=2
-  [16]=2
-  [4]=1
+  [32]=2 # 7950X
+  [10]=1 # M4
 )
 declare -A c_rotation_to_filter=(
   [cw]="transpose=clock"
