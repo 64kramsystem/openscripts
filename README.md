@@ -29,7 +29,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `split_cue_audio_file`: splits an audio file based on the provided cue file
   - `tag_mp3s_bpm`: tag mp3 files with the BPM field, using the Mixxx analysis
   - `texerak`: convenient wrapper around Tesseract, to OCR images/documents
-  - `whisperc`: convenient wrapper around Whisper.cpp
+  - `whisp`: convenient wrapper around Whisper.cpp
 - git
   - `git_find_default_branch`: finds and prints the default branch; if 'origin/HEAD' is not present, it sets it
   - `git_maintain_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in the main branch; also syncs with upstream
