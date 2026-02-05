@@ -654,6 +654,59 @@ function apply_config_tweaks {
   scripts/config --undefine CONFIG_XEN_GRANT_DMA_OPS
   scripts/config --undefine CONFIG_XEN_VIRTIO
   scripts/config --undefine CONFIG_XEN_VIRTIO_FORCE_GRANT
+  # Intel Graphics
+  scripts/config --disable  CONFIG_DRM_I915           # Integrated/discrete graphics (very large)
+  scripts/config --undefine CONFIG_DRM_I915_GVT
+  scripts/config --undefine CONFIG_DRM_I915_GVT_KVMGT
+  scripts/config --undefine CONFIG_DRM_I915_USERPTR
+  # Other GPU Drivers (Not VMWare)
+  scripts/config --disable  CONFIG_DRM_AST            # ASPEED server graphics
+  scripts/config --disable  CONFIG_DRM_QXL            # QEMU/KVM virtual GPU
+  scripts/config --disable  CONFIG_DRM_BOCHS          # QEMU bochs VGA
+  # Intel Network Drivers
+  scripts/config --disable  CONFIG_E1000              # Intel Gigabit (old)
+  scripts/config --disable  CONFIG_E1000E             # Intel Gigabit (newer)
+  scripts/config --disable  CONFIG_IGB                # Intel I350
+  scripts/config --disable  CONFIG_IXGBE              # Intel 10GbE
+  scripts/config --disable  CONFIG_I40E               # Intel 40GbE
+  scripts/config --disable  CONFIG_ICE                # Intel Ethernet Connection E800
+  # Very Old WiFi Drivers Only
+  scripts/config --disable  CONFIG_IPW2100            # Intel PRO/Wireless 2100 (2003)
+  scripts/config --disable  CONFIG_IPW2200            # Intel PRO/Wireless 2200BG (2004)
+  scripts/config --disable  CONFIG_IWL4965            # Intel Wireless WiFi 4965AGN (2007)
+  scripts/config --disable  CONFIG_IWL3945            # Intel PRO/Wireless 3945ABG (2006)
+  # Hyper-V
+  scripts/config --disable  CONFIG_HYPERV             # Microsoft Hyper-V
+  # InfiniBand/RDMA
+  scripts/config --disable  CONFIG_INFINIBAND         # InfiniBand support
+  scripts/config --disable  CONFIG_INFINIBAND_IPOIB
+  # Network filesystems (keeping CIFS for SMB)
+  scripts/config --disable  CONFIG_NFS_FS
+  scripts/config --disable  CONFIG_NFSD
+  scripts/config --disable  CONFIG_CODA_FS
+  scripts/config --disable  CONFIG_AFS_FS
+  # Exotic filesystems (keeping ext4, btrfs, vfat, fuse, squashfs, ntfs3)
+  scripts/config --disable  CONFIG_XFS_FS
+  scripts/config --disable  CONFIG_F2FS_FS
+  scripts/config --disable  CONFIG_JFS_FS
+  scripts/config --disable  CONFIG_REISERFS_FS
+  scripts/config --disable  CONFIG_NTFS_FS            # Legacy driver
+  scripts/config --disable  CONFIG_OCFS2_FS
+  scripts/config --disable  CONFIG_GFS2_FS
+  scripts/config --disable  CONFIG_NILFS2_FS
+  scripts/config --disable  CONFIG_EROFS_FS
+  scripts/config --disable  CONFIG_UBIFS_FS
+  scripts/config --disable  CONFIG_CRAMFS
+  # Datacenter/specialty hardware
+  scripts/config --disable  CONFIG_HAMRADIO           # Amateur Radio
+  scripts/config --disable  CONFIG_ISDN               # Legacy telephony
+  scripts/config --disable  CONFIG_IIO                # Industrial I/O sensors
+  scripts/config --disable  CONFIG_THUNDERBOLT        # unless you have TB ports
+  scripts/config --disable  CONFIG_NVME_TARGET        # NVMe over Fabrics (datacenter)
+  scripts/config --disable  CONFIG_NVME_TCP
+  scripts/config --disable  CONFIG_NVME_RDMA
+  # Staging drivers (experimental)
+  scripts/config --disable  CONFIG_STAGING
 }
 
 function run_olddefconfig {
