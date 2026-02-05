@@ -286,7 +286,7 @@ function find_most_recent_config_version_available {
   local candidate_versions
   candidate_versions=$(find_config_package_candidate_versions "$1")
 
-  >&2 echo "Find config package candidate versions:"
+  >&2 echo "Found config package candidate versions:"
   >&2 echo "$candidate_versions" | perl -pe 's/^/- /'
 
   # When operating, the PPA includes all the version as directories, including failed builds.
