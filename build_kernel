@@ -50,6 +50,7 @@ Workflow (regular):
 
 Workflow (bisect):
 
+- some features are disabled (LTO/sanitizers)
 - the kernel local version is set to '$c_bisect_local_version', overriding any user setting
 - the kernel version is gathered from the latest tag reachable from HEAD
 - (the configuration is handled as regular, plus 'make olddefconfig' is executed)
@@ -516,6 +517,22 @@ function disable_debug_info {
   scripts/config --disable  CONFIG_DEBUG_INFO_BTF
 }
 
+# Additional optimizations for bisect mode to reduce compile time.
+# These make the kernel slower but compile much faster.
+#
+function apply_bisect_build_optimizations {
+  # Disable LTO - link time optimization is very slow
+  scripts/config --enable   CONFIG_LTO_NONE
+  scripts/config --disable  CONFIG_LTO_CLANG_FULL
+  scripts/config --disable  CONFIG_LTO_CLANG_THIN
+
+  # Disable other sanitizers/debug that slow down builds
+  scripts/config --disable  CONFIG_KASAN
+  scripts/config --disable  CONFIG_KCSAN
+  scripts/config --disable  CONFIG_UBSAN
+  scripts/config --disable  CONFIG_GCOV_KERNEL
+}
+
 # Extracted from kernel 6.11-rc3.
 #
 function apply_config_tweaks {
@@ -855,6 +872,10 @@ function main {
 
   fix_ubuntu_config
   disable_debug_info
+
+  if [[ -n $v_bisect ]]; then
+    apply_bisect_build_optimizations
+  fi
 
   if [[ -n $v_apply_tweaks ]]; then
     apply_config_tweaks
