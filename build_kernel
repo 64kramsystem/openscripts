@@ -703,6 +703,10 @@ function compile_kernel {
     make_options+=(LOCALVERSION=-"$v_local_version")
   fi
 
+  # Enable ccache with deterministic timestamps for cache hits
+  make_options+=(CC="ccache gcc")
+  make_options+=(KBUILD_BUILD_TIMESTAMP='')
+
   make -j "$(nproc)" bindeb-pkg "${make_options[@]}"
 }
 
