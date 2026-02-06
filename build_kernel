@@ -658,10 +658,32 @@ function disable_unused_modules {
   scripts/config --undefine CONFIG_DRM_I915_GVT
   scripts/config --undefine CONFIG_DRM_I915_GVT_KVMGT
   scripts/config --undefine CONFIG_DRM_I915_USERPTR
-  # Other GPU Drivers (Not VMWare)
+  # Other GPU Drivers
   scripts/config --disable  CONFIG_DRM_AST            # ASPEED server graphics
   scripts/config --disable  CONFIG_DRM_QXL            # QEMU/KVM virtual GPU
   scripts/config --disable  CONFIG_DRM_BOCHS          # QEMU bochs VGA
+  scripts/config --disable  CONFIG_DRM_VMWGFX         # VMware SVGA virtual GPU
+  scripts/config --disable  CONFIG_DRM_VIRTIO_GPU     # virtio GPU for VMs
+  scripts/config --disable  CONFIG_DRM_PANEL          # Generic panel support
+  scripts/config --disable  CONFIG_DRM_LIMA           # ARM Mali 400/450
+  scripts/config --disable  CONFIG_DRM_PANFROST       # ARM Mali Midgard/Bifrost
+  scripts/config --disable  CONFIG_DRM_ETNAVIV        # Vivante GPU (embedded)
+  scripts/config --disable  CONFIG_DRM_TEGRA          # NVIDIA Tegra (ARM)
+  scripts/config --disable  CONFIG_DRM_GMA500         # Intel GMA500/600
+  scripts/config --disable  CONFIG_DRM_SIS            # SiS video cards
+  scripts/config --disable  CONFIG_DRM_VIA            # VIA video cards
+  scripts/config --disable  CONFIG_DRM_SAVAGE         # S3 Savage
+  # VirtIO guest drivers (for when Linux runs as VM guest)
+  scripts/config --disable  CONFIG_VIRTIO_BLK        # VirtIO block device
+  scripts/config --disable  CONFIG_VIRTIO_NET        # VirtIO network
+  scripts/config --disable  CONFIG_VIRTIO_CONSOLE    # VirtIO console
+  scripts/config --disable  CONFIG_SCSI_VIRTIO       # VirtIO SCSI
+  scripts/config --disable  CONFIG_VIRTIO_BALLOON    # VirtIO memory balloon
+  scripts/config --disable  CONFIG_VIRTIO_INPUT      # VirtIO input devices
+  scripts/config --disable  CONFIG_HW_RANDOM_VIRTIO  # VirtIO RNG
+  scripts/config --disable  CONFIG_CRYPTO_DEV_VIRTIO # VirtIO crypto
+  scripts/config --disable  CONFIG_VIRTIO_PMEM       # VirtIO persistent memory
+  scripts/config --disable  CONFIG_VIRTIO_MEM        # VirtIO memory hotplug
   # Intel Network Drivers
   scripts/config --disable  CONFIG_E1000              # Intel Gigabit (old)
   scripts/config --disable  CONFIG_E1000E             # Intel Gigabit (newer)
@@ -669,11 +691,126 @@ function disable_unused_modules {
   scripts/config --disable  CONFIG_IXGBE              # Intel 10GbE
   scripts/config --disable  CONFIG_I40E               # Intel 40GbE
   scripts/config --disable  CONFIG_ICE                # Intel Ethernet Connection E800
+  # Legacy/Old Ethernet Drivers (10/100 Mbps, 90s/2000s era)
+  scripts/config --disable  CONFIG_NET_VENDOR_3COM    # 3Com cards (3c59x, 3c509, etc.)
+  scripts/config --disable  CONFIG_PCMCIA_3C574       # 3Com 3c574
+  scripts/config --disable  CONFIG_PCMCIA_3C589       # 3Com 3c589
+  scripts/config --disable  CONFIG_VORTEX             # 3Com 3c59x
+  scripts/config --disable  CONFIG_TYPHOON            # 3Com Typhoon
+  scripts/config --disable  CONFIG_NET_VENDOR_AMD     # AMD PCnet32, etc.
+  scripts/config --disable  CONFIG_PCNET32            # AMD PCnet32
+  scripts/config --disable  CONFIG_NE2000             # NE2000 ISA
+  scripts/config --disable  CONFIG_NE2K_PCI           # NE2000 PCI
+  scripts/config --disable  CONFIG_8139TOO            # Realtek RTL8139 (10/100)
+  scripts/config --disable  CONFIG_8139CP             # Realtek RTL8139C+
+  scripts/config --disable  CONFIG_NET_VENDOR_SIS     # SiS 900/7016
+  scripts/config --disable  CONFIG_SIS900             # SiS 900/7016
+  scripts/config --disable  CONFIG_NET_VENDOR_VIA     # VIA Rhine
+  scripts/config --disable  CONFIG_VIA_RHINE          # VIA Rhine
+  scripts/config --disable  CONFIG_NET_VENDOR_DEC     # DEC Tulip
+  scripts/config --disable  CONFIG_TULIP              # DEC 21x4x Tulip
+  scripts/config --disable  CONFIG_DE2104X            # DEC 21040
+  scripts/config --disable  CONFIG_NET_VENDOR_NATSEMI # National Semiconductor
+  scripts/config --disable  CONFIG_NATSEMI            # DP8381x
+  scripts/config --disable  CONFIG_FEALNX             # Myson MTD-8xx
+  scripts/config --disable  CONFIG_NET_VENDOR_DLINK   # D-Link DL2000
+  scripts/config --disable  CONFIG_SUNDANCE           # Sundance Alta
+  scripts/config --disable  CONFIG_NET_VENDOR_SMSC    # SMSC LAN91C111
+  scripts/config --disable  CONFIG_SMC91X             # SMC 91Cxx
+  scripts/config --disable  CONFIG_PCMCIA_SMC91C92    # SMC 91Cxx PCMCIA
+  scripts/config --disable  CONFIG_NET_VENDOR_SILAN   # Silan SC92031
+  scripts/config --disable  CONFIG_SC92031            # Silan SC92031
   # Very Old WiFi Drivers Only
   scripts/config --disable  CONFIG_IPW2100            # Intel PRO/Wireless 2100 (2003)
   scripts/config --disable  CONFIG_IPW2200            # Intel PRO/Wireless 2200BG (2004)
   scripts/config --disable  CONFIG_IWL4965            # Intel Wireless WiFi 4965AGN (2007)
   scripts/config --disable  CONFIG_IWL3945            # Intel PRO/Wireless 3945ABG (2006)
+  scripts/config --disable  CONFIG_ATH5K              # Atheros 5xxx (pre-2010)
+  scripts/config --disable  CONFIG_ATH9K              # Atheros 802.11n (older)
+  scripts/config --disable  CONFIG_B43                # Broadcom 43xx (old)
+  scripts/config --disable  CONFIG_B43LEGACY          # Broadcom 43xx legacy
+  scripts/config --disable  CONFIG_RTL8180            # Realtek RTL8180/8185 (old)
+  scripts/config --disable  CONFIG_RTL8187            # Realtek RTL8187/8187B (old)
+  scripts/config --disable  CONFIG_RT2400PCI          # Ralink rt2400 (2004)
+  scripts/config --disable  CONFIG_RT2500PCI          # Ralink rt2500 (2005)
+  scripts/config --disable  CONFIG_RT61PCI            # Ralink rt2501/rt61 (2006)
+  scripts/config --disable  CONFIG_RT2500USB          # Ralink rt2500 USB
+  scripts/config --disable  CONFIG_RT73USB            # Ralink rt2501/rt73 USB
+  scripts/config --disable  CONFIG_RT2800PCI          # Ralink rt2800 PCI
+  scripts/config --disable  CONFIG_RT2800USB          # Ralink rt2800 USB
+  scripts/config --disable  CONFIG_PCMCIA_RAYCS       # Raylink/WebGear
+  scripts/config --disable  CONFIG_LIBERTAS           # Marvell Libertas
+  # PCMCIA/CardBus (obsolete laptop tech)
+  scripts/config --disable  CONFIG_PCCARD             # PCMCIA/CardBus support
+  scripts/config --disable  CONFIG_PCMCIA             # PCMCIA support
+  scripts/config --disable  CONFIG_CARDBUS            # CardBus support
+  # Fibre Channel (datacenter SAN storage)
+  scripts/config --disable  CONFIG_SCSI_FC_ATTRS      # Fibre Channel transport
+  scripts/config --disable  CONFIG_SCSI_QLOGIC_FC     # QLogic Fibre Channel
+  scripts/config --disable  CONFIG_SCSI_QLOGIC_1280  # QLogic ISP1280
+  scripts/config --disable  CONFIG_SCSI_LPFC          # Emulex LightPulse FC
+  scripts/config --disable  CONFIG_SCSI_BFA_FC        # Brocade BFA FC
+  scripts/config --disable  CONFIG_FCOE               # FCoE (Fibre Channel over Ethernet)
+  # Hardware RAID controllers (enterprise servers)
+  scripts/config --disable  CONFIG_SCSI_MEGARAID_MM   # LSI MegaRAID
+  scripts/config --disable  CONFIG_SCSI_MEGARAID_LEGACY # LSI MegaRAID legacy
+  scripts/config --disable  CONFIG_SCSI_MEGARAID_NEWGEN # LSI MegaRAID new
+  scripts/config --disable  CONFIG_SCSI_MEGARAID_SAS  # LSI MegaRAID SAS
+  scripts/config --disable  CONFIG_MEGARAID_SAS       # LSI MegaRAID SAS (new)
+  scripts/config --disable  CONFIG_SCSI_MPT3SAS       # LSI MPT Fusion SAS 3.0
+  scripts/config --disable  CONFIG_SCSI_MPT2SAS       # LSI MPT Fusion SAS 2.0
+  scripts/config --disable  CONFIG_SCSI_3W_9XXX       # 3ware 9xxx RAID
+  scripts/config --disable  CONFIG_SCSI_3W_SAS        # 3ware SAS/SATA RAID
+  scripts/config --disable  CONFIG_SCSI_AACRAID       # Adaptec AACRAID
+  scripts/config --disable  CONFIG_SCSI_AIC7XXX       # Adaptec AIC7xxx
+  scripts/config --disable  CONFIG_SCSI_AIC79XX       # Adaptec AIC79xx
+  scripts/config --disable  CONFIG_SCSI_ARCMSR        # ARECA SATA RAID
+  scripts/config --disable  CONFIG_SCSI_HPSA          # HP Smart Array
+  scripts/config --disable  CONFIG_SCSI_HPTIOP        # HighPoint RocketRAID
+  scripts/config --disable  CONFIG_SCSI_MVSAS         # Marvell SAS
+  scripts/config --disable  CONFIG_SCSI_MVUMI         # Marvell UMI
+  scripts/config --disable  CONFIG_SCSI_ESAS2R        # ATTO ExpressSAS
+  scripts/config --disable  CONFIG_SCSI_PM8001        # PMC Sierra SAS/SATA
+  # Legacy Audio Drivers (ISA/old PCI sound cards)
+  scripts/config --disable  CONFIG_SND_ISA            # ISA sound cards
+  scripts/config --disable  CONFIG_SND_SB8            # SoundBlaster 1.0/2.0
+  scripts/config --disable  CONFIG_SND_SB16           # SoundBlaster 16
+  scripts/config --disable  CONFIG_SND_SBAWE          # SoundBlaster AWE32/64
+  scripts/config --disable  CONFIG_SND_ES968          # ESS ES968
+  scripts/config --disable  CONFIG_SND_ES1688         # ESS ES1688/ES688
+  scripts/config --disable  CONFIG_SND_ES18XX         # ESS ES18xx
+  scripts/config --disable  CONFIG_SND_CS4231         # CS4231
+  scripts/config --disable  CONFIG_SND_CS4236         # CS4232/CS4236+
+  scripts/config --disable  CONFIG_SND_GUS_SYNTH      # Gravis UltraSound
+  scripts/config --disable  CONFIG_SND_OPL3SA2        # Yamaha OPL3-SA2/SA3
+  scripts/config --disable  CONFIG_SND_AD1816A        # AD1816A
+  scripts/config --disable  CONFIG_SND_ALS100         # Avance Logic ALS100/ALS120
+  scripts/config --disable  CONFIG_SND_AZT2320        # Aztech AZT2320
+  scripts/config --disable  CONFIG_SND_CMI8330        # C-Media CMI8330
+  scripts/config --disable  CONFIG_SND_ENS1370        # Ensoniq ES1370 (old)
+  scripts/config --disable  CONFIG_SND_ENS1371        # Ensoniq ES1371 (old)
+  scripts/config --disable  CONFIG_SND_FM801          # ForteMedia FM801
+  scripts/config --disable  CONFIG_SND_YMFPCI         # Yamaha YMF7xx PCI
+  scripts/config --disable  CONFIG_SND_CMIPCI         # C-Media CMI8338/8738
+  scripts/config --disable  CONFIG_SND_ALS300         # Avance Logic ALS300
+  scripts/config --disable  CONFIG_SND_ALS4000        # Avance Logic ALS4000
+  scripts/config --disable  CONFIG_SND_ALI5451        # ALi M5451 PCI
+  scripts/config --disable  CONFIG_SND_ATIIXP         # ATI IXP AC97
+  scripts/config --disable  CONFIG_SND_ATIIXP_MODEM   # ATI IXP Modem
+  scripts/config --disable  CONFIG_SND_AU8810         # Aureal Advantage
+  scripts/config --disable  CONFIG_SND_AU8820         # Aureal Vortex
+  scripts/config --disable  CONFIG_SND_AU8830         # Aureal Vortex 2
+  scripts/config --disable  CONFIG_SND_BT87X          # Bt87x audio
+  scripts/config --disable  CONFIG_SND_CA0106         # Creative SB Audigy LS/Live 24bit
+  scripts/config --disable  CONFIG_SND_CS4281         # Cirrus Logic CS4281
+  scripts/config --disable  CONFIG_SND_CS46XX         # Cirrus Logic CS46xx
+  scripts/config --disable  CONFIG_SND_EMU10K1        # Creative SB Live!/Audigy (old)
+  scripts/config --disable  CONFIG_SND_EMU10K1X       # Creative SB Live! Dell OEM
+  scripts/config --disable  CONFIG_SND_MAESTRO3       # ESS Allegro/Maestro3
+  scripts/config --disable  CONFIG_SND_TRIDENT        # Trident 4D-Wave
+  scripts/config --disable  CONFIG_SND_VIA82XX        # VIA 82Cxxx AC97
+  scripts/config --disable  CONFIG_SND_VIA82XX_MODEM  # VIA 82Cxxx Modem
+  scripts/config --disable  CONFIG_SND_VIRTUOSO       # Asus Virtuoso (old)
   # Hyper-V
   scripts/config --disable  CONFIG_HYPERV             # Microsoft Hyper-V
   # InfiniBand/RDMA
