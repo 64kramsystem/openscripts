@@ -513,6 +513,7 @@ function disable_debug_info {
   scripts/config --undefine CONFIG_DEBUG_INFO_SPLIT
   scripts/config --undefine GDB_SCRIPTS
   scripts/config --disable  CONFIG_DEBUG_INFO_DWARF5
+  scripts/config --disable  CONFIG_DEBUG_INFO_BTF
 }
 
 # Extracted from kernel 6.11-rc3.
