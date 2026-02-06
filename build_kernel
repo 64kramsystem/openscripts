@@ -25,7 +25,7 @@ Options:
 - [-b|--bisect]                    : bisect mode (see below); incompatible with '--kernel-version'
 - [-l|--local-version <name>]      : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                      minus is automatically added
-- [-t|--config-tweaks]             : apply configuration tweaks
+- [-D|--disable-unused-modules]    : disable unused modules
 - [-f|--fill-missing-config]       : run 'make olddefconfig' after applying all the config changes
 - [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
@@ -73,12 +73,12 @@ v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
-v_apply_tweaks=         # boolean; false=blank; true=anything else
+v_disable_unused_modules= # boolean; false=blank; true=anything else
 v_run_olddefconfig=     # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:dtfc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,config-tweaks,fill-missing-config,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:dDfc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,disable-unused-modules,fill-missing-config,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -105,8 +105,8 @@ function decode_cmdline_args {
       -d|--display-config-diff)
         v_display_config_diff=1
         shift ;;
-      -t|--config-tweaks)
-        v_apply_tweaks=1
+      -D|--disable-unused-modules)
+        v_disable_unused_modules=1
         shift ;;
       -f|--fill-missing-config)
         v_run_olddefconfig=1
@@ -534,7 +534,7 @@ function apply_bisect_build_optimizations {
 
 # Extracted from kernel 6.11-rc3.
 #
-function apply_config_tweaks {
+function disable_unused_modules {
   # DON'T FORGET TO APPLY THE UBUNTU FIXES, IF COPY/PASTING!
 
   # Some don't make any measurable comptime improvements, but anyway they're not used.
@@ -934,8 +934,8 @@ function main {
     apply_bisect_build_optimizations
   fi
 
-  if [[ -n $v_apply_tweaks ]]; then
-    apply_config_tweaks
+  if [[ -n $v_disable_unused_modules ]]; then
+    disable_unused_modules
   fi
 
   if [[ -n $v_run_olddefconfig || -n $v_bisect ]]; then
