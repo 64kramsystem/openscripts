@@ -928,14 +928,14 @@ function remove_destination_old_version_files {
   local short_version
   short_version=$(short_kernel_version "$raw_version" no_rc)
 
-  # This is actually redundant, although by using the basename, we make this logic more robust.
-  #
-  local source_config_file
-  source_config_file=$(basename "$source_config_file")
-
   # Note that at least one configuration is necessarily present, but not the packages.
 
   if [[ -z $v_bisect ]]; then
+    # This is actually redundant, although by using the basename, we make this logic more robust.
+    #
+    local config_basename
+    config_basename=$(basename "$source_config_file")
+
     # Sample filenames:
     #
     # - config-6.9.0
@@ -944,7 +944,7 @@ function remove_destination_old_version_files {
     # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
     # e.g. reference/backup.
     #
-    find "$v_packages_destination" -regextype egrep -not -name "$source_config_file" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
+    find "$v_packages_destination" -regextype egrep -not -name "$config_basename" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
   fi
 
   # Sample filenames:
