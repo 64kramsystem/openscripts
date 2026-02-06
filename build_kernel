@@ -756,7 +756,7 @@ function cherry_pick_commits {
           if [[ $commit == R* ]]; then
             commit=${commit#R}
             echo "# REVERT $commit #######################################################"
-            git revert --no-edit
+            git revert --no-edit "$commit"
           else
             echo "# CHERRY PICK $commit ##################################################"
             git cherry-pick "$commit"
