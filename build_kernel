@@ -61,7 +61,7 @@ Workflow (bisect):
 Cherry picking:
 
 - incompatible with bisect workflow
-- format: 'shortver1:c1a,c1b/shortver2:c2a,c2b'
+- format: '[shortver:]ca{,cb…}/…'
 - each commit can be prefixed with 'R', which will revert the given commit
 "
 
@@ -735,7 +735,9 @@ function cherry_pick_commits {
     for cherry_picks_entry in "${raw_cherry_pick_entries[@]}"; do
       local entry_kernel_version=${cherry_picks_entry%:*}
 
-      if [[ $entry_kernel_version == "$short_building_kernel_version" ]]; then
+      # In the second expression, there is no kernel prefix.
+      #
+      if [[ $entry_kernel_version == "$short_building_kernel_version" || $entry_kernel_version == "$cherry_picks_entry" ]]; then
         # Switch to a temporary branch only when there are CPs for the building kernel; this
         # makes the output cleaner.
         #
