@@ -532,6 +532,10 @@ function apply_bisect_build_optimizations {
   scripts/config --disable  CONFIG_GCOV_KERNEL
 }
 
+function enable_native_cpu {
+  scripts/config --enable X86_CPU_NATIVE
+}
+
 # Extracted from kernel 6.11-rc3.
 #
 function disable_unused_modules {
@@ -1070,6 +1074,7 @@ function main {
 
   fix_ubuntu_config
   disable_debug_info
+  enable_native_cpu
 
   if [[ -n $v_bisect ]]; then
     apply_bisect_build_optimizations
