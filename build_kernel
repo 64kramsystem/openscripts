@@ -22,7 +22,10 @@ The list (newline-separated) of built packages is sent to FD 3 (if open/valid).
 Options:
 
 - [-v|--kernel-version <version>]  : if 'M.m', the latest version is set; RCs must be set in the format 'M.m-rcN'.
-- [-b|--bisect]                    : bisect mode (see below); incompatible with '--kernel-version'
+- [-b|--bisect]                    : bisect mode (see below); incompatible with '--kernel-version' and '--ubuntu-packaging'
+- [-u|--ubuntu-packaging]          : use Ubuntu mainline packaging (dpkg-buildpackage); requires Ubuntu kernel tree;
+                                     produces packages with Ubuntu mainline structure; incompatible with '--bisect';
+                                     automatically detects Ubuntu series from lsb_release
 - [-l|--local-version <name>]      : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                      minus is automatically added
 - [-D|--disable-unused-modules]    : disable unused modules
@@ -45,7 +48,7 @@ Workflow (regular):
 - find the target version's config, and copies it to the packages destination
 - patches the configuration to make it compile (assumes it's Ubuntu), and updates it
 - removes the old packages/configs from the packages destination
-- builds and moves the packages to the packages destination
+- builds and moves the packages to the packages destination (via make bindeb-pkg or dpkg-buildpackage if --ubuntu-packaging)
 - if --install is specified, it installs the packages
 
 Workflow (bisect):
@@ -57,6 +60,16 @@ Workflow (bisect):
 - removes the old packages (not the configs) from the packages destination
 - builds and moves the packages to the packages destination
 - installs the packages
+- NOT available with --ubuntu-packaging
+
+Workflow (ubuntu-packaging):
+
+- requires Ubuntu kernel tree (git://git.launchpad.net/~ubuntu-kernel-test/ubuntu/+source/linux/+git/mainline-crack)
+- modifies debian.master/ files to produce Ubuntu mainline-compatible packages
+- uses dpkg-buildpackage instead of make bindeb-pkg
+- produces packages with naming like: linux-headers-6.1.0-060100-generic, linux-image-unsigned-6.1.0-060100-generic
+- cherry-picking and module disabling are supported
+- bisect mode is NOT supported
 
 Cherry picking:
 
@@ -75,10 +88,11 @@ v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
 v_disable_unused_modules= # boolean; false=blank; true=anything else
 v_run_olddefconfig=     # boolean; false=blank; true=anything else
+v_ubuntu_packaging=     # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:dDfc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,disable-unused-modules,fill-missing-config,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:buir:l:dDfc: --long help,kernel-version:,bisect,ubuntu-packaging,install,repo-path:,local-version:,display-config-diff,disable-unused-modules,fill-missing-config,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -92,6 +106,9 @@ function decode_cmdline_args {
         shift 2 ;;
       -b|--bisect)
         v_bisect=1
+        shift ;;
+      -u|--ubuntu-packaging)
+        v_ubuntu_packaging=1
         shift ;;
       -i|--install)
         v_install=1
@@ -128,6 +145,9 @@ function decode_cmdline_args {
     exit 1
   elif [[ -n $v_bisect && -n $v_raw_cherry_picks ]]; then
     echo "Bisection and cherry picking are incompatible!"
+    exit 1
+  elif [[ -n $v_bisect && -n $v_ubuntu_packaging ]]; then
+    echo "Bisection and Ubuntu packaging are incompatible!"
     exit 1
   elif [[ $# -eq 1 ]]; then
     v_packages_destination=$1
@@ -494,7 +514,16 @@ function print_sorted_commits_diff {
 }
 
 function import_config_file {
+  # Always copy to .config first for modifications
   cp "$source_config_file" .config
+}
+
+# Move modified config to Ubuntu location
+#
+function finalize_ubuntu_config {
+  echo "Finalizing config for Ubuntu packaging"
+  mkdir -p debian.master/config/amd64
+  cp .config debian.master/config/amd64/config.common.amd64
 }
 
 function fix_ubuntu_config {
@@ -912,6 +941,106 @@ function cherry_pick_commits {
   fi
 }
 
+function verify_ubuntu_kernel_tree {
+  if [[ ! -d debian.master ]]; then
+    >&2 echo "Error: This doesn't appear to be an Ubuntu kernel tree! (missing 'debian.master' dir)."
+    exit 1
+  fi
+}
+
+# Generate Ubuntu-style ABI number (e.g., 060100 for 6.1.0, 061000rc1 for 6.10.0-rc1)
+function generate_abi_number {
+  local version=$1
+
+  version=${version#v}
+
+  if [[ $version =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    # GA version: 6.1.0 -> 060100
+    printf "%02d%02d%02d" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  elif [[ $version =~ ^([0-9]+)\.([0-9]+)-rc([0-9]+)$ ]]; then
+    # RC version: 6.10-rc1 -> 061000rc1
+    printf "%02d%02d00rc%d" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  elif [[ $version =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+    # Short version: 6.1 -> 060100
+    printf "%02d%02d00" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  else
+    >&2 echo "Error: Cannot parse version for ABI number: $version"
+    exit 1
+  fi
+}
+
+function setup_ubuntu_packaging {
+  local ubuntu_series
+  ubuntu_series=$(lsb_release -cs)
+
+  echo "Setting up Ubuntu packaging for $building_kernel_version (series: $ubuntu_series)"
+
+  local debversion
+  debversion=$(date +%Y%m%d%H%M)
+
+  local abinum
+  abinum=$(generate_abi_number "$building_kernel_version")
+
+  local clean_version
+  clean_version=$(short_kernel_version "$building_kernel_version" with_rc)
+
+  echo "  ABI number: $abinum"
+  echo "  Deb version: $debversion"
+  echo "  Clean version: $clean_version"
+
+  # Modify changelog - keep source package as "linux" (no renaming for simplicity)
+  sed -i -re "s/(^linux) \(([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)\.[0-9]+\) ([^;]*)(.*)/linux (${clean_version}-${abinum}.${debversion}) ${ubuntu_series}\5/" debian.master/changelog
+
+  # Update dwarves dependency
+  sed -i -re 's/dwarves \[/dwarves (>=1.21) \[/g' debian.master/control.stub.in
+
+  # Don't fail if we find no *.ko files in the build dir
+  sed -i -re 's/zstd -19 --quiet --rm/zstd -19 --rm || true/g' debian/rules.d/2-binary-arch.mk || true
+
+  # Series-specific adjustments
+  if [[ $ubuntu_series == "focal" ]]; then
+    echo "  Applying focal-specific adjustments"
+    sed -i -re 's/export gcc\?=.*/export gcc?=gcc-9/' debian/rules.d/0-common-vars.mk
+  elif [[ $ubuntu_series == "jammy" ]]; then
+    echo "  Applying jammy-specific adjustments"
+    sed -i -re 's/export gcc\?=.*/export gcc?=gcc-12/' debian/rules.d/0-common-vars.mk
+  fi
+
+  # Check for debian.env bug (some kernel versions have incorrect DEBIAN path)
+  if [[ -f debian/debian.env ]]; then
+    if [[ $(cat debian/debian.env) != "DEBIAN=debian.master" ]]; then
+      echo "  Fixing debian.env bug"
+      echo "DEBIAN=debian.master" > debian/debian.env
+    fi
+  fi
+
+  # Set flavour to generic only
+  sed -i -re "s/(flavours\s+=).*/\1 generic/" debian.master/rules.d/amd64.mk
+
+  # Disable udebs (installer images)
+  echo "disable_d_i = true" >> debian.master/rules.d/amd64.mk
+}
+
+# Run Ubuntu's config preparation
+#
+function prepare_ubuntu_build {
+  echo "Preparing Ubuntu kernel build environment"
+  echo 'archs="amd64"' > debian.master/etc/kernelconfig
+  fakeroot debian/rules clean defaultconfigs
+  fakeroot debian/rules clean
+}
+
+function compile_kernel_ubuntu {
+  echo "Building kernel with dpkg-buildpackage (Ubuntu packaging)"
+  local buildargs="-aamd64 -d -b -uc -ui -us"
+
+  # Enable ccache
+  export CC="ccache gcc"
+  export KBUILD_BUILD_TIMESTAMP=''
+
+  dpkg-buildpackage $buildargs
+}
+
 function compile_kernel {
   local make_options=()
 
@@ -1014,6 +1143,10 @@ function main {
     cd "$v_repo_path"
   fi
 
+  if [[ -n $v_ubuntu_packaging ]]; then
+    verify_ubuntu_kernel_tree
+  fi
+
   register_exit_hook
 
   setup_logging
@@ -1072,6 +1205,10 @@ function main {
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
 
+  if [[ -n $v_ubuntu_packaging ]]; then
+    setup_ubuntu_packaging
+  fi
+
   fix_ubuntu_config
   disable_debug_info
   enable_native_cpu
@@ -1084,17 +1221,28 @@ function main {
     disable_unused_modules
   fi
 
-  if [[ -n $v_run_olddefconfig || -n $v_bisect ]]; then
-    run_olddefconfig
-  fi
+  if [[ -n $v_ubuntu_packaging ]]; then
+    finalize_ubuntu_config
 
-  if [[ -n $v_display_config_diff ]]; then
-    display_config_diff
+    prepare_ubuntu_build
+  else
+    if [[ -n $v_run_olddefconfig || -n $v_bisect ]]; then
+      run_olddefconfig
+    fi
+
+    if [[ -n $v_display_config_diff ]]; then
+      display_config_diff
+    fi
   fi
 
   cherry_pick_commits "$building_kernel_version"
 
-  compile_kernel
+  # Compile based on mode
+  if [[ -z $v_ubuntu_packaging ]]; then
+    compile_kernel
+  else
+    compile_kernel_ubuntu
+  fi
 
   # Config files are handled based on $v_bisect.
   #
