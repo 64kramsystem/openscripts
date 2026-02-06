@@ -13,6 +13,7 @@ c_cherry_pick_branch=temporary_cherry_picks
 c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/
 # Example: https://kernel.ubuntu.com/mainline/v6.8-rc1/amd64/linux-modules-6.8.0-060800rc1-generic_6.8.0-060800rc1.202401212233_amd64.deb
 c_package_name_pattern="amd64/linux-modules-[[:alnum:]_.-]+_amd64+\.deb"
+c_crack_bundle_temp_file=$(mktemp --suffix=-crack.bundle)
 c_help="Usage: $(basename "$0") [-h|--help] <options...> [packages_destination]
 
 Builds a kernel from the source code.
@@ -26,12 +27,11 @@ Options:
 - [-l|--local-version <name>]      : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                      minus is automatically added
 - [-D|--disable-unused-modules]    : disable unused modules
-- [-f|--fill-missing-config]       : run 'make olddefconfig' after applying all the config changes
 - [-F|--faster-build]              : disable LTO and sanitizers for faster builds (automatically enabled in bisect mode)
 - [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
 - [-r|--repo-path <path>]          : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
-- [-d|--display-config-diff]
+- [-d|--display-config-diff]       : display config diff in meld after applying modifications
 
 Parameters:
 
@@ -41,12 +41,17 @@ Options/parameters override the corresponding env variables.
 
 Workflow (regular):
 
+- works with EITHER Ubuntu kernel tree OR mainline kernel (kernel.org)
+- if debian.master/ is not present, automatically downloads packaging from Ubuntu mainline PPA crack.bundle
+- the crack.bundle contains Ubuntu packaging structure WITHOUT Ubuntu patches (pure mainline kernel)
 - fetches the remote(s) and finds the latest patch version, for the running or specified kernel
 - checks the target version's branch out
 - find the target version's config, and copies it to the packages destination
-- patches the configuration to make it compile (assumes it's Ubuntu), and updates it
+- patches the configuration to make it compile, and updates it
+- modifies debian.master/ files to produce Ubuntu mainline-compatible packages
 - removes the old packages/configs from the packages destination
-- builds and moves the packages to the packages destination
+- builds and moves the packages to the packages destination (via debian/rules)
+- produces packages with naming like: linux-headers-6.19-061900-mybuild-generic, linux-image-unsigned-6.19-061900-mybuild-generic
 - if --install is specified, it installs the packages
 
 Workflow (bisect):
@@ -54,7 +59,7 @@ Workflow (bisect):
 - some features are disabled (LTO/sanitizers) for faster builds
 - the kernel local version is set to '$c_bisect_local_version', overriding any user setting
 - the kernel version is gathered from the latest tag reachable from HEAD
-- (the configuration is handled as regular, plus 'make olddefconfig' is executed)
+- (the configuration is handled as regular)
 - removes the old packages (not the configs) from the packages destination
 - builds and moves the packages to the packages destination
 - installs the packages
@@ -64,6 +69,39 @@ Cherry picking:
 - incompatible with bisect workflow
 - format: '[shortver:]ca{,cb…}/…'
 - each commit can be prefixed with 'R', which will revert the given commit
+
+Mainline-like build details:
+
+The build system produces packages compatible with the Ubuntu mainline PPA format, working with both
+Ubuntu kernel trees (which include debian.master/) and vanilla mainline kernel.org repositories.
+
+crack.bundle mechanism:
+- when debian.master/ is absent, the script automatically downloads 'crack.bundle' from the Ubuntu mainline PPA
+- crack.bundle is a git bundle containing Ubuntu's packaging infrastructure (debian/ and debian.master/ directories)
+- it provides the build system WITHOUT Ubuntu's patches, designed for building pure mainline kernels
+- bundles are fetched from: https://kernel.ubuntu.com/mainline/vX.Y-rcN/crack.bundle or vX.Y.Z/crack.bundle
+
+Packaging extraction:
+- the bundle is fetched into the current repo using git fetch (bundles have dependencies on upstream commits)
+- the script extracts the latest 'cod/mainline/*' tag from the bundle (e.g., cod/mainline/v6.19.0)
+- debian/ and debian.master/ directories are checked out from this tag into the working tree
+
+Build modifications:
+- changelog is modified to include the local version suffix and current timestamp
+- ABI number is generated Ubuntu-style: 6.19.0 → 061900, 6.10.0-rc1 → 061000rc1
+- gcc version is auto-detected from installed packages and configured in debian/rules.d/
+- annotations and config are restricted to amd64 architecture only
+- builds use debian/rules targets (clean, defaultconfigs, binary-headers, build-arch, binary-debs)
+- mainline PPA flags are applied: do_mainline_build=true, do_tools=0, do_lib_rust=false, do_extras_package=false
+
+Package output:
+- produces 4 packages matching the mainline PPA format:
+  1. linux-headers-X.Y-NNNNNN[-localver]_X.Y-NNNNNN[-localver].TIMESTAMP_all.deb
+  2. linux-headers-X.Y-NNNNNN[-localver]-generic_X.Y-NNNNNN[-localver].TIMESTAMP_amd64.deb
+  3. linux-image-unsigned-X.Y-NNNNNN[-localver]-generic_X.Y-NNNNNN[-localver].TIMESTAMP_amd64.deb
+  4. linux-modules-X.Y-NNNNNN[-localver]-generic_X.Y-NNNNNN[-localver].TIMESTAMP_amd64.deb
+- additional packages (linux-buildinfo-*, linux-lib-rust-*) are created during build but automatically removed
+- the local version (if specified) appears in package names and versions, e.g.: linux-headers-6.19-061900-mybuild-generic
 "
 
 v_kernel_version=
@@ -75,12 +113,11 @@ v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
 v_disable_unused_modules= # boolean; false=blank; true=anything else
-v_run_olddefconfig=     # boolean; false=blank; true=anything else
 v_faster_build=         # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:dDfFc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,disable-unused-modules,fill-missing-config,faster-build,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:dDFc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,disable-unused-modules,faster-build,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -109,9 +146,6 @@ function decode_cmdline_args {
         shift ;;
       -D|--disable-unused-modules)
         v_disable_unused_modules=1
-        shift ;;
-      -f|--fill-missing-config)
-        v_run_olddefconfig=1
         shift ;;
       -F|--faster-build)
         v_faster_build=1
@@ -169,7 +203,14 @@ function cache_sudo {
 #
 function find_running_kernel_version {
   local raw_version
-  raw_version=$(uname -r | sed -E 's/-[^-]+$//')
+  # Supports all the formats.
+  #
+  raw_version=$(uname -r | sed -E 's/^([0-9]+\.[0-9]+(\.[0-9]+)?(-rc[0-9]+)?).*/\1/')
+
+  if [[ ! $raw_version =~ ^[0-9]+\.[0-9]+ ]]; then
+    >&2 echo "Error: Could not extract kernel version from '$(uname -r)'"
+    exit 1
+  fi
 
   normalize_kernel_version "$raw_version"
 }
@@ -211,6 +252,8 @@ function short_kernel_version {
 function register_exit_hook {
   function _exit_hook {
     "${SCRIPTING_ALARM_PROGRAM:-true}"
+
+    rm "$c_crack_bundle_temp_file"
 
     if git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
       local current_branch
@@ -335,7 +378,7 @@ function find_most_recent_config_version_available {
   exit 1
 }
 
-# Print the versions, one per line, with .0 patch version.
+# # Print the versions, one per line, with .0 patch version.
 #
 function find_ppa_kernel_versions {
   local target_version
@@ -425,6 +468,71 @@ function download_and_extract_config_file_from_modules_package {
   echo -n "$v_packages_destination/$config_file"
 }
 
+# Download crack.bundle for the specified kernel version.
+#
+# $1: kernel version (e.g., "6.19-rc8" or "6.11.4")
+#
+# Returns: path to the downloaded crack.bundle file
+#
+function download_crack_bundle {
+  local kernel_version=$1
+  local short_version
+  short_version=$(short_kernel_version "$kernel_version" with_rc)
+
+  local crack_bundle_url="${c_mainline_ppa_url}v${short_version}/crack.bundle"
+
+  >&2 echo "Downloading crack.bundle from ${crack_bundle_url}..."
+
+  if wget --quiet "$crack_bundle_url" -O "$c_crack_bundle_temp_file"; then
+    >&2 echo "Downloaded crack.bundle for v${short_version}"
+    echo -n "$c_crack_bundle_temp_file"
+  else
+    >&2 echo "Failed to download crack.bundle from ${crack_bundle_url}"
+    exit 1
+  fi
+}
+
+# Extract debian/ and debian.master/ directories from crack.bundle.
+# The bundle is a git bundle containing the Ubuntu mainline packaging.
+#
+# $1: path to crack.bundle file
+#
+# Extracts debian directories to the current directory.
+#
+function extract_debian_from_crack_bundle {
+  local bundle_path=$1
+
+  if [[ ! -f "$bundle_path" ]]; then
+    >&2 echo "Error: crack.bundle not found at $bundle_path"
+    exit 1
+  fi
+
+  >&2 echo "Extracting debian packaging from crack.bundle..."
+
+  # Fetch the bundle into current repo (bundles have dependencies on existing commits)
+  if ! git fetch "$bundle_path" 'refs/tags/cod/mainline/*:refs/tags/cod/mainline/*' 2>/dev/null; then
+    >&2 echo "Error: Failed to fetch crack.bundle"
+    exit 1
+  fi
+
+  # Find the tag name (e.g., cod/mainline/v6.17.13)
+  local bundle_tag
+  bundle_tag=$(git tag -l 'cod/mainline/*' | sort -V | tail -1)
+
+  if [[ -z $bundle_tag ]]; then
+    >&2 echo "Error: No cod/mainline tag found in bundle"
+    exit 1
+  fi
+
+  # Extract debian directories from the tag
+  if ! git checkout "$bundle_tag" -- debian debian.master 2>/dev/null; then
+    >&2 echo "Error: Failed to extract debian directories from $bundle_tag"
+    exit 1
+  fi
+
+  >&2 echo "Successfully extracted debian packaging from $bundle_tag"
+}
+
 function check_if_version_already_packaged {
   local building_kernel_version=$1
 
@@ -456,8 +564,10 @@ function find_latest_packaged_version {
   #
   # We can't use short_kernel_version() because this is not the standard format.
   #
+  # Match both old-style (linux-image-6.19.0) and mainline-style (linux-image-unsigned-6.19.2-061902-sav-generic) packages
+  #
   find "$v_packages_destination" -printf "%P\n" |
-    perl -ne 'print $1 if /^linux-image-('"$kernel_version"'(-rc\d+)?)/' |
+    perl -ne 'print $2 if /^linux-image(-unsigned)?-('"$kernel_version"'(-rc\d+)?)/' |
     sort -V |
     tail -n 1 |
     perl -pe 's/\.0(?=-rc)//' ||
@@ -503,7 +613,16 @@ function print_sorted_commits_diff {
 }
 
 function import_config_file {
+  # Always copy to .config first for modifications
   cp "$source_config_file" .config
+}
+
+# Move modified config to Ubuntu location
+#
+function finalize_ubuntu_config {
+  echo "Finalizing config for Ubuntu packaging"
+  mkdir -p debian.master/config/amd64
+  mv -f .config debian.master/config/amd64/config.common.amd64
 }
 
 function fix_ubuntu_config {
@@ -559,7 +678,6 @@ function disable_unused_modules {
   #     make mrproper
   #     cp .config{.sav,}
   #     # (apply below)
-  #     make olddefconfig
   #     /usr/bin/time -f "TIME: %e" make -j $(nproc)
   #     ${SCRIPTING_ALARM_PROGRAM:-true}
   #
@@ -860,10 +978,6 @@ function disable_unused_modules {
   scripts/config --disable  CONFIG_STAGING
 }
 
-function run_olddefconfig {
-  make olddefconfig
-}
-
 function display_config_diff {
   # Assume that the error status 2 (real error) can't happen, because the file exists.
   #
@@ -923,18 +1037,151 @@ function cherry_pick_commits {
   fi
 }
 
-function compile_kernel {
-  local make_options=()
+function verify_or_setup_ubuntu_packaging {
+  local running_kernel_version=$1
 
-  if [[ -n $v_local_version ]]; then
-    make_options+=(LOCALVERSION=-"$v_local_version")
+  # Check if we have a complete debian.master setup (not just changelog)
+  if [[ -f debian.master/changelog && -f debian.master/rules.d/amd64.mk && -d debian.master/config ]]; then
+    >&2 echo "Found existing debian.master directory (Ubuntu kernel tree)"
+    return
   fi
 
-  # Enable ccache with deterministic timestamps for cache hits
-  make_options+=(CC="ccache gcc")
-  make_options+=(KBUILD_BUILD_TIMESTAMP='')
+  # Remove incomplete debian directories and extract fresh from crack.bundle
+  rm -rf debian.master debian
 
-  make -j "$(nproc)" bindeb-pkg "${make_options[@]}"
+  >&2 echo "Downloading Ubuntu packaging from mainline PPA"
+
+  # Find the latest version to get packaging from (for the running kernel major.minor)
+  local packaging_version
+  packaging_version=$(find_ppa_kernel_versions "$running_kernel_version" | head -n 1)
+
+  >&2 echo "Using packaging from v${packaging_version}"
+
+  # Download crack.bundle
+  local bundle_path
+  bundle_path=$(download_crack_bundle "$packaging_version")
+
+  # Extract debian directories
+  extract_debian_from_crack_bundle "$bundle_path"
+}
+
+# Generate Ubuntu-style ABI number (e.g., 060100 for 6.1.0, 061000rc1 for 6.10.0-rc1)
+function generate_abi_number {
+  local version=$1
+
+  version=${version#v}
+
+  if [[ $version =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    # GA version: 6.1.0 -> 060100
+    printf "%02d%02d%02d" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  elif [[ $version =~ ^([0-9]+)\.([0-9]+)-rc([0-9]+)$ ]]; then
+    # RC version: 6.10-rc1 -> 061000rc1
+    printf "%02d%02d00rc%d" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  elif [[ $version =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+    # Short version: 6.1 -> 060100
+    printf "%02d%02d00" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  else
+    >&2 echo "Error: Cannot parse version for ABI number: $version"
+    exit 1
+  fi
+}
+
+function setup_ubuntu_packaging {
+  echo "Setting up Ubuntu packaging for $building_kernel_version"
+
+  local debversion
+  debversion=$(date +%Y%m%d%H%M)
+
+  local abinum
+  abinum=$(generate_abi_number "$building_kernel_version")
+
+  local clean_version
+  clean_version=$(short_kernel_version "$building_kernel_version" with_rc)
+
+  echo "  ABI number: $abinum"
+  echo "  Deb version: $debversion"
+  echo "  Clean version: $clean_version"
+
+  local ubuntu_series
+  ubuntu_series=$(lsb_release -cs)
+
+  # Modify changelog - keep source package as "linux" (no renaming for simplicity)
+  # Handle both GA format (6.19.0-061900.timestamp) and RC format (6.19.0-061900rc8.timestamp)
+  sed -i -re "s/(^linux) \(([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)(rc[0-9]+)?\.[0-9]+\) ([^;]*)(.*)/linux (${clean_version}-${abinum}${v_local_version:+-$v_local_version}.${debversion}) ${ubuntu_series}\6/" debian.master/changelog
+
+  # Update dwarves dependency
+  sed -i -re 's/dwarves \[/dwarves (>=1.21) \[/g' debian.master/control.stub.in
+
+  # Don't fail if we find no *.ko files in the build dir
+  sed -i -re 's/zstd -19 --quiet --rm/zstd -19 --rm || true/g' debian/rules.d/2-binary-arch.mk || true
+
+  echo "  Applying adjustments"
+
+  local latest_installed_gcc_package
+  latest_installed_gcc_package=$(dpkg -l 'gcc-*' | awk '$1 == "ii" && $2 ~ /^gcc-[[:digit:]]+$/ {print $2}' | sort -V | tail -n 1)
+
+  sed -i -rE "1s/^gcc:=.*/gcc:=$latest_installed_gcc_package/" debian/rules.d/0-common-vars.mk
+  sed -i -rE "s/export gcc\?=.*/export gcc?=$latest_installed_gcc_package/" debian/rules.d/0-common-vars.mk
+  sed -i -rE "s/gcc-[[:digit:]]+/$latest_installed_gcc_package/g" debian.master/control.stub.in
+
+  # Note: We don't modify amd64.mk here. Instead, we pass do_mainline_build=true
+  # and do_tools=0 on the command line when calling debian/rules, which overrides
+  # any settings in .mk files. This matches how the mainline PPA builds kernels.
+}
+
+# Run Ubuntu's config preparation
+#
+function prepare_ubuntu_build {
+  echo "Preparing Ubuntu kernel build environment"
+
+  # Modify annotations to only include amd64 architecture
+  sed -i -e 's/^# ARCH: .*/# ARCH: amd64/' \
+         -e 's/^# FLAVOUR: .*/# FLAVOUR: amd64-generic/' \
+         debian.master/config/annotations
+
+  mkdir -p debian.master/etc
+  echo 'archs="amd64"' > debian.master/etc/kernelconfig
+  fakeroot debian/rules clean defaultconfigs
+}
+
+function compile_kernel {
+  echo "Building kernel with Ubuntu mainline method (debian/rules targets)"
+
+  # Enable ccache
+  export PATH="/usr/lib/ccache:$PATH"
+  export KBUILD_BUILD_TIMESTAMP=''
+
+  # Mainline PPA flags: disable tools, extras, rust-lib; enable mainline mode
+  local build_flags="do_mainline_build=true do_extras_package=false do_tools=0 do_lib_rust=false no_dumpfile=1"
+
+  # Clean
+  fakeroot debian/rules clean
+
+  # Build headers
+  fakeroot debian/rules do_tools=0 no_dumpfile=1 binary-headers
+
+  # Build kernel (yes '' auto-answers prompts)
+  # The 'yes' command will receive SIGPIPE when build-arch closes stdin, so we ignore that error
+  (yes '' || test $? -eq 141) | debian/rules $build_flags build-arch
+
+  # Package into .deb files
+  fakeroot debian/rules $build_flags binary-debs
+
+  # Remove extra packages that mainline PPA doesn't publish.
+  #
+  # The Ubuntu debian/rules (extracted from crack.bundle) creates these additional packages:
+  # - linux-buildinfo-*: Build metadata (config, ABI, modules list, compiler info).
+  # - linux-lib-rust-*: Rust kernel library support (even with do_lib_rust=false).
+  #
+  # The mainline PPA build DOES create these packages (visible in build logs), but the
+  # mainline-build infrastructure filters them out and only publishes 4 packages:
+  #   1. linux-headers-*_all.deb
+  #   2. linux-headers-*-generic_amd64.deb
+  #   3. linux-image-unsigned-*-generic_amd64.deb
+  #   4. linux-modules-*-generic_amd64.deb
+  #
+  # We delete the extras to match the published mainline PPA package set.
+  rm -f ../linux-buildinfo-*.deb ../linux-lib-rust-*.deb
 }
 
 function remove_destination_old_version_files {
@@ -962,20 +1209,17 @@ function remove_destination_old_version_files {
     find "$v_packages_destination" -regextype egrep -not -name "$config_basename" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
   fi
 
-  # Sample filenames:
+  # Sample filenames (mainline-style packages):
   #
-  # - linux-headers-6.1.9-mybuild_6.1.9-mybuild-4_amd64.deb
-  # - linux-image-6.1.9-mybuild_6.1.9-mybuild-4_amd64.deb
-  # - linux-libc-dev_6.1.9-mybuild-4_amd64.deb
+  # - linux-headers-6.19-061900-mybuild_6.19-061900-mybuild.202602091928_all.deb
+  # - linux-image-unsigned-6.19-061900-mybuild-generic_6.19-061900-mybuild.202602091928_amd64.deb
+  # - linux-modules-6.19-061900-mybuild-generic_6.19-061900-mybuild.202602091928_amd64.deb
   #
-  # - linux-headers-6.10.0-rc2-mybuild_6.10.0-rc2-65_amd64.deb
-  #
-  find "$v_packages_destination" -regextype egrep -regex ".*/.+[-_]$short_version\..+\.deb" -exec rm {} \;
+  find "$v_packages_destination" -regextype egrep -regex ".*/.+[-_]$short_version.+\.deb" -exec rm {} \;
 }
 
 function move_packages_and_cleanup {
   mv ../*.deb "$v_packages_destination"/
-  rm ../*.{changes,buildinfo}
 }
 
 # Output the package filenames, newline-separated.
@@ -987,8 +1231,9 @@ function find_built_packages {
   short_version=$(short_kernel_version "$normalized_version" no_rc)
 
   # See remove_destination_old_version_files() for the filenames format.
+  # Pattern matches: linux-headers-6.19-061900-mybuild_6.19-061900-mybuild.202602091928_all.deb
   #
-  find "$v_packages_destination" -name "linux-*[-_]$short_version.*-*.deb"
+  find "$v_packages_destination" -name "linux-*[-_]$short_version*-*.deb"
 }
 
 # Doesn't uninstall the libc package (which doesn't carry the local version), but we can live with it.
@@ -1061,9 +1306,13 @@ function main {
     if [[ -z $v_kernel_version ]] && same_major_minor_version "$running_kernel_version" "$building_kernel_version"; then
       print_sorted_commits_diff "$running_kernel_version" "$building_kernel_version"
     fi
+
+    cherry_pick_commits "$building_kernel_version"
   else
     building_kernel_version=$(find_branch_kernel_version)
   fi
+
+  verify_or_setup_ubuntu_packaging "$building_kernel_version"
 
   local source_config_file
   source_config_file=$(find_local_config_file_for_version "$building_kernel_version")
@@ -1076,12 +1325,27 @@ function main {
 
   import_config_file "$source_config_file"
 
-  # Used later when displaying the diff.
-  #
-  cp .config .config.bak
+  setup_ubuntu_packaging
 
-  # Always patch for simplicity, so if we want to replace the config for a version with an existing
-  # configuration, we don't need to manually patch it.
+  # Move the base config to Ubuntu location (will be used as template)
+  finalize_ubuntu_config
+
+  # Prepare Ubuntu build environment (regenerates configs from annotations + base config)
+  prepare_ubuntu_build
+
+  # Apply config modifications AFTER prepare_ubuntu_build regenerates configs
+  # Edit the generated config file directly
+  local ubuntu_config="debian.master/config/amd64/config.common.amd64"
+  if [[ ! -f "$ubuntu_config" ]]; then
+    >&2 echo "Error: Ubuntu config not found at $ubuntu_config"
+    exit 1
+  fi
+
+  # Temporarily use the Ubuntu config as .config for scripts/config to work
+  cp "$ubuntu_config" .config
+
+  # Backup for display_config_diff
+  cp .config .config.bak
 
   fix_ubuntu_config
   disable_debug_info
@@ -1095,15 +1359,12 @@ function main {
     disable_unused_modules
   fi
 
-  if [[ -n $v_run_olddefconfig || -n $v_bisect ]]; then
-    run_olddefconfig
-  fi
-
   if [[ -n $v_display_config_diff ]]; then
     display_config_diff
   fi
 
-  cherry_pick_commits "$building_kernel_version"
+  # Move modified config back to Ubuntu location for the build
+  mv .config "$ubuntu_config"
 
   time compile_kernel
 
