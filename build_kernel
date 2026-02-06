@@ -1061,6 +1061,10 @@ function main {
 
   import_config_file "$source_config_file"
 
+  # Used later when displaying the diff.
+  #
+  cp .config .config.bak
+
   # Always patch for simplicity, so if we want to replace the config for a version with an existing
   # configuration, we don't need to manually patch it.
 
