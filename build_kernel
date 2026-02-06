@@ -761,6 +761,9 @@ function cherry_pick_commits {
             git cherry-pick "$commit"
           fi
         done
+      elif [[ ! $entry_kernel_version =~ ^[[:digit:]]+\.[[:digit:]]+ ]]; then
+        >&2 echo "Wrong cherry pick format: $cherry_picks_entry"
+        exit 1
       fi
     done
   fi
