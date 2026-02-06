@@ -407,7 +407,7 @@ function download_and_extract_config_file_from_modules_package {
   # Make sure that the processing was correct.
   #
   if [[ -z $(echo "$config_file" | perl -ne 'print if /^config-\d+\.\d+(\.\d+|-rc\d+)?$/') ]]; then
-    >&2 "Config filename processing failed: $raw_config_file"
+    >&2 echo "Config filename processing failed: $raw_config_file"
     exit 1
   fi
 
