@@ -437,7 +437,7 @@ function check_if_version_already_packaged {
 function find_latest_packaged_version {
   local kernel_version=$1
 
-  if [[ $kernel_version =~ ^([0-9]+\.[0-9]+)($|-rc) ]]; then
+  if [[ $kernel_version =~ ^([[:digit:]]+\.[[:digit:]]+)($|-rc) ]]; then
     kernel_version=${BASH_REMATCH[1]}.0
   fi
 
