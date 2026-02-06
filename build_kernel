@@ -111,7 +111,7 @@ function decode_cmdline_args {
       -f|--fill-missing-config)
         v_run_olddefconfig=1
         shift ;;
-      -c|cherry-pick)
+      -c|--cherry-pick)
         v_raw_cherry_picks=$2
         shift 2 ;;
       --)
