@@ -221,7 +221,6 @@ function register_exit_hook {
 function setup_logging {
   exec 5> "$c_logfile"
   BASH_XTRACEFD=5
-  rm -f "$c_logfile"
   exec > >(tee -ai "$c_logfile") 2>&1
   set -x
 }
