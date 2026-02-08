@@ -1096,7 +1096,7 @@ function main {
 
   cherry_pick_commits "$building_kernel_version"
 
-  compile_kernel
+  time compile_kernel
 
   # Config files are handled based on $v_bisect.
   #
