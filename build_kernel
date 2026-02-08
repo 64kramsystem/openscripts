@@ -559,6 +559,8 @@ function disable_unused_modules {
   scripts/config --disable  CONFIG_CPU_SUP_ZHAOXIN
   scripts/config --disable  CONFIG_DRM_RADEON               # radeon...
   scripts/config --undefine CONFIG_DRM_RADEON_USERPTR
+  scripts/config --disable  CONFIG_DRM_AMDGPU_SI            # GCN 1.0 (2012)
+  scripts/config --disable  CONFIG_DRM_AMDGPU_CIK           # GCN 2.0 (2013-2014)
   scripts/config --disable  CONFIG_DRM_NOUVEAU              # nouveau...
   scripts/config --undefine CONFIG_NOUVEAU_DEBUG
   scripts/config --undefine CONFIG_NOUVEAU_DEBUG_DEFAULT
