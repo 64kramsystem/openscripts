@@ -211,7 +211,9 @@ function register_exit_hook {
 
     if [[ $current_branch == "$c_cherry_pick_branch" ]]; then
       git checkout -
-      git branch -d "$current_branch"
+      # Use -D (force delete) because the branch may have cherry-picked/reverted commits
+      # that aren't in the base branch, causing -d (safe delete) to fail
+      git branch -D "$current_branch"
     fi
   }
 
