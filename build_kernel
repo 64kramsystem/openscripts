@@ -552,7 +552,7 @@ function disable_unused_modules {
   #     # (apply below)
   #     make olddefconfig
   #     /usr/bin/time -f "TIME: %e" make -j $(nproc)
-  #     plin
+  #     ${SCRIPTING_ALARM_PROGRAM:-true}
   #
   scripts/config --disable  CONFIG_CPU_SUP_HYGON            # exotic hw architectures...
   scripts/config --disable  CONFIG_CPU_SUP_CENTAUR
