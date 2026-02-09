@@ -284,7 +284,7 @@ function find_most_recent_config_version_available {
   local building_kernel_version=$1
 
   local candidate_versions
-  candidate_versions=$(find_config_package_candidate_versions "$1")
+  candidate_versions=$(find_ppa_kernel_versions "$1")
 
   >&2 echo "Found config package candidate versions:"
   >&2 echo "$candidate_versions" | perl -pe 's/^/- /'
@@ -326,9 +326,9 @@ function find_most_recent_config_version_available {
   exit 1
 }
 
-# Print the candidate versions, one per line, with .0 patch version.
+# Print the versions, one per line, with .0 patch version.
 #
-function find_config_package_candidate_versions {
+function find_ppa_kernel_versions {
   local target_version
   target_version=$(short_kernel_version "$1" no_rc)
 
