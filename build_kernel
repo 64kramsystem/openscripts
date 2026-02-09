@@ -27,6 +27,7 @@ Options:
                                      minus is automatically added
 - [-D|--disable-unused-modules]    : disable unused modules
 - [-f|--fill-missing-config]       : run 'make olddefconfig' after applying all the config changes
+- [-F|--faster-build]              : disable LTO and sanitizers for faster builds (automatically enabled in bisect mode)
 - [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
 - [-r|--repo-path <path>]          : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
@@ -50,7 +51,7 @@ Workflow (regular):
 
 Workflow (bisect):
 
-- some features are disabled (LTO/sanitizers)
+- some features are disabled (LTO/sanitizers) for faster builds
 - the kernel local version is set to '$c_bisect_local_version', overriding any user setting
 - the kernel version is gathered from the latest tag reachable from HEAD
 - (the configuration is handled as regular, plus 'make olddefconfig' is executed)
@@ -75,10 +76,11 @@ v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
 v_disable_unused_modules= # boolean; false=blank; true=anything else
 v_run_olddefconfig=     # boolean; false=blank; true=anything else
+v_faster_build=         # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:dDfc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,disable-unused-modules,fill-missing-config,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:dDfFc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,disable-unused-modules,fill-missing-config,faster-build,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -110,6 +112,9 @@ function decode_cmdline_args {
         shift ;;
       -f|--fill-missing-config)
         v_run_olddefconfig=1
+        shift ;;
+      -F|--faster-build)
+        v_faster_build=1
         shift ;;
       -c|--cherry-pick)
         v_raw_cherry_picks=$2
@@ -146,6 +151,7 @@ function decode_cmdline_args {
   if [[ -n $v_bisect ]]; then
     v_local_version=$c_bisect_local_version
     v_install=1
+    v_faster_build=1
   fi
 }
 
@@ -522,7 +528,7 @@ function disable_debug_info {
 # Additional optimizations for bisect mode to reduce compile time.
 # These make the kernel slower but compile much faster.
 #
-function apply_bisect_build_optimizations {
+function make_build_faster {
   # Disable LTO - link time optimization is very slow
   scripts/config --enable   CONFIG_LTO_NONE
   scripts/config --disable  CONFIG_LTO_CLANG_FULL
@@ -1081,8 +1087,8 @@ function main {
   disable_debug_info
   enable_native_cpu
 
-  if [[ -n $v_bisect ]]; then
-    apply_bisect_build_optimizations
+  if [[ -n $v_faster_build ]]; then
+    make_build_faster
   fi
 
   if [[ -n $v_disable_unused_modules ]]; then
