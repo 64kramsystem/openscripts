@@ -206,14 +206,15 @@ function register_exit_hook {
   function _exit_hook {
     "${SCRIPTING_ALARM_PROGRAM:-true}"
 
-    local current_branch
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    if git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
+      local current_branch
+      current_branch=$(git rev-parse --abbrev-ref HEAD)
 
-    if [[ $current_branch == "$c_cherry_pick_branch" ]]; then
-      git checkout -
-      # Use -D (force delete) because the branch may have cherry-picked/reverted commits
-      # that aren't in the base branch, causing -d (safe delete) to fail
-      git branch -D "$current_branch"
+      if [[ $current_branch == "$c_cherry_pick_branch" ]]; then
+        git checkout -
+      fi
+
+      git branch -D "$c_cherry_pick_branch"
     fi
   }
 
