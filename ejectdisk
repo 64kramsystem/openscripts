@@ -2,15 +2,11 @@
 
 set -o errexit
 
-c_help="Usage: $(basename "$0") [-n|--no-poweroff] [<block_device>|<mtp_uri>]
+c_help="Usage: $(basename "$0") [-n|--no-poweroff]
 
-Unmounts and powers off a disk, or unmounts MTP devices (phones), like the typical desktop environment functionality.
-The prefix \`/dev/\` is automatically added to block devices, if not present.
-
-If no arguments are passed, all the USB storage devices are ejected and all MTP devices are unmounted.
+Unmounts all USB storage devices and MTP devices (phones), like the typical desktop environment functionality.
 
 If the \`no-poweroff\` option is passed, the partitions are unmounted, but the disk is not powered off (applies to block devices only)."
-v_option_device=
 v_option_no_poweroff=
 
 declare -a v_devices
@@ -36,27 +32,15 @@ function decode_commandline_arguments {
     esac
   done
 
-  if [[ $# -gt 1 ]]; then
+  if [[ $# -gt 0 ]]; then
     echo "$c_help"
-    exit 1;
-  elif [[ $# == 0 ]]; then
-    v_option_device=
-  else
-    v_option_device="$1"
+    exit 1
   fi
 }
 
 function set_devices {
-  if [[ "$v_option_device" == "" ]]; then
-    find_usb_storage_devices
-    find_mtp_devices
-  elif [[ $v_option_device =~ ^mtp:// ]]; then
-    v_mtp_devices+=("$v_option_device")
-  elif [[ $v_option_device =~ ^/dev/ ]]; then
-    v_devices+=("$v_option_device")
-  else
-    v_devices+=("/dev/$v_option_device")
-  fi
+  find_usb_storage_devices
+  find_mtp_devices
 }
 
 function find_usb_storage_devices {
