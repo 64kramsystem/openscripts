@@ -2,18 +2,19 @@
 
 set -o errexit
 
-c_help="Usage: $(basename "$0") [-n|--no-poweroff] [<block_device>]
+c_help="Usage: $(basename "$0") [-n|--no-poweroff] [<block_device>|<mtp_uri>]
 
-Unmounts and powers off a disk, like the typical desktop environment functionality.
-The prefix \`/dev/\` is automatically added, if not present.
+Unmounts and powers off a disk, or unmounts MTP devices (phones), like the typical desktop environment functionality.
+The prefix \`/dev/\` is automatically added to block devices, if not present.
 
-If no arguments are passed, all the usb storage devices are ejected.
+If no arguments are passed, all the USB storage devices are ejected and all MTP devices are unmounted.
 
-If the \`no-poweroff\` option is passed, the partitions are unmounted, but the disk is not powered off."
+If the \`no-poweroff\` option is passed, the partitions are unmounted, but the disk is not powered off (applies to block devices only)."
 v_option_device=
 v_option_no_poweroff=
 
 declare -a v_devices
+declare -a v_mtp_devices
 
 function decode_commandline_arguments {
   eval set -- "$(getopt --options hn --long help,no-poweroff -- "$@")"
@@ -48,6 +49,9 @@ function decode_commandline_arguments {
 function set_devices {
   if [[ "$v_option_device" == "" ]]; then
     find_usb_storage_devices
+    find_mtp_devices
+  elif [[ $v_option_device =~ ^mtp:// ]]; then
+    v_mtp_devices+=("$v_option_device")
   elif [[ $v_option_device =~ ^/dev/ ]]; then
     v_devices+=("$v_option_device")
   else
@@ -68,6 +72,39 @@ function find_usb_storage_devices {
       v_devices+=("$device_name")
     fi
   done
+}
+
+function find_mtp_devices {
+  # Find all MTP devices using gio mount -l
+  # Sample output:
+  #   Mount(0): Phone Model -> mtp://Manufacturer_Model_XXXXXXXXXXXX/
+  #
+  local mtp_list mtp_uri
+  # Deduplicate: gio mount -l shows the same MTP URI multiple times (once as a named mount, once
+  # as a generic "mtp" mount), but we only want to unmount each device once.
+  #
+  declare -A unique_uris
+  mtp_list=$(gio mount -l 2>/dev/null || true)
+
+  while IFS= read -r line; do
+    if [[ $line =~ -\>\ (mtp://[^[:space:]]+) ]]; then
+      unique_uris["${BASH_REMATCH[1]}"]=1
+    fi
+  done <<< "$mtp_list"
+
+  for mtp_uri in "${!unique_uris[@]}"; do
+    v_mtp_devices+=("$mtp_uri")
+  done
+}
+
+function unmount_mtp_device() {
+  local mtp_uri="$1"
+
+  if gio mount -u "$mtp_uri" 2>/dev/null; then
+    echo "MTP device $mtp_uri unmounted."
+  else
+    echo "Failed to unmount MTP device $mtp_uri or already unmounted."
+  fi
 }
 
 function unmount_device_partitions() {
@@ -138,3 +175,9 @@ if [[ "$v_option_no_poweroff" != "1" ]]; then
     power_off_device
   done
 fi
+
+# Unmount MTP devices (phones, tablets, etc.)
+#
+for mtp_uri in "${v_mtp_devices[@]}"; do
+  unmount_mtp_device "$mtp_uri"
+done
