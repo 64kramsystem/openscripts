@@ -251,9 +251,11 @@ function short_kernel_version {
 
 function register_exit_hook {
   function _exit_hook {
+    set +o errexit
+
     "${SCRIPTING_ALARM_PROGRAM:-true}"
 
-    rm "$c_crack_bundle_temp_file"
+    rm -f "$c_crack_bundle_temp_file"
 
     if git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
       local current_branch
