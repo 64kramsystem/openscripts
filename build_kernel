@@ -1264,6 +1264,11 @@ function send_built_packages_to_fd3 {
 }
 
 function main {
+  if [[ $EUID -eq 0 ]]; then
+    >&2 echo "This script must not be run with sudo permissions."
+    exit 1
+  fi
+
   if [[ -n $v_install ]]; then
     cache_sudo
   fi
