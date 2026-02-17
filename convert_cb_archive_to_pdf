@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_image_extensions_regex='.+\.(jpg|png)'
+c_image_extensions_regex='.+\.(jpe?g|png)'
 
 c_unnecessary_files=(
   *.mp3
