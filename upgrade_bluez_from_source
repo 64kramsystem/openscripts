@@ -8,7 +8,7 @@ shopt -s inherit_errexit
 
 c_repo_address=https://github.com/bluez/bluez.git
 c_temporary_dir=$(mktemp -d --suffix=.bluez)
-c_help="Usage: $(basename "$0") [-h|--help]
+c_help="Usage: $(basename "$0") [-h|--help] [-v|--version VERSION]
 
 Upgrade Bluez from source.
 
@@ -16,11 +16,13 @@ Needs to be run as root.
 
 Uninstalls the files corresponding to the previous, and puts the bluez package on hold.
 
-If the current version is the latest, nothing is done."
+If the current version is the latest (or the specified version), nothing is done."
+
+v_version=
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv: --long help,version: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -29,6 +31,9 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
+      -v|--version)
+        v_version=$2
+        shift 2 ;;
       --)
         shift
         break ;;
@@ -128,9 +133,11 @@ function main {
   check_user
 
   current_version=$(find_current_version)
-  latest_version=$(find_latest_version)
 
-  if [[ $current_version != "$latest_version" ]]; then
+  local target_version
+  target_version=${v_version:-$(find_latest_version)}
+
+  if [[ $current_version != "$target_version" ]]; then
     clone_repository "$current_version"
     switch_dir
 
@@ -145,7 +152,7 @@ function main {
 
     uninstall
 
-    change_to_version "$latest_version"
+    change_to_version "$target_version"
 
     clean_and_configure "$libexecdir"
 
@@ -157,9 +164,9 @@ function main {
 
     hold_bluez_package
 
-    echo "Upgraded Bluez to v$latest_version."
+    echo "Upgraded Bluez to v$target_version."
   else
-    echo 'Bluez already at the latest version.'
+    echo 'Bluez already at the target version.'
   fi
 }
 
