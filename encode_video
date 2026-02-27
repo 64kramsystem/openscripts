@@ -7,15 +7,15 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_default_extension=mkv
-# SVT-AV1 preset scale: 0 (slowest) to 13 (fastest). Medium ≈ 8; slower ≈ 6.
+# The combinations h265:slow+25 vs. av1:4+29 yield similar size, with av1 being much faster and
+# significantly higher quality.
 declare -A c_default_preset=(
-  [h265]=slower
-  [av1]=6
+  [h265]=slow # M4=17 FPS
+  [av1]=4     # M4=68 FPS (!)
 )
-# CRF scales differ: x265 is 0-51, SVT-AV1 is 0-63. Roughly: x265 CRF 25 ≈ SVT-AV1 CRF 35.
 declare -A c_default_crf=(
   [h265]=25
-  [av1]=32
+  [av1]=29
 )
 c_tmp_extension=tmp
 # Very roughly tested; set 1 process less than the amount saturating the given CPU.
