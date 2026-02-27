@@ -7,8 +7,16 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_default_extension=mkv
-c_default_preset=slower
-c_crf=25
+# SVT-AV1 preset scale: 0 (slowest) to 13 (fastest). Medium ≈ 8; slower ≈ 6.
+declare -A c_default_preset=(
+  [h265]=slower
+  [av1]=6
+)
+# CRF scales differ: x265 is 0-51, SVT-AV1 is 0-63. Roughly: x265 CRF 25 ≈ SVT-AV1 CRF 35.
+declare -A c_default_crf=(
+  [h265]=25
+  [av1]=32
+)
 c_tmp_extension=tmp
 # Very roughly tested; set 1 process less than the amount saturating the given CPU.
 declare -A c_procs_mapping=(
@@ -19,10 +27,11 @@ declare -A c_rotation_to_filter=(
   [cw]="transpose=clock"
   [ccw]="transpose=cclock"
 )
-c_help="Usage: $(basename "$0") [-h|--help] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] [-k|--keep-input-files] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [--encoder h265|av1] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-c|--cut <start>-<end>] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] [-k|--keep-input-files] <input> {<input>, ...}
 
-Encodes video files to h265, in parallel; copies the audio. The number of parallel procs is based on an internal table.
-The default x265 preset is '$c_default_preset', with CRF=$c_crf.
+Encodes video files to h265 or AV1 (default), in parallel; copies the audio. The number of parallel procs is based on an internal table.
+Encoder selection: --encoder av1 (default) uses libsvtav1; --encoder h265 uses libx265.
+Default preset/crf: h265=${c_default_preset[h265]}/${c_default_crf[h265]}, av1=${c_default_preset[av1]}/${c_default_crf[av1]}.
 The file extension is replaced with '$c_default_extension' (or '--extension', when provided).
 
 Files workflow:
@@ -54,20 +63,22 @@ v_temp_input_files=()
 v_output_files=()
 
 v_parallel_procs=         # numeric
+v_video_codec=av1         # "h265" or "av1"
 v_batch_mode=             # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
 v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
 v_rotate=                 # "cw"/"ccw"
 v_segment=                # string '<start>-<end>' (see help).
-v_preset=$c_default_preset
+v_preset=                 # blank means "use codec default"
+v_crf=                    # blank means "use codec default"
 v_extension=$c_default_extension
 v_output_dir=             # optional; when set, has never a trailing slash
 v_delete_input_files=1    # boolean; false=blank, true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hbds:r:R:c:p:e:o:k --long help,batch,deinterlace,square:,resize:,rotate:,cut:,preset:,extension:,output-dir:,keep-input-files --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hbds:r:R:c:p:e:o:k --long help,encoder:,batch,deinterlace,square:,resize:,rotate:,cut:,preset:,extension:,output-dir:,keep-input-files --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -76,6 +87,13 @@ function decode_cmdline_args {
       -h|--help)
         echo "$c_help"
         exit 0 ;;
+      --encoder)
+        if [[ ! $2 =~ ^h265|av1$ ]]; then
+          >&2 echo "Invalid encoder: $2 (valid: h265, av1)"
+          exit 1
+        fi
+        v_video_codec=$2
+        shift 2 ;;
       -b|--batch)
         v_batch_mode=1
         shift ;;
@@ -115,6 +133,14 @@ function decode_cmdline_args {
         break ;;
     esac
   done
+
+  if [[ -z $v_preset ]]; then
+    v_preset=${c_default_preset[$v_video_codec]}
+  fi
+
+  if [[ -z $v_crf ]]; then
+    v_crf=${c_default_crf[$v_video_codec]}
+  fi
 
   if [[ $# -lt 1 ]]; then
     echo "$c_help"
@@ -265,6 +291,13 @@ function encode_files {
     video_filters_par=$(IFS=,; echo -n "-vf \"${video_filters[*]}\"")
   fi
 
+  local video_codec_options
+  if [[ $v_video_codec == h265 ]]; then
+    video_codec_options="-c:v libx265 -crf $v_crf -preset $v_preset -pix_fmt yuv420p10le"
+  else
+    video_codec_options="-c:v libsvtav1 -crf $v_crf -preset $v_preset -pix_fmt yuv420p10le -svtav1-params tune=0"
+  fi
+
   local ffmpeg_command="\
 ffmpeg \
   ${global_options[*]} \
@@ -272,7 +305,7 @@ ffmpeg \
   ${video_options[*]} \
   -c:a copy \
   $video_filters_par \
-  -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le \
+  $video_codec_options \
   ${output_options[*]} \
   {2}
 "
