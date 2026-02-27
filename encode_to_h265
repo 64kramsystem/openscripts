@@ -272,7 +272,7 @@ ffmpeg \
   ${video_options[*]} \
   -c:a copy \
   $video_filters_par \
-  -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le -x265-params asm=avx512 \
+  -c:v libx265 -crf $c_crf -preset $v_preset -pix_fmt yuv420p10le \
   ${output_options[*]} \
   {2}
 "
