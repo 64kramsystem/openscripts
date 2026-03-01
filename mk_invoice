@@ -102,7 +102,7 @@ class InvoiceGenerator
     ignore_files = options[:ignore] || []
     rename_files = options[:rename] || {}
 
-    Zip::File.open(zipfile_name, Zip::File::CREATE) do |zipfile|
+    Zip::File.open(zipfile_name, create: true) do |zipfile|
       raw_input_filenames = find_all_directory_files(directory)
 
       raw_input_filenames.each do |raw_filename|
