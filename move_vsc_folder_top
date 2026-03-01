@@ -12,8 +12,9 @@ class MoveVscFolderTop
   sig { params(projects_dir: String, project_pattern: String, folder_pattern: String).void }
   def execute(projects_dir, project_pattern, folder_pattern:)
     project_file = find_project_file(projects_dir, project_pattern)
-    new_content = move_matching_folder_to_top(project_file, folder_pattern)
+    new_content, folder_path = move_matching_folder_to_top(project_file, folder_pattern)
     write_new_content(project_file, new_content)
+    puts folder_path
   end
 
   private
@@ -31,7 +32,7 @@ class MoveVscFolderTop
     end
   end
 
-  sig { params(project_file: String, folder_pattern: String).returns(T::Hash[String, T.untyped]) }
+  sig { params(project_file: String, folder_pattern: String).returns([T::Hash[String, T.untyped], String]) }
   def move_matching_folder_to_top(project_file, folder_pattern)
     data = T.let(YAML.load(File.read(project_file)), T::Hash[String, T.untyped])
 
@@ -48,9 +49,9 @@ class MoveVscFolderTop
     if matching_indices.length == 1
       idx = matching_indices[0]
       project_basename = project_file[/(\w+)\.code-workspace$/, 1]
-      puts "Moving folder #{project_basename}:#{folder_names[idx]}…"
+      folder_path = File.expand_path(data["folders"][idx].fetch("path"), File.dirname(project_file))
       data["folders"].insert(0, data["folders"].delete_at(idx))
-      data
+      [data, folder_path]
     else
       $stderr.puts "Unexpected number of folders found matching pattern '#{folder_pattern}':"
       matching_indices.each { $stderr.puts "- #{ folder_names[it] }" }
@@ -71,7 +72,7 @@ if __FILE__ == $PROGRAM_NAME
     "folder_pattern",
     "[project_pattern]",
     long_help: <<~HELP
-      Move a matching folder to the top of a VSCode workspace file.
+      Move a matching folder to the top of a VSCode workspace file, then prints the folder path.
 
       Environment variables:
         MOVE_VSC_FOLDER_TOP_PROJECTS_DIR  - Default projects directory
