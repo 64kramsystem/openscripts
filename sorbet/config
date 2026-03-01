@@ -1,3 +1,5 @@
+--disable-watchman
+--did-you-mean=false
 --dir
 .
 --ignore=tmp/
