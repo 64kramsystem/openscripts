@@ -115,6 +115,37 @@ class KernelVersionTest < Minitest::Test
     assert_equal 'custom', v.type
   end
 
+  def test_parse_rc_built_from_sources_with_numeric_type
+    # e.g. `uname -r` on a kernel built from RC sources
+    v = KernelVersion.parse_uname_version('7.0-rc3-070000rc3-sav-generic')
+    assert_equal 7, v.major
+    assert_equal 0, v.minor
+    assert_equal 0, v.patch
+    assert_nil v.ongoing
+    assert_equal 3, v.rc
+    assert_equal '070000rc3-sav-generic', v.type
+  end
+
+  def test_parse_rc_built_from_sources_with_numeric_type_and_patch
+    v = KernelVersion.parse_uname_version('7.1.0-rc5-071000rc5-sav-generic')
+    assert_equal 7, v.major
+    assert_equal 1, v.minor
+    assert_equal 0, v.patch
+    assert_nil v.ongoing
+    assert_equal 5, v.rc
+    assert_equal '071000rc5-sav-generic', v.type
+  end
+
+  def test_parse_modern_rc_without_patch
+    v = KernelVersion.parse_uname_version('6.15-rc2-061500rc2-generic')
+    assert_equal 6, v.major
+    assert_equal 15, v.minor
+    assert_equal 0, v.patch
+    assert_nil v.ongoing
+    assert_equal 2, v.rc
+    assert_equal '061500rc2-generic', v.type
+  end
+
   def test_parse_invalid_version_raises_error
     assert_raises(RuntimeError) do
       KernelVersion.parse_uname_version('invalid-version')

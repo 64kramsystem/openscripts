@@ -18,6 +18,7 @@ class KernelVersion
   # - 4.11.6-041106-generic    # mainline, stable; the release version is not needed
   # - 4.12.0-041200rc7-generic # mainline, RC
   # - 4.12.0-rc4-sav           # built from sources
+  # - 7.0-rc3-070000rc3-sav-generic # built from RC sources; type contains digits
   # - 6.19-061900-sav-generic  # modern kernels may omit the .0 patch version
   #
   # The type is optional; since header packages don't have it, and we use this expression
@@ -35,7 +36,7 @@ class KernelVersion
     )?
     (
       -
-      ([-a-z]+)
+      ([-a-z0-9]+)
     )?
     $
   /x
