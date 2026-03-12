@@ -639,12 +639,12 @@ function finalize_ubuntu_config {
 #
 function annotation_set {
   local config=$1 value=$2
-  python3 debian/scripts/misc/annotations --config "$config" --arch amd64 --write "$value"
+  python3 debian/scripts/misc/annotations --config "$config" --arch amd64 --write "$value" > /dev/null
 }
 
 function annotation_undefine {
   local config=$1
-  python3 debian/scripts/misc/annotations --config "$config" --arch amd64 --write null
+  python3 debian/scripts/misc/annotations --config "$config" --arch amd64 --write null > /dev/null
 }
 
 function fix_ubuntu_config {
