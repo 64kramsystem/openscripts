@@ -1418,5 +1418,7 @@ function main {
   send_built_packages_to_fd3 "$built_packages"
 }
 
-decode_cmdline_args "$@"
-main
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  decode_cmdline_args "$@"
+  main
+fi
