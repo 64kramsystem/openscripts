@@ -556,7 +556,7 @@ function check_if_version_already_packaged {
 function find_latest_packaged_version {
   local kernel_version=$1
 
-  if [[ $kernel_version =~ ^([[:digit:]]+\.[[:digit:]]+)($|-rc) ]]; then
+  if [[ $kernel_version =~ ^([[:digit:]]+\.[[:digit:]]+)$ ]]; then
     kernel_version=${BASH_REMATCH[1]}.0
   fi
 
@@ -568,11 +568,13 @@ function find_latest_packaged_version {
   #
   # Match both old-style (linux-image-6.19.0) and mainline-style (linux-image-unsigned-6.19.2-061902-sav-generic) packages
   #
+  local escaped_version=${kernel_version//./\\.}
+
   find "$v_packages_destination" -printf "%P\n" |
-    perl -ne 'print $2 if /^linux-image(-unsigned)?-('"$kernel_version"'(-rc\d+)?)/' |
+    perl -lne 'print $2 if /^linux-image(-unsigned)?-('"$escaped_version"'(-rc\d+)?)-/' |
     sort -V |
     tail -n 1 |
-    perl -pe 's/\.0(?=-rc)//' ||
+    perl -pe 's/^(\d+\.\d+)\.0(-rc\d+)$/$1$2/' ||
     true
 }
 
