@@ -26,7 +26,7 @@ Options:
 - [-b|--bisect]                    : bisect mode (see below); incompatible with '--kernel-version'
 - [-l|--local-version <name>]      : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                      minus is automatically added
-- [-D|--disable-unused-modules]    : disable unused modules
+- [-e|--enable-unused-modules]     : enable unused modules (by default, they're disabled)
 - [-F|--faster-build]              : disable LTO and sanitizers for faster builds (automatically enabled in bisect mode)
 - [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
@@ -112,12 +112,12 @@ v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
-v_disable_unused_modules= # boolean; false=blank; true=anything else
+v_enable_unused_modules= # boolean; false=blank; true=anything else
 v_faster_build=         # boolean; false=blank; true=anything else
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:dDFc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,disable-unused-modules,faster-build,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:deFc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,enable-unused-modules,faster-build,cherry-pick: --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -144,8 +144,8 @@ function decode_cmdline_args {
       -d|--display-config-diff)
         v_display_config_diff=1
         shift ;;
-      -D|--disable-unused-modules)
-        v_disable_unused_modules=1
+      -e|--enable-unused-modules)
+        v_enable_unused_modules=1
         shift ;;
       -F|--faster-build)
         v_faster_build=1
@@ -1390,7 +1390,7 @@ function main {
     make_build_faster
   fi
 
-  if [[ -n $v_disable_unused_modules ]]; then
+  if [[ -z $v_enable_unused_modules ]]; then
     disable_unused_modules
   fi
 
