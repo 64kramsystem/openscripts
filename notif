@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] [-t|--expire-time <ms>] <summary> [body]
+
+Send a desktop notification. Uses notify-send on Linux, osascript on Mac.
+
+Options:
+  -t, --expire-time <ms>    Expiry time in milliseconds (ignored on Mac)"
+
+v_summary=
+v_body=
+v_expire_time=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options ht: --long help,expire-time: --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -t|--expire-time)
+        v_expire_time=$2
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -lt 1 || $# -gt 2 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_summary=$1
+  v_body=${2:-}
+}
+
+function main {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    if [[ -n "$v_body" ]]; then
+      osascript -e 'on run argv' \
+                -e 'display notification (item 1 of argv) with title (item 2 of argv)' \
+                -e 'end run' \
+                -- "$v_body" "$v_summary"
+    else
+      osascript -e 'on run argv' \
+                -e 'display notification "" with title (item 1 of argv)' \
+                -e 'end run' \
+                -- "$v_summary"
+    fi
+  else
+    local notify_args=("$v_summary")
+    [[ -n "$v_body" ]] && notify_args+=("$v_body")
+    [[ -n "$v_expire_time" ]] && notify_args+=(--expire-time "$v_expire_time")
+    notify-send "${notify_args[@]}"
+  fi
+}
+
+decode_cmdline_args "$@"
+main
