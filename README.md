@@ -21,6 +21,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `fill_dhl_packet_slip`: fills a DHL packet slip, and opens an OpenDocument page with it
   - `fill_labels`: prepares an OpenDocument page with addresses, to be printed on a standard A4 page with 96x50.8mm labels
   - `mk_invoice`: prepares a generic (software engineering) invoice in Office Open XML format, using a template, and the data provided in the configuration file
+  - `notif`: send a desktop notification; cross-platform (uses `notify-send` on Linux, `osascript` on Mac)
   - `normalize_flac_tracks`: renames, removes the current tags, and add replay gain, to flac files
   - `plot_2y_diagram`: plots a diagram with two y scales from a text file, via GNU Plot (and Ruby)
   - `plot_diagram`: plots a diagram from a text file, via GNU Plot (and Ruby),  with better support for batch processing than `plot_2y_diagram`
