@@ -60,9 +60,10 @@ function main {
                 -- "$v_summary"
     fi
   else
-    local notify_args=("$v_summary")
-    [[ -n "$v_body" ]] && notify_args+=("$v_body")
+    local notify_args=()
     [[ -n "$v_expire_time" ]] && notify_args+=(--expire-time "$v_expire_time")
+    notify_args+=(-- "$v_summary")
+    [[ -n "$v_body" ]] && notify_args+=("$v_body")
     notify-send "${notify_args[@]}"
   fi
 }
