@@ -1137,6 +1137,9 @@ function setup_ubuntu_packaging {
   # Update dwarves dependency
   sed -i -re 's/dwarves \[/dwarves (>=1.21) \[/g' debian.master/control.stub.in
 
+  # Remove ZFS modules dependency - not built in mainline builds (introduced in 7.0-rc7)
+  sed -i -re 's/, linux-main-modules-zfs-\S+ \[[^]]+\]//' debian.master/control.d/flavour-control.stub
+
   # Don't fail if we find no *.ko files in the build dir
   sed -i -re 's/zstd -19 --quiet --rm/zstd -19 --rm || true/g' debian/rules.d/2-binary-arch.mk || true
 
