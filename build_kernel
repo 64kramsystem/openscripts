@@ -1140,6 +1140,67 @@ function setup_ubuntu_packaging {
   # Remove ZFS modules dependency - not built in mainline builds (introduced in 7.0-rc7)
   sed -i -re 's/, linux-main-modules-zfs-\S+ \[[^]]+\]//' debian.master/control.d/flavour-control.stub
 
+  # Fix run-parts two-directory invocation - system run-parts only accepts one directory (introduced in 7.0-rc7)
+  python3 - <<'PYEOF'
+import pathlib
+
+def patch(path, old, new):
+    content = path.read_text()
+    patched = content.replace(old, new)
+    if patched != content:
+        path.write_text(patched)
+        print(f'  Patched run-parts two-directory invocation in {path}')
+
+p = pathlib.Path('debian/templates/headers.postinst.in')
+if p.exists():
+    old = ('if [ -d /etc/kernel/header_postinst.d ] || [ -d /usr/share/kernel/header_postinst.d ]; then\n'
+           '    DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version \\\n'
+           '        /etc/kernel/header_postinst.d /usr/share/kernel/header_postinst.d\n'
+           'fi')
+    new = ('for _kd in /etc/kernel/header_postinst.d /usr/share/kernel/header_postinst.d; do\n'
+           '    if [ -d "$_kd" ]; then\n'
+           '        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version "$_kd"\n'
+           '    fi\n'
+           'done')
+    patch(p, old, new)
+
+for fname, img in [('image.postinst.in', '$image_path'), ('extra.postinst.in', '"$image_path"')]:
+    p = pathlib.Path(f'debian/templates/{fname}')
+    if p.exists():
+        old = (f'DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version \\\n'
+               f'    --arg={img} /etc/kernel/postinst.d /usr/share/kernel/postinst.d')
+        new = ('for _kd in /etc/kernel/postinst.d /usr/share/kernel/postinst.d; do\n'
+               '    if [ -d "\\$_kd" ]; then\n'
+               '        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version --arg=$image_path "\\$_kd"\n'
+               '    fi\n'
+               'done')
+        patch(p, old, new)
+
+p = pathlib.Path('debian/templates/image.postrm.in')
+if p.exists():
+    old = ('    DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version \\\n'
+           '        --arg=$image_path /etc/kernel/postrm.d /usr/share/kernel/postrm.d')
+    new = ('    for _kd in /etc/kernel/postrm.d /usr/share/kernel/postrm.d; do\n'
+           '        if [ -d "$_kd" ]; then\n'
+           '            DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version --arg=$image_path "$_kd"\n'
+           '        fi\n'
+           '    done')
+    patch(p, old, new)
+
+p = pathlib.Path('debian/templates/image.prerm.in')
+if p.exists():
+    old = ('if [ -d /etc/kernel/prerm.d ] || [ -d /usr/share/kernel/prerm.d ]; then\n'
+           '    DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version \\\n'
+           '        --arg=$image_path /etc/kernel/prerm.d /usr/share/kernel/prerm.d\n'
+           'fi')
+    new = ('for _kd in /etc/kernel/prerm.d /usr/share/kernel/prerm.d; do\n'
+           '    if [ -d "$_kd" ]; then\n'
+           '        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version --arg=$image_path "$_kd"\n'
+           '    fi\n'
+           'done')
+    patch(p, old, new)
+PYEOF
+
   # Don't fail if we find no *.ko files in the build dir
   sed -i -re 's/zstd -19 --quiet --rm/zstd -19 --rm || true/g' debian/rules.d/2-binary-arch.mk || true
 
