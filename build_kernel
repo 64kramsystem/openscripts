@@ -511,18 +511,27 @@ function extract_debian_from_crack_bundle {
 
   >&2 echo "Extracting debian packaging from crack.bundle..."
 
-  # Fetch the bundle into current repo (bundles have dependencies on existing commits)
-  if ! git fetch "$bundle_path" 'refs/tags/cod/mainline/*:refs/tags/cod/mainline/*' 2>/dev/null; then
-    >&2 echo "Error: Failed to fetch crack.bundle"
-    exit 1
-  fi
-
-  # Find the tag name (e.g., cod/mainline/v6.17.13)
+  # Determine the tag name from the bundle itself (e.g., cod/mainline/v6.17.13).
+  # Do NOT rely on `git tag -l` against the local repo: previous runs leave
+  # cod/mainline/* tags around, and `sort -V | tail -1` would return a stale tag
+  # (e.g. cod/mainline/v7.0-rc7 when the freshly downloaded bundle is v7.0.0).
   local bundle_tag
-  bundle_tag=$(git tag -l 'cod/mainline/*' | sort -V | tail -1)
+  bundle_tag=$(git bundle list-heads "$bundle_path" \
+    | awk '{print $2}' \
+    | grep '^refs/tags/cod/mainline/' \
+    | sed 's|^refs/tags/||' \
+    | sort -V \
+    | tail -1)
 
   if [[ -z $bundle_tag ]]; then
     >&2 echo "Error: No cod/mainline tag found in bundle"
+    exit 1
+  fi
+
+  # Fetch the bundle into current repo (bundles have dependencies on existing commits).
+  # Force-update so a stale local tag from a prior run doesn't block the fetch.
+  if ! git fetch --force "$bundle_path" "refs/tags/${bundle_tag}:refs/tags/${bundle_tag}" 2>/dev/null; then
+    >&2 echo "Error: Failed to fetch crack.bundle"
     exit 1
   fi
 
