@@ -573,17 +573,23 @@ function find_latest_packaged_version {
   #
   # See remove_destination_old_version_files() for the filenames format.
   #
-  # We can't use short_kernel_version() because this is not the standard format.
+  # Package filenames use the short version (e.g. 7.0, not 7.0.0) as set by
+  # setup_ubuntu_packaging(), so search with the short form, then re-normalize.
   #
-  # Match both old-style (linux-image-6.19.0) and mainline-style (linux-image-unsigned-6.19.2-061902-sav-generic) packages
-  #
-  local escaped_version=${kernel_version//./\\.}
+  local search_version
+  search_version=$(short_kernel_version "$kernel_version" with_rc)
+  local escaped_version=${search_version//./\\.}
+
+  local rc_guard=""
+  if [[ ! $search_version =~ -rc ]]; then
+    rc_guard="(?!-rc\\d)"
+  fi
 
   find "$v_packages_destination" -printf "%P\n" |
-    perl -lne 'print $2 if /^linux-image(-unsigned)?-('"$escaped_version"'(-rc\d+)?)-/' |
+    perl -lne 'print $2 if /^linux-image(-unsigned)?-('"$escaped_version"')'"$rc_guard"'-/' |
     sort -V |
     tail -n 1 |
-    perl -pe 's/^(\d+\.\d+)\.0(-rc\d+)$/$1$2/' ||
+    perl -pe 's/^(\d+\.\d+)$/$1.0/' ||
     true
 }
 
