@@ -2,7 +2,7 @@
 
 setup_file() {
   source "$BATS_TEST_DIRNAME/build_kernel"
-  export -f find_latest_packaged_version
+  export -f find_latest_packaged_version short_kernel_version
 }
 
 teardown_file() {
@@ -27,6 +27,7 @@ make_pkg() {
 # Real-world filename formats:
 #   linux-image-unsigned-7.0-rc3-070000rc3-sav-generic_7.0-rc3-070000rc3-sav.202603112040_amd64.deb
 #   linux-image-unsigned-6.19.6-061906-sav-generic_6.19.6-061906-sav.202603052259_amd64.deb
+#   linux-image-unsigned-6.19-061900-sav-generic_6.19-061900-sav.202601010000_amd64.deb  (GA/.0 version)
 
 # ── RC versions ───────────────────────────────────────────────────────────────
 
@@ -109,24 +110,42 @@ make_pkg() {
   [ "$output" = "6.19.12" ]
 }
 
-# ── Stable short M.m → M.m.0 ─────────────────────────────────────────────────
+# ── Stable .0 GA versions (packages use short M.m form) ─────────────────────
 
 @test "short 6.19 → finds 6.19.0 old-style package" {
-  make_pkg "linux-image-6.19.0-sav-generic_6.19.0-sav_amd64.deb"
+  make_pkg "linux-image-6.19-sav-generic_6.19-sav_amd64.deb"
   run find_latest_packaged_version "6.19"
   [ "$output" = "6.19.0" ]
 }
 
 @test "short 6.19 → finds 6.19.0 mainline-style package" {
-  make_pkg "linux-image-unsigned-6.19.0-061900-sav-generic_6.19.0-061900-sav.202601010000_amd64.deb"
+  make_pkg "linux-image-unsigned-6.19-061900-sav-generic_6.19-061900-sav.202601010000_amd64.deb"
   run find_latest_packaged_version "6.19"
   [ "$output" = "6.19.0" ]
 }
 
 @test "explicit 6.19.0 → finds 6.19.0 package" {
-  make_pkg "linux-image-unsigned-6.19.0-061900-sav-generic_6.19.0-061900-sav.202601010000_amd64.deb"
+  make_pkg "linux-image-unsigned-6.19-061900-sav-generic_6.19-061900-sav.202601010000_amd64.deb"
   run find_latest_packaged_version "6.19.0"
   [ "$output" = "6.19.0" ]
+}
+
+@test "explicit 7.0.0 → finds package with short 7.0 in name" {
+  make_pkg "linux-image-unsigned-7.0-070000-sav-generic_7.0-070000-sav.202601010000_amd64.deb"
+  run find_latest_packaged_version "7.0.0"
+  [ "$output" = "7.0.0" ]
+}
+
+@test "explicit 7.0.0, only 7.0.0-named package → empty (packages use short form)" {
+  make_pkg "linux-image-unsigned-7.0.0-070000-sav-generic_7.0.0-070000-sav.202601010000_amd64.deb"
+  run find_latest_packaged_version "7.0.0"
+  [ "$output" = "" ]
+}
+
+@test "explicit 7.0.0, rc packages present → empty (no rc bleed)" {
+  make_pkg "linux-image-unsigned-7.0-rc3-070000rc3-sav-generic_7.0-rc3-070000rc3-sav.202603112040_amd64.deb"
+  run find_latest_packaged_version "7.0.0"
+  [ "$output" = "" ]
 }
 
 @test "short 6.19, only patch packages present → empty" {
@@ -172,8 +191,8 @@ make_pkg() {
 # ── Package name variants ─────────────────────────────────────────────────────
 
 @test "both signed and unsigned packages present → returns version" {
-  make_pkg "linux-image-6.19.0-sav-generic_6.19.0-sav_amd64.deb"
-  make_pkg "linux-image-unsigned-6.19.0-061900-sav-generic_6.19.0-061900-sav.202601010000_amd64.deb"
+  make_pkg "linux-image-6.19-sav-generic_6.19-sav_amd64.deb"
+  make_pkg "linux-image-unsigned-6.19-061900-sav-generic_6.19-061900-sav.202601010000_amd64.deb"
   run find_latest_packaged_version "6.19.0"
   [ "$output" = "6.19.0" ]
 }
