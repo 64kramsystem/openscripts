@@ -353,6 +353,49 @@ class KernelVersionTest < Minitest::Test
     assert_equal version_str, v.raw
   end
 
+  # Test GA .0 release with mainline ongoing number (no patch in version string)
+
+  def test_parse_ga_release_without_patch
+    v = KernelVersion.parse_uname_version('7.0-070000-sav-generic')
+    assert_equal 7, v.major
+    assert_equal 0, v.minor
+    assert_equal 0, v.patch
+    assert_equal '070000', v.ongoing
+    assert_nil v.rc
+    assert_equal 'sav-generic', v.type
+  end
+
+  def test_comparison_ga_release_higher_than_rc
+    v_ga = KernelVersion.parse_uname_version('7.0-070000-sav-generic')
+    v_rc7 = KernelVersion.parse_uname_version('7.0-rc7-070000rc7-sav-generic')
+    assert v_ga > v_rc7
+    assert v_rc7 < v_ga
+  end
+
+  def test_comparison_ga_release_higher_than_all_rcs
+    v_ga = KernelVersion.parse_uname_version('7.0-070000-sav-generic')
+    v_rc6 = KernelVersion.parse_uname_version('7.0-rc6-070000rc6-sav-generic')
+    v_rc7 = KernelVersion.parse_uname_version('7.0-rc7-070000rc7-sav-generic')
+    assert v_ga > v_rc6
+    assert v_ga > v_rc7
+    assert v_rc6 < v_rc7
+  end
+
+  def test_sorting_rc_and_ga_versions
+    versions = [
+      KernelVersion.parse_uname_version('7.0-070000-sav-generic'),
+      KernelVersion.parse_uname_version('7.0-rc7-070000rc7-sav-generic'),
+      KernelVersion.parse_uname_version('7.0-rc6-070000rc6-sav-generic'),
+    ]
+
+    sorted = versions.sort
+
+    # Expected order: rc6 < rc7 < GA
+    assert_equal '7.0-rc6-070000rc6-sav-generic', sorted[0].raw
+    assert_equal '7.0-rc7-070000rc7-sav-generic', sorted[1].raw
+    assert_equal '7.0-070000-sav-generic', sorted[2].raw
+  end
+
   # Test sorting
 
   def test_sorting_multiple_versions
