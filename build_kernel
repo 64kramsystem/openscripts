@@ -569,27 +569,27 @@ function find_latest_packaged_version {
     kernel_version=${BASH_REMATCH[1]}.0
   fi
 
-  # Use the image package for reference.
+  # Extract the kernel version from every image package filename, normalize it
+  # to the canonical form (M.m.p for GA, M.m-rcN for RC), then filter for the
+  # target. Must recognize all historical and current naming variants:
   #
-  # See remove_destination_old_version_files() for the filenames format.
+  #   - linux-image-M.m-localver-generic_...                                   (very old, no ABI)
+  #   - linux-image(-unsigned)?-M.m-<abi>-localver-generic_...                 (old GA short form)
+  #   - linux-image(-unsigned)?-M.m.p-<abi>-localver-generic_...               (old patch form / new GA form)
+  #   - linux-image(-unsigned)?-M.m-rcN-<abi>rcN-localver-generic_...          (old RC form)
+  #   - linux-image(-unsigned)?-M.m.0-<abi>rcN-localver-generic_...            (new/mainline-PPA RC form)
   #
-  # Package filenames use the short version (e.g. 7.0, not 7.0.0) as set by
-  # setup_ubuntu_packaging(), so search with the short form, then re-normalize.
-  #
-  local search_version
-  search_version=$(short_kernel_version "$kernel_version" with_rc)
-  local escaped_version=${search_version//./\\.}
-
-  local rc_guard=""
-  if [[ ! $search_version =~ -rc ]]; then
-    rc_guard="(?!-rc\\d)"
-  fi
-
   find "$v_packages_destination" -printf "%P\n" |
-    perl -lne 'print $2 if /^linux-image(-unsigned)?-('"$escaped_version"')'"$rc_guard"'-/' |
-    sort -V |
-    tail -n 1 |
-    perl -pe 's/^(\d+\.\d+)$/$1.0/' ||
+    perl -lne '
+      if (/^linux-image(?:-unsigned)?-(\d+\.\d+)(?:\.(\d+)|-rc(\d+))?(?:-(\d+)(?:rc(\d+))?)?[-_]/) {
+        my ($mm, $patch, $ver_rc, $abi_rc) = ($1, $2, $3, $5);
+        my $rc = defined $ver_rc ? $ver_rc : $abi_rc;
+        if (defined $rc)    { print "$mm-rc$rc"; }
+        else                { $patch = 0 unless defined $patch; print "$mm.$patch"; }
+      }
+    ' |
+    sort -u |
+    grep -Fx "$kernel_version" ||
     true
 }
 
@@ -1133,11 +1133,21 @@ function generate_abi_number {
 # $3: deb timestamp (e.g., YYYYMMDDHHMM)
 #
 # Format: <upstream>-<abi>[-<localver>].<timestamp>
+#
+# Matches Ubuntu mainline PPA convention (https://kernel.ubuntu.com/mainline/):
+# the upstream part is always X.Y.Z (with Z=0 for the initial release), for
+# both GA and RC; the RC marker is encoded only inside the ABI (e.g.,
+# 070000rc7), never as a segment between upstream and ABI. That keeps GA
+# releases sorted above the corresponding RCs under GRUB's version_sort.
 function mainline_package_version {
   local kernel_version=$1 local_version=$2 debversion=$3
 
   local upstream
-  upstream=$(short_kernel_version "$kernel_version" with_rc)
+  if [[ $kernel_version =~ ^([0-9]+\.[0-9]+)-rc[0-9]+$ ]]; then
+    upstream="${BASH_REMATCH[1]}.0"
+  else
+    upstream=$kernel_version
+  fi
 
   local abinum
   abinum=$(generate_abi_number "$kernel_version")
