@@ -111,6 +111,32 @@ make_pkg() {
   [ "$output" = "6.19.12" ]
 }
 
+# ── Mainline-PPA-form .0 GA and RC packages (X.Y.Z upstream) ────────────────
+#
+# After the mainline_package_version fix, setup_ubuntu_packaging emits packages
+# whose upstream segment is X.Y.Z (with Z=0 for the initial release) for both
+# GA and RC, matching kernel.ubuntu.com/mainline naming. find_latest_packaged_version
+# must recognize these, otherwise check_if_version_already_packaged never sees
+# a freshly built kernel as already packaged and the script rebuilds it.
+
+@test "new-form explicit 7.0.0 → finds 7.0.0 mainline-PPA-form package" {
+  make_pkg "linux-image-unsigned-7.0.0-070000-sav-generic_7.0.0-070000-sav.202604141930_amd64.deb"
+  run find_latest_packaged_version "7.0.0"
+  [ "$output" = "7.0.0" ]
+}
+
+@test "new-form short 7.0 → finds 7.0.0 mainline-PPA-form package" {
+  make_pkg "linux-image-unsigned-7.0.0-070000-sav-generic_7.0.0-070000-sav.202604141930_amd64.deb"
+  run find_latest_packaged_version "7.0"
+  [ "$output" = "7.0.0" ]
+}
+
+@test "new-form rc7 → finds 7.0-rc7 mainline-PPA-form package (rc marker only in ABI)" {
+  make_pkg "linux-image-unsigned-7.0.0-070000rc7-sav-generic_7.0.0-070000rc7-sav.202604081639_amd64.deb"
+  run find_latest_packaged_version "7.0-rc7"
+  [ "$output" = "7.0-rc7" ]
+}
+
 # ── Stable .0 GA versions (packages use short M.m form) ─────────────────────
 
 @test "short 6.19 → finds 6.19.0 old-style package" {
@@ -137,10 +163,12 @@ make_pkg() {
   [ "$output" = "7.0.0" ]
 }
 
-@test "explicit 7.0.0, only 7.0.0-named package → empty (packages use short form)" {
+@test "explicit 7.0.0 → finds new-form and short-form GA packages equivalently" {
+  # Duplicate of the new-form test block above; keeps the section self-contained
+  # so the old short-form and new mainline-PPA-form symmetry is visible here.
   make_pkg "linux-image-unsigned-7.0.0-070000-sav-generic_7.0.0-070000-sav.202601010000_amd64.deb"
   run find_latest_packaged_version "7.0.0"
-  [ "$output" = "" ]
+  [ "$output" = "7.0.0" ]
 }
 
 @test "explicit 7.0.0, rc packages present → empty (no rc bleed)" {
@@ -200,13 +228,15 @@ make_pkg() {
 
 # ── mainline_package_version ──────────────────────────────────────────────────
 #
-# Characterizes the source package version string produced by build_kernel for
-# the debian/changelog entry. Used both as a refactoring safety net and as the
-# target assertion for the mainline-PPA naming fix.
+# Matches Ubuntu mainline PPA convention (see https://kernel.ubuntu.com/mainline/):
+# the upstream part is always X.Y.Z (with Z=0 for the initial release), for both
+# GA and RC. The RC marker is encoded only inside the ABI (e.g., 070000rc7),
+# never as a segment between upstream and ABI. This keeps GA releases sorted
+# above the corresponding RCs under GRUB's version_sort.
 
 @test "mainline_package_version: GA 7.0.0 with local version" {
   run mainline_package_version "7.0.0" "sav" "202604141930"
-  [ "$output" = "7.0-070000-sav.202604141930" ]
+  [ "$output" = "7.0.0-070000-sav.202604141930" ]
 }
 
 @test "mainline_package_version: stable patch 6.19.5 with local version" {
@@ -214,12 +244,20 @@ make_pkg() {
   [ "$output" = "6.19.5-061905-sav.202601010000" ]
 }
 
-@test "mainline_package_version: RC 7.0-rc7 with local version" {
+@test "mainline_package_version: RC 7.0-rc7 with local version (no interior -rc segment)" {
   run mainline_package_version "7.0-rc7" "sav" "202604081639"
-  [ "$output" = "7.0-rc7-070000rc7-sav.202604081639" ]
+  [ "$output" = "7.0.0-070000rc7-sav.202604081639" ]
 }
 
 @test "mainline_package_version: GA 7.0.0 with empty local version (no trailing -suffix)" {
   run mainline_package_version "7.0.0" "" "202604141930"
-  [ "$output" = "7.0-070000.202604141930" ]
+  [ "$output" = "7.0.0-070000.202604141930" ]
+}
+
+@test "mainline_package_version: GA sorts above matching RC under grub-sort-version" {
+  ga_release="$(mainline_package_version "7.0.0"   "sav" "202604141930")-generic"
+  rc_release="$(mainline_package_version "7.0-rc7" "sav" "202604081639")-generic"
+  first=$(printf '%s\n%s\n' "$ga_release" "$rc_release" \
+          | LC_ALL=C /usr/lib/grub/grub-sort-version -r | head -n 1)
+  [ "$first" = "$ga_release" ]
 }
