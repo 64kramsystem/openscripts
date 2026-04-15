@@ -1126,28 +1126,42 @@ function generate_abi_number {
   fi
 }
 
+# Build the source package version string used in debian/changelog entries.
+#
+# $1: normalized kernel version (X.Y.Z or X.Y-rcN)
+# $2: local version suffix (may be empty)
+# $3: deb timestamp (e.g., YYYYMMDDHHMM)
+#
+# Format: <upstream>-<abi>[-<localver>].<timestamp>
+function mainline_package_version {
+  local kernel_version=$1 local_version=$2 debversion=$3
+
+  local upstream
+  upstream=$(short_kernel_version "$kernel_version" with_rc)
+
+  local abinum
+  abinum=$(generate_abi_number "$kernel_version")
+
+  echo -n "${upstream}-${abinum}${local_version:+-$local_version}.${debversion}"
+}
+
 function setup_ubuntu_packaging {
   echo "Setting up Ubuntu packaging for $building_kernel_version"
 
   local debversion
   debversion=$(date +%Y%m%d%H%M)
 
-  local abinum
-  abinum=$(generate_abi_number "$building_kernel_version")
+  local source_version
+  source_version=$(mainline_package_version "$building_kernel_version" "$v_local_version" "$debversion")
 
-  local clean_version
-  clean_version=$(short_kernel_version "$building_kernel_version" with_rc)
-
-  echo "  ABI number: $abinum"
-  echo "  Deb version: $debversion"
-  echo "  Clean version: $clean_version"
+  echo "  Source version: $source_version"
 
   local ubuntu_series
   ubuntu_series=$(lsb_release -cs)
 
   # Modify changelog - keep source package as "linux" (no renaming for simplicity)
   # Handle both GA format (6.19.0-061900.timestamp) and RC format (6.19.0-061900rc8.timestamp)
-  sed -i -re "s/(^linux) \(([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)(rc[0-9]+)?\.[0-9]+\) ([^;]*)(.*)/linux (${clean_version}-${abinum}${v_local_version:+-$v_local_version}.${debversion}) ${ubuntu_series}\6/" debian.master/changelog
+  sed -i -re "s/(^linux) \(([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)(rc[0-9]+)?\.[0-9]+\) ([^;]*)(.*)/linux (${source_version}) ${ubuntu_series}\6/" debian.master/changelog
 
   # Update dwarves dependency
   sed -i -re 's/dwarves \[/dwarves (>=1.21) \[/g' debian.master/control.stub.in
