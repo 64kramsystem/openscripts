@@ -3,6 +3,7 @@
 setup_file() {
   source "$BATS_TEST_DIRNAME/build_kernel"
   export -f find_latest_packaged_version short_kernel_version
+  export -f mainline_package_version generate_abi_number
 }
 
 teardown_file() {
@@ -195,4 +196,30 @@ make_pkg() {
   make_pkg "linux-image-unsigned-6.19-061900-sav-generic_6.19-061900-sav.202601010000_amd64.deb"
   run find_latest_packaged_version "6.19.0"
   [ "$output" = "6.19.0" ]
+}
+
+# ── mainline_package_version ──────────────────────────────────────────────────
+#
+# Characterizes the source package version string produced by build_kernel for
+# the debian/changelog entry. Used both as a refactoring safety net and as the
+# target assertion for the mainline-PPA naming fix.
+
+@test "mainline_package_version: GA 7.0.0 with local version" {
+  run mainline_package_version "7.0.0" "sav" "202604141930"
+  [ "$output" = "7.0-070000-sav.202604141930" ]
+}
+
+@test "mainline_package_version: stable patch 6.19.5 with local version" {
+  run mainline_package_version "6.19.5" "sav" "202601010000"
+  [ "$output" = "6.19.5-061905-sav.202601010000" ]
+}
+
+@test "mainline_package_version: RC 7.0-rc7 with local version" {
+  run mainline_package_version "7.0-rc7" "sav" "202604081639"
+  [ "$output" = "7.0-rc7-070000rc7-sav.202604081639" ]
+}
+
+@test "mainline_package_version: GA 7.0.0 with empty local version (no trailing -suffix)" {
+  run mainline_package_version "7.0.0" "" "202604141930"
+  [ "$output" = "7.0-070000.202604141930" ]
 }
