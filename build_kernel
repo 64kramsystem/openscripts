@@ -700,7 +700,7 @@ function make_build_faster {
 }
 
 function enable_native_cpu {
-  annotation_set CONFIG_X86_CPU_NATIVE y
+  annotation_set CONFIG_X86_NATIVE_CPU y
 }
 
 # Extracted from kernel 6.11-rc3.
