@@ -72,6 +72,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `ownsync`: command line sync script for Owncloud/Nextcloud, with conflicts handling
   - `patch_acpi_s3_support`: patch and hook the DSDT tables with S3 support (see [article](https://saveriomiroddi.github.io/Enabling-the-S3-sleep-suspend-on-the-Lenovo-Yoga-7-AMD-Gen-7-and-possibly-others/))
   - `purge_trash`: purge the trash files trashed before a certain threashold
+  - `scan`: set the simple-scan color-profile DPI, and launch simple-scan
   - `script_template`: create a Bash script template, and sets the permissions
   - `send_display_to_sleep`: send the display to sleep, working around GNOME's screensaver interference
   - `upgrade_bluez_from_source`: upgrade the system Bluez to the latest version, from source
