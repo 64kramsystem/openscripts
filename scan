@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] <dpi>
+
+Sets the simple-scan color-profile DPI to <dpi>, then launches simple-scan."
+
+v_dpi=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_dpi=$1
+}
+
+function main {
+  gsettings set org.gnome.SimpleScan photo-dpi "$v_dpi"
+  exec simple-scan
+}
+
+decode_cmdline_args "$@"
+main
