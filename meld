@@ -36,6 +36,117 @@ function run_meld {
   else
     "$meld_path" "$@"
   fi
+
+  # ---------------------------------------------------------------------------
+  # macOS-only: workaround for Meld's broken window placement on this platform.
+  #
+  # Symptoms (Meld 3.22.3 on macOS, Homebrew cask, GTK build):
+  #   - On every launch, Meld opens with its title bar partly hidden under the
+  #     menu bar (AX-reported y is around -28) and shifted slightly off the
+  #     right edge of the screen.
+  #   - Rectangle and other AX-based window managers can't fix it because the
+  #     GTK port doesn't expose its window normally to Quartz/AX.
+  #
+  # What we found by probing the prefs (~/Library/Preferences/org.gnome.Meld.plist):
+  #   - width  / height        → are persisted across launches.
+  #   - is-maximized           → is a dead knob. macOS has no maximize gesture
+  #                              (the green button is Zoom/Fullscreen, not
+  #                              maximize), so GTK never sets it true. Setting
+  #                              it manually via `defaults write` gets
+  #                              overwritten back to false on next launch.
+  #   - x / y position         → NOT persisted at all. Meld picks placement
+  #                              fresh each launch, hence the off-screen drift.
+  #
+  # Root cause confirmed by reading Meld's source:
+  #   /Applications/Meld.app/Contents/Resources/lib/python3.10/site-packages/
+  #     meld/windowstate.py
+  #
+  #   class SavedWindowState binds only `width`, `height`, `is-maximized`,
+  #   `is-fullscreen` to GSettings — there is no x/y persistence path at all,
+  #   so position can never be restored regardless of platform.
+  #
+  #   On startup `bind()` calls `window.set_default_size(w, h)` and then,
+  #   only `if self.props.is_maximized: window.maximize()`. But on macOS the
+  #   GTK quartz backend never delivers `Gdk.WindowState.MAXIMIZED` events
+  #   (macOS has no "maximized" state — the green button is Zoom or
+  #   Fullscreen), so `on_window_state_event` never sets `is_maximized` to
+  #   True, the GSettings flag stays false, and `window.maximize()` is never
+  #   called on subsequent launches. Manually flipping the flag via
+  #   `defaults write` doesn't help because GTK overwrites it back via the
+  #   bidirectional binding the next time a state-event arrives (or on
+  #   resize). This is a Meld portability gap, not a single bug — the
+  #   maximize/restore mechanism assumes an X11/Wayland WM that delivers
+  #   MAXIMIZED state events, and there is no macOS-specific fallback.
+  #
+  #   A clean source-level fix would patch `bind()` to either call
+  #   `window.move(x, y)` after `set_default_size(...)` or to also persist
+  #   x/y to GSettings. We chose not to patch (would be lost on every brew
+  #   cask upgrade) and to wrap externally instead.
+  #
+  # What we found by probing AX (System Events / osascript):
+  #   - AX *can* read window position and size for the Meld process.
+  #   - AX *can* set position (the writes propagate to the visible window).
+  #   - AX *cannot* set size — set calls return success but are silently
+  #     ignored by GTK. Size must be controlled exclusively via the prefs.
+  #   - This requires the parent terminal to be granted Accessibility
+  #     permission in System Settings → Privacy & Security → Accessibility.
+  #
+  # The "invisible chrome" effect:
+  #   AX-reported size is consistently larger than the pref-stored size by
+  #   about 52px width and 99px height. About 26px of the width delta is
+  #   invisible padding on the LEFT of the visible window (GTK CSD shadow /
+  #   margin). So setting AX position x=0 leaves a ~26px visible gap on the
+  #   left; pushing AX x=-26 makes the visible content flush against the left
+  #   screen edge. The y nudge (10) is empirical: y=0 still tucks part of the
+  #   title bar under the menu bar; y=25 leaves a visible gap; y=10 looks
+  #   right on this screen.
+  #
+  # Tuning notes (current values are calibrated for a 1470x956 logical screen):
+  #   - Pref width 1470 → AX width ~1522, visible width 1470 → flush both
+  #     edges when AX x = -26.
+  #   - Pref height 880 → AX height ~979, visible height fits the screen
+  #     comfortably below the menu bar at y=10.
+  #   - To recalibrate on a different screen: launch Meld, run
+  #       osascript -e 'tell application "System Events" to tell process "Meld" to get size of window 1'
+  #     compute the chrome delta (AX_width - pref_width), and pick a new x
+  #     such that x + (delta/2) = 0 (flush left). Then increase pref width
+  #     until visible right edge meets the screen.
+  #
+  # When enabled, the osascript polls AX every 100ms (up to 5s) until the
+  # Meld process exists AND has at least one window, then sets position
+  # once and exits — no hardcoded sleep, so it adapts to slow cold starts
+  # and exits immediately on warm starts. Errors are swallowed: if AX
+  # permission is missing the script still works, the window just lands
+  # wherever GTK puts it.
+  #
+  # NOTE: this workaround is currently DISABLED in favour of an in-source
+  # patch to windowstate.py (saved as
+  # ~/code/scripts/meld-macos-window-position.patch, re-applied automatically
+  # by update_system after `brew upgrade`) that calls window.move() based
+  # on Gdk.Monitor.get_workarea() at startup,
+  # which avoids the AX dependency and the brief startup race. The block
+  # below is left commented out so it can be re-enabled if the patch is
+  # ever lost (e.g. wiped by a `brew upgrade --cask meld`). To re-enable,
+  # also background the meld launch with `&` and `wait` for it at the end
+  # of the function so the osascript can run in parallel with startup.
+  # ---------------------------------------------------------------------------
+  # if [[ $(uname) == "Darwin" ]]; then
+  #   (
+  #     osascript 2>/dev/null <<'OSA' || true
+  # tell application "System Events"
+  #   repeat 50 times
+  #     if exists (process "Meld") then
+  #       if (count windows of process "Meld") > 0 then
+  #         set position of window 1 of process "Meld" to {-26, 10}
+  #         exit repeat
+  #       end if
+  #     end if
+  #     delay 0.1
+  #   end repeat
+  # end tell
+  # OSA
+  #   ) &
+  # fi
 }
 
 function main {
