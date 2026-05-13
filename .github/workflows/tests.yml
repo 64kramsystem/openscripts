@@ -25,3 +25,14 @@ jobs:
         with:
           ruby-version: '4.0'
       - run: ruby kernel_packages_maintenance/kernel_version_test.rb
+
+  downer:
+    name: downer (minitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+      - run: gem install --no-document simple_scripting open_uri_redirections
+      - run: ruby downer_test.rb
