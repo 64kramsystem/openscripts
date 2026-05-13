@@ -132,7 +132,13 @@ if __FILE__ == $0
     ['-w', '--wget',                    'Use wget to download the page'],
     'page_address',
     'file_link_pattern',
-    long_help: "This script is meant to be used only internally; it doesn't employ any form of protection against malicious attacks."
+    long_help: "This script is meant to be used only internally; it doesn't employ any form of protection against malicious attacks.
+
+Examples:
+
+  # Download a Github release asset (first match is always the latest)
+  downer -r 'https://github.com/rustdesk/rustdesk/releases' '/rustdesk/rustdesk/releases/download/[\\d.-]+/rustdesk-[\\d.-]+-x86_64\\.deb'
+"
   ) || exit
 
   page_address, file_link_pattern = options.fetch_values(:page_address, :file_link_pattern)
