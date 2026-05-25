@@ -1,90 +1,203 @@
 #!/usr/bin/env ruby
 
 require 'cgi'
+require 'fileutils'
 require 'pathname'
 require 'tmpdir'
 require 'zip'
 require 'simple_scripting/argv'
-require 'simple_scripting/configuration'
 
 require_relative 'helpers/system_helper'
 
 class ConfigurationPreparer
+  CONFIG_PATH = File.expand_path('~/.fill_labels')
+
   LONG_HELP = <<~HELP
-    Prepare an OpenDocument with addresses, to be printed on a standard A4 page with 96x50.8mm labels (see https://web.archive.org/web/20191023093929if_/https://www.labelwonderland.co.uk/images/P/diag-es0010e.jpg).
+    Prepare an OpenDocument with addresses or images on a standard A4 sticker sheet.
 
-    The <position> is 0-based, and supports several formats, for example: `1`, `1,3,5`, `3-7`.s
+    The <position> is 0-based, and supports several formats, for example: `1`, `1,3,5`, `3-7`.
+    When omitted, the active format's `next_position` from the config is used; after a
+    successful run, `next_position` is advanced past the labels just used.
 
-    The <recipient> supports 1 to 4 lines.
-    If it's one line, it's used as search pattern; in this mode, the address book keys and first address lines are scanned for the pattern, case-insensitively, and the first match is returned; if no entries are found, an error is raised.
+    The mode is auto-detected from the <recipient> argument:
+      - contains a newline -> multi-line address (used verbatim, 1-4 lines)
+      - contains a dot     -> image file path (PNG only)
+      - otherwise          -> address-book key/pattern (case-insensitive search of
+                              keys and first address line; single match returns
+                              directly, multiple matches prompt interactively)
 
-    The address book is stored in the `$HOME/.fill_labels` file.
-    Each entry is in the format `key=sender_name:address_line_1:address_line_2,address_line_3` (only the <sender_name> is mandatory; up to 4 lines are supported).
-    The special entry `sender` is the address of the sender (up to 3 lines supported); if not set, a placeholder is printed.
+    Address-book keys MUST NOT contain dots, since a single-line input containing a
+    dot is interpreted as an image path. Multi-line addresses passed verbatim may
+    contain anything (the newline triggers address mode before the dot is examined).
 
-    Sample address book:
+    The configuration is stored in the `$HOME/.fill_labels` file as a sectioned INI.
+    [defaults] selects the active format names per mode and the sender address (colon-separated, up to 3 lines).
+    [format.<name>] sections declare each format: `type` is `address` or `image`; image formats add cols/rows and cell_width_mm/cell_height_mm. Each format may carry a `next_position` field (auto-managed).
+    [address_book] maps a key to a colon-separated recipient address (1-4 lines).
 
-      sender=Donald Duck:1313 Webfoot Walk:Duckburg
-      scrooge=Scrooge McDuck:McDuck Manor:Duckburg:Calisota
-      homer=Home Simpson:742 Evergreen Terrace:Springfield
+    Sample configuration:
+
+      [defaults]
+      address = labelwonderland_es0010
+      image   = topstick_8739
+      sender  = Donald Duck:1313 Webfoot Walk:Duckburg
+
+      [format.labelwonderland_es0010]
+      type          = address
+      template      = labelwonderland_es0010
+      next_position = 0
+
+      [format.topstick_8739]
+      type           = image
+      template       = topstick_8739
+      cols           = 2
+      rows           = 4
+      cell_width_mm  = 96.5
+      cell_height_mm = 67.7
+      next_position  = 0
+
+      [address_book]
+      scrooge = Scrooge McDuck:McDuck Manor:Duckburg:Calisota
+      homer   = Homer Simpson:742 Evergreen Terrace:Springfield
 
   HELP
 
-  PLACEHOLDER_SENDER_ADDRESS = %w(<sender_name> <sender_address_line_1> <sender_address_line_2>)
-
   def execute
     options = SimpleScripting::Argv.decode(
-      "label_position",
+      ['-p', '--position POSITION', 'Label position (default: per-format next_position from config)'],
       "recipient",
       long_help: LONG_HELP
     ) || exit
 
-    label_position, raw_recipient = options.values_at(:label_position, :recipient)
+    raw_input = options.fetch(:recipient)
 
-    sender_address, address_book = load_address_book
-    recipient_address = find_recipient_address(raw_recipient, address_book)
+    cfg  = load_config
+    mode = FillLabels.new.send(:detect_mode, raw_input)
 
-    [sender_address, recipient_address, label_position]
+    format_name = cfg.fetch(:defaults).fetch(mode)
+    format      = cfg.fetch(:formats).fetch(format_name)
+
+    label_position = options[:position] || format.fetch(:next_position, 0).to_s
+
+    recipient_or_image =
+      case mode
+      when :address then find_recipient_address(raw_input, cfg.fetch(:address_book))
+      when :image   then raw_input
+      end
+
+    [cfg.fetch(:sender), recipient_or_image, label_position, format, format_name]
+  end
+
+  def save_next_position(format_name, used_positions_raw, path: CONFIG_PATH)
+    next_pos = FillLabels.new.send(:decode_label_positions, used_positions_raw).to_a.map(&:to_i).max + 1
+    update_config_value(path, "format.#{format_name}", 'next_position', next_pos)
   end
 
   private
 
-  def load_address_book
-    raw_address_book = SimpleScripting::Configuration.load.to_h
+  def load_config(path = CONFIG_PATH)
+    require 'parseconfig'
+    raw = ParseConfig.new(path)
 
-    sender_address = raw_address_book[:sender]&.split(':') || PLACEHOLDER_SENDER_ADDRESS
-    address_book = raw_address_book.each_with_object({}) { |(key, raw_address), address_book| address_book[key.to_s] = raw_address.split(':') }
+    formats = raw.groups.select { |g| g.start_with?('format.') }.each_with_object({}) do |g, h|
+      name = g.sub(/\Aformat\./, '')
+      h[name] = raw[g].each_with_object({}) do |(field, value), out|
+        out[field.to_sym] = case field
+                            when 'cols', 'rows', 'next_position'   then value.to_i
+                            when 'cell_width_mm', 'cell_height_mm' then value.to_f
+                            else                                        value
+                            end
+      end
+    end
 
-    [sender_address, address_book]
+    defaults_raw = raw['defaults']
+
+    {
+      defaults:     { address: defaults_raw['address'], image: defaults_raw['image'] },
+      sender:       defaults_raw['sender'].split(':'),
+      formats:      formats,
+      address_book: raw['address_book'].each_with_object({}) { |(k, v), h| h[k] = v.split(':') },
+    }
   end
 
   def find_recipient_address(raw_recipient, address_book)
     recipient_address = raw_recipient.split("\n")
+    return recipient_address if recipient_address.size > 1
 
-    if recipient_address.size == 1
-      recipient_pattern = raw_recipient.downcase
+    pattern = raw_recipient.downcase
 
-      address_book.each do |key, address_lines|
-        return address_lines if key.downcase.include?(recipient_pattern) || address_lines[0].downcase.include?(recipient_pattern)
-      end
-
-      raise "Recipient (pattern) not found"
-    else
-      recipient_address
+    matches = address_book.select do |key, address_lines|
+      key.downcase.include?(pattern) || address_lines[0].downcase.include?(pattern)
     end
+
+    raise "Recipient (pattern) not found" if matches.empty?
+    return matches.values.first                if matches.size == 1
+
+    require 'tty-prompt'
+    choices = matches.each_with_object({}) { |(key, lines), h| h["#{key}: #{lines.join(', ')}"] = lines }
+    TTY::Prompt.new.select("Pick recipient:", choices, filter: true)
+  end
+
+  # Replace `key`'s value in-place inside [section] if present (preserving the
+  # original `key   =` alignment); otherwise insert a new line before the
+  # section's trailing blank lines. Other lines are left untouched.
+  #
+  def update_config_value(path, section, key, value)
+    lines = File.readlines(path)
+
+    section_start = lines.find_index { |l| l.strip == "[#{section}]" }
+    raise "Section [#{section}] not found in #{path}" if section_start.nil?
+
+    after_section = lines[(section_start + 1)..].find_index { |l| l =~ /\A\s*\[/ }
+    section_end   = after_section ? section_start + 1 + after_section : lines.size
+
+    key_regex = /\A\s*#{Regexp.escape(key)}\s*=/
+    key_idx   = ((section_start + 1)...section_end).find { |i| lines[i] =~ key_regex }
+
+    if key_idx
+      prefix = lines[key_idx].split('=', 2).first
+      lines[key_idx] = "#{prefix}= #{value}\n"
+    else
+      insert_idx = section_end
+      insert_idx -= 1 while insert_idx > section_start + 1 && lines[insert_idx - 1].strip.empty?
+      lines.insert(insert_idx, "#{key} = #{value}\n")
+    end
+
+    File.write(path, lines.join)
   end
 end # ConfigurationPreparer
 
 class FillLabels
-  TEMPLATE_DIR  = File.join(__dir__, 'fill_labels_template')
-  TEMPLATE_FILE = File.join(TEMPLATE_DIR, 'content.xml')
-  TEMPLATE_BAK  = TEMPLATE_FILE + '.bak'
+  TEMPLATES_ROOT = File.join(__dir__, 'fill_labels_templates')
 
   # Returns the generated file name.
   #
-  def fill(sender_address, recipient_address, raw_label_positions, debug: false)
+  def fill(sender_address, recipient_or_image, raw_label_positions, format, debug: false)
+    case format.fetch(:type)
+    when 'address'
+      fill_address(sender_address, recipient_or_image, raw_label_positions, format, debug: debug)
+    when 'image'
+      fill_image(recipient_or_image, raw_label_positions, format, debug: debug)
+    else
+      raise "Unknown format type: #{format[:type].inspect}"
+    end
+  end
+
+  private
+
+  def detect_mode(raw_input)
+    return :address if raw_input.include?("\n")
+    return :image   if raw_input.include?(".")
+    :address
+  end
+
+  def fill_address(sender_address, recipient_address, raw_label_positions, format, debug:)
+    template_dir  = File.join(TEMPLATES_ROOT, format.fetch(:template))
+    template_file = File.join(template_dir, 'content.xml')
+    template_bak  = template_file + '.bak'
+
     output_filename = Dir::Tmpname.create(['filled_labels', '.odt']) { }
-    source_template = IO.read(TEMPLATE_FILE)
+    source_template = IO.read(template_file)
     recipient_address << "" if recipient_address.size == 3
 
     check_addresses!(sender_address, recipient_address)
@@ -95,20 +208,114 @@ class FillLabels
 
     compiled_template = compile_template(source_template, template_replacements)
 
-    IO.write(TEMPLATE_BAK, compiled_template)
+    IO.write(template_bak, compiled_template)
 
-    compress_directory(TEMPLATE_DIR, output_filename, ignore: [TEMPLATE_FILE], rename: { TEMPLATE_BAK => TEMPLATE_FILE }, debug: debug)
+    compress_directory(template_dir, output_filename, ignore: [template_file], rename: { template_bak => template_file }, debug: debug)
 
     output_filename
   ensure
-    File.delete(TEMPLATE_BAK) if File.exist?(TEMPLATE_BAK)
+    File.delete(template_bak) if template_bak && File.exist?(template_bak)
   end
 
-  private
+  def fill_image(image_path, raw_label_positions, format, debug:)
+    template_dir  = File.join(TEMPLATES_ROOT, format.fetch(:template))
+    template_file = File.join(template_dir, 'content.xml')
+
+    source_template = IO.read(template_file)
+    positions       = decode_label_positions(raw_label_positions)
+    check_image_positions!(positions, format)
+    compiled        = strip_unselected_frames(source_template, positions)
+    rotation        = best_fit_rotation_degrees(image_path, format)
+
+    staging = Dir.mktmpdir('fill_labels_stage')
+    begin
+      FileUtils.cp_r(File.join(template_dir, '.'), staging)
+      IO.write(File.join(staging, 'content.xml'), compiled)
+      FileUtils.mkdir_p(File.join(staging, 'Pictures'))
+      stage_image(image_path, File.join(staging, 'Pictures', 'image.png'), rotation, format)
+
+      output_filename = Dir::Tmpname.create(['filled_labels', '.odt']) { }
+      compress_directory(staging, output_filename, debug: debug)
+      output_filename
+    ensure
+      FileUtils.rm_rf(staging)
+    end
+  end
+
+  def best_fit_rotation_degrees(image_path, format)
+    img_w, img_h = png_dimensions(image_path)
+    cell_w = format.fetch(:cell_width_mm)
+    cell_h = format.fetch(:cell_height_mm)
+    scale_unrotated = [cell_w.fdiv(img_w), cell_h.fdiv(img_h)].min
+    scale_rotated   = [cell_w.fdiv(img_h), cell_h.fdiv(img_w)].min
+    scale_rotated > scale_unrotated ? 90 : 0
+  end
+
+  def png_dimensions(path)
+    File.open(path, 'rb') do |f|
+      raise "Not a PNG: #{path}" unless f.read(8) == "\x89PNG\r\n\x1a\n".b
+      f.read(4)
+      raise "Bad PNG header: #{path}" unless f.read(4) == "IHDR".b
+      [f.read(4).unpack1('N'), f.read(4).unpack1('N')]
+    end
+  end
+
+  MIN_PADDING_MM = 2.0
+
+  # Bakes aspect-ratio-preserving fit and >=1mm padding into the image itself:
+  # scales conceptually to fit cell minus padding, then centers on a white
+  # canvas with the cell's aspect ratio. The frame in the template stays
+  # cell-sized; since the canvas matches the cell aspect, LibreOffice renders
+  # it without distortion.
+  #
+  def stage_image(source, target, rotation_degrees, format)
+    require 'chunky_png'
+    img = ChunkyPNG::Image.from_file(source)
+    rotations = (rotation_degrees / 90) % 4
+    rotations.times { img = img.rotate_right }
+
+    cell_w_mm = format.fetch(:cell_width_mm)
+    cell_h_mm = format.fetch(:cell_height_mm)
+
+    avail_w_mm = cell_w_mm - 2 * MIN_PADDING_MM
+    avail_h_mm = cell_h_mm - 2 * MIN_PADDING_MM
+    scale_mm_per_px = [avail_w_mm.fdiv(img.width), avail_h_mm.fdiv(img.height)].min
+    ppm = 1.0 / scale_mm_per_px
+
+    canvas_w_px = (cell_w_mm * ppm).floor
+    canvas_h_px = (cell_h_mm * ppm).floor
+    offset_x    = (canvas_w_px - img.width) / 2
+    offset_y    = (canvas_h_px - img.height) / 2
+
+    canvas = ChunkyPNG::Image.new(canvas_w_px, canvas_h_px, ChunkyPNG::Color::WHITE)
+    canvas.compose!(img, offset_x, offset_y)
+    canvas.save(target)
+  end
+
+  # An `as-char` anchored `<draw:frame>` with no child element collapses to zero
+  # width in LibreOffice (its declared svg:width/svg:height are ignored), so an
+  # unselected position would disappear and shift the image-bearing frame into
+  # position 0. The text-box placeholder gives the frame a child so its declared
+  # size is honored.
+  #
+  EMPTY_FRAME_PLACEHOLDER = '<draw:text-box><text:p text:style-name="Standard"/></draw:text-box>'
+
+  def strip_unselected_frames(template, selected_positions)
+    positions = selected_positions.to_a.map(&:to_i)
+    template.gsub(/<!--FRAME_(\d+)-->(.*?)<!--\/FRAME_\1-->/m) do
+      positions.include?(Regexp.last_match(1).to_i) ? Regexp.last_match(2) : EMPTY_FRAME_PLACEHOLDER
+    end
+  end
 
   def check_addresses!(sender_address, recipient_address)
     raise "Invalid sender address (3 lines allowed)!" if sender_address.size > 3
     raise "Invalid recipient address (4 lines allowed)!" if recipient_address.size > 4
+  end
+
+  def check_image_positions!(positions, format)
+    max_pos     = format.fetch(:cols) * format.fetch(:rows) - 1
+    bad         = positions.to_a.map(&:to_i).reject { |p| p.between?(0, max_pos) }
+    raise "Position(s) out of range for #{format.fetch(:template)} (allowed 0-#{max_pos}): #{bad.join(',')}" if bad.any?
   end
 
   def decode_label_positions(raw_label_positions)
@@ -180,9 +387,12 @@ class FillLabels
 end # class FillLabels
 
 if __FILE__ == $PROGRAM_NAME
-  sender_address, recipient_address, label_position = ConfigurationPreparer.new.execute
+  preparer = ConfigurationPreparer.new
+  sender_address, recipient_or_image, label_position, format, format_name = preparer.execute
 
-  output_filename = FillLabels.new.fill(sender_address, recipient_address, label_position)
+  output_filename = FillLabels.new.fill(sender_address, recipient_or_image, label_position, format)
+
+  preparer.save_next_position(format_name, label_position)
 
   SystemHelper.open_file(output_filename)
 end
