@@ -3,12 +3,6 @@
 set -o errexit
 set -o nounset
 
-# It's not clear if in theory, files could be analyzed individually for track gain, then the audio
-# gain to be applied without recomputing, but it doesn't work based on testing:
-#
-#     for f in *.m4a; do aacgain -s r "$f"; done
-#     aacgain -k -a *.m4a
-
 c_default_quality=4
 # shellcheck disable=SC2016
 c_help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-t|--trash-input] <input1> {<inputN>, ...}
@@ -32,7 +26,7 @@ The codec used is libfdk_aac, in VBR, with a default quality of $c_default_quali
 - 3: 115
 - 2:  99
 
-Requires aacgain, trash, a recompiled FFmpeg, and GNU Parallel.
+Requires rsgain, trash, a recompiled FFmpeg, and GNU Parallel.
 
 Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
 "
@@ -160,9 +154,7 @@ function encode_file {
 
   echo -n "Normalizing (track) "
 
-  # `-s -r`: ignore ffmpeg written tags, which set the album gain for each track separately.
-  #
-  aacgain -q -k -r -s r "$intermediate_file"
+  rsgain custom -q -s i -c p "$intermediate_file"
 
   mv "$intermediate_file" "$destination_file"
 
@@ -235,9 +227,7 @@ function encode_directory {
 
   echo "Normalizing (album) $destination_subdir (tmp dir: $intermediate_subdir)..."
 
-  # See `-s -r` note in the previous invocation.
-  #
-  aacgain -q -k -a -s r "${destination_subfiles[@]}"
+  rsgain custom -q -a -s i -c p "${destination_subfiles[@]}"
 
   # Removing the source before moving is less clean than the reverse, but it simplifies the case of
   # the source directory being encoded in-place.
