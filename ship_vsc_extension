@@ -1,0 +1,196 @@
+#!/usr/bin/env ruby
+
+require 'json'
+require 'shellwords'
+require 'open3'
+
+require 'simple_scripting/argv'
+
+class ShipVscExtension
+  MAJOR = 'major'
+  MINOR = 'minor'
+  PATCH = 'patch'
+  NONE  = 'none'
+
+  PACKAGE_FILE      = 'package.json'
+  PACKAGE_LOCK_FILE = 'package-lock.json'
+
+  # Number of "version" entries to update in each file: package.json has the
+  # single extension version; package-lock.json (lockfileVersion >= 2) repeats
+  # it at the top level and under packages[""], both before any dependency.
+  VERSION_OCCURRENCES = { PACKAGE_FILE => 1, PACKAGE_LOCK_FILE => 2 }.freeze
+
+  COMMIT_MESSAGE = ->(version) { "Bump version to #{version}" }
+  TAG_NAME       = ->(version) { "v#{version}" }
+
+  def execute(increment_type)
+    check_increment_type(increment_type)
+    check_required_files
+
+    current_version = find_current_version
+
+    if increment_type != NONE
+      new_version = increment_version(current_version, increment_type)
+      VERSION_OCCURRENCES.each do |file, occurrences|
+        write_version(file, current_version, new_version, occurrences)
+      end
+      commit_changes(new_version)
+    end
+
+    tag_commit(new_version || current_version)
+    push_commit_and_tag
+
+    publish_to_marketplace
+
+    # `ovsx` falls back to the OS keyring (via keytar) when `OVSX_PAT` is unset,
+    # which blocks indefinitely on a locked/headless keyring. Open VSX publishing
+    # is therefore opt-in: it runs only when the token is provided.
+    if ENV['OVSX_PAT'].to_s.empty?
+      puts "OVSX_PAT not set; skipping Open VSX publishing."
+    else
+      publish_to_open_vsx
+    end
+  end
+
+  private
+
+  # MAIN STEPS #################################################################
+
+  def check_increment_type(increment_type)
+    if ![MAJOR, MINOR, PATCH, NONE].include?(increment_type)
+      raise "Unexpected increment type: #{increment_type.inspect}"
+    end
+  end
+
+  def check_required_files
+    [PACKAGE_FILE, PACKAGE_LOCK_FILE].each do |file|
+      raise "#{file} not found!" if !File.exist?(file)
+    end
+  end
+
+  def find_current_version
+    JSON.parse(IO.read(PACKAGE_FILE)).fetch('version')
+  end
+
+  # Unfortunately, there's no stdlib helper for this, so it's done by hand
+  # (mirroring the gem-shipping counterpart).
+  def increment_version(version, increment_type)
+    version_parts = version.split('.')
+
+    if increment_type == PATCH
+      version_parts[2] = version_parts[2].to_i + 1
+    else
+      version_parts[2] = 0
+
+      if increment_type == MINOR
+        version_parts[1] = version_parts[1].to_i + 1
+      else
+        version_parts[1] = 0
+
+        if increment_type == MAJOR
+          version_parts[0] = version_parts[0].to_i + 1
+        else
+          raise "Unexpected increment type: #{increment_type}"
+        end
+      end
+    end
+
+    version_parts.join('.')
+  end
+
+  # Replaces the first `occurrences` `"version": "<current>"` entries; matching
+  # the current version (rather than any version) leaves dependency versions in
+  # the lockfile untouched.
+  def write_version(file, current_version, new_version, occurrences)
+    file_content = IO.read(file)
+
+    version_regex = /("version":\s*")#{Regexp.escape(current_version)}(")/
+    replaced = 0
+
+    updated_content = file_content.gsub(version_regex) do |match|
+      replaced += 1
+      replaced <= occurrences ? "#{$1}#{new_version}#{$2}" : match
+    end
+
+    raise "Expected #{occurrences} version occurrence(s) in #{file}, found #{replaced}!" if replaced < occurrences
+
+    IO.write(file, updated_content)
+  end
+
+  def commit_changes(new_version)
+    commit_message = COMMIT_MESSAGE[new_version]
+    checked_execution("git add -A && git commit -m #{commit_message.shellescape}")
+  end
+
+  def tag_commit(version)
+    tag_name = TAG_NAME[version]
+    checked_execution("git tag #{tag_name.shellescape}")
+  end
+
+  def push_commit_and_tag
+    current_branch = checked_execution("git rev-parse --abbrev-ref HEAD").strip
+    checked_execution("git push --tags origin #{current_branch}")
+  end
+
+  # Both tools package the extension themselves (running `vscode:prepublish`)
+  # when no `*.vsix` is supplied, so there's no separate packaging step.
+  def publish_to_marketplace
+    checked_execution("npx --yes @vscode/vsce publish")
+  end
+
+  def publish_to_open_vsx
+    checked_execution("npx --yes ovsx publish")
+  end
+
+  # HELPERS ####################################################################
+
+  # `capture3` reads stdout and stderr concurrently; reading them sequentially
+  # (e.g. `popen3` + `stdout.read` then `stderr.read`) deadlocks when a child
+  # fills the stderr pipe buffer while the parent is still draining stdout.
+  def checked_execution(command)
+    stdout_content, stderr_content, status = Open3.capture3(command)
+
+    puts stdout_content if stdout_content != ''
+    puts stderr_content if stderr_content != ''
+
+    raise "Error (exit status: #{status.exitstatus})" if !status.success?
+
+    stdout_content
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  long_help = <<~STR
+    Valid <increment_type> values: major, minor, patch, none.
+
+    This script will:
+
+    - increase the version in `package.json` and `package-lock.json`
+    - commit, with title `Bump version to <new_version>`
+    - tag the commit, with name `v<version>`
+    - perform a `git push` (commit and tag)
+    - publish to the VS Marketplace (`npx @vscode/vsce publish`)
+    - publish to Open VSX (`npx ovsx publish`), if `OVSX_PAT` is set
+
+    The script performs a series of checks, and will abort if they don't pass
+    (eg. a missing `package.json`).
+
+    If `none` increment type is specified, the operations related to the version
+    change are not performed (the current version is tagged and published).
+
+    Marketplace publishing relies on the standard credentials being available
+    in the environment: `VSCE_PAT` (or a prior `vsce login`).
+
+    Open VSX publishing is opt-in: it runs only when `OVSX_PAT` is set, and is
+    skipped otherwise (`ovsx` would otherwise block on the OS keyring).
+  STR
+
+  options = SimpleScripting::Argv.decode(
+    'increment_type',
+    long_help: long_help
+  ) || exit
+
+  increment_type = options.fetch(:increment_type)
+
+  ShipVscExtension.new.execute(increment_type)
+end
