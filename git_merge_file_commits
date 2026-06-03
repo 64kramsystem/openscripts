@@ -66,7 +66,7 @@ function pull_and_rebase_branch {
 }
 
 function find_first_addition_hash {
-  git log --oneline "$v_filename" | awk 'END {print $1}'
+  git log --pretty=format:%H -- "$v_filename" | tail -n 1
 }
 
 function print_history_from_first_addition {
