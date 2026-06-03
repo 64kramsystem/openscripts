@@ -7,14 +7,11 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_rebase_commands_file=$(mktemp)
-export c_commits_count_regex='have (\d+) and (\d+) different commits'
 c_help="Usage: $(basename "$0") [-h|--help] [--non-interactive] <filename> [subject_suffix]
 
 Rewrites the history of a repository, merging the commits including a given file into a single commit; this is useful when one wants to keep only the latest version of a file.
 
-Before the operation, the origin is pulled, and the branch rebased. A keypress is required before rewriting the history.
-
-Currently, the script assumes that there are two commits involving the file, not more."
+Before the operation, the origin is pulled, and the branch rebased. A keypress is required before rewriting the history."
 
 v_filename=
 v_subject_suffix=
@@ -68,10 +65,6 @@ function pull_and_rebase_branch {
   echo
 }
 
-function find_head_hash {
-  git log --oneline "$v_filename" | awk 'NR==1 {print $1}'
-}
-
 function find_first_addition_hash {
   git log --oneline "$v_filename" | awk 'END {print $1}'
 }
@@ -91,15 +84,21 @@ function print_history_from_first_addition {
 }
 
 function prepare_rebase_commands {
-  local head_hash=$1 first_addition_hash=$2
+  local first_addition_hash=$1
 
-  # The `log` command doesn't include HEAD and $first_addition_hash.
+  local all_commits file_commits
+  all_commits=$(git log --reverse --pretty=format:'pick %H %s' "$first_addition_hash"~..)
+  file_commits=$(git log --reverse --pretty=format:'pick %H %s' "$first_addition_hash"~.. -- "$v_filename")
+
+  # Pick the commits not including the file in their original order, then the first commit
+  # including it, then fixup all the other commits including it; the merged commit ends up as
+  # HEAD, which rename_head_message() amends.
   #
-  cat >> "$c_rebase_commands_file" << COMMANDS
-$(git log --reverse --pretty=format:'pick %h %s' "$first_addition_hash"..HEAD~)
-pick $first_addition_hash $(git show -s --pretty=format:"%s" "$first_addition_hash")
-fixup $head_hash $(git show -s --pretty=format:"%s" "$head_hash")
-COMMANDS
+  {
+    grep -vxF -f <(printf '%s\n' "$file_commits") <<< "$all_commits" || true
+    head -n 1 <<< "$file_commits"
+    sed '1d; s/^pick/fixup/' <<< "$file_commits"
+  } > "$c_rebase_commands_file"
 }
 
 function print_rebase_commands {
@@ -148,18 +147,17 @@ function push_repository {
 
 
 function main {
-  local head_hash first_addition_hash
+  local first_addition_hash
 
   register_exit_hook
 
   pull_and_rebase_branch
 
-  head_hash=$(find_head_hash)
   first_addition_hash=$(find_first_addition_hash)
 
   print_history_from_first_addition "$first_addition_hash"
 
-  prepare_rebase_commands "$head_hash" "$first_addition_hash"
+  prepare_rebase_commands "$first_addition_hash"
 
   print_rebase_commands
 
@@ -174,5 +172,7 @@ function main {
   push_repository
 }
 
-decode_cmdline_args "$@"
-main
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  decode_cmdline_args "$@"
+  main
+fi
