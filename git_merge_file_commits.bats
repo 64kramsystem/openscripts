@@ -36,6 +36,15 @@ standard_fixture() {
   c_v3_hash=$(make_commit FILE v3 'FILE v3')
 }
 
+# ── First addition hash ───────────────────────────────────────────────────────
+
+@test "find_first_addition_hash: file name also matching a ref" {
+  standard_fixture
+  git tag FILE
+
+  [ "$(find_first_addition_hash)" = "$c_add_hash" ]
+}
+
 # ── Rebase commands ───────────────────────────────────────────────────────────
 
 @test "prepare_rebase_commands: fixups all file commits; unrelated commits stay in order" {
