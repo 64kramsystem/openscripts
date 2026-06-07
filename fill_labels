@@ -11,12 +11,13 @@ require_relative 'helpers/system_helper'
 
 class ConfigurationPreparer
   CONFIG_PATH = File.expand_path('~/.fill_labels')
+  STATE_PATH  = File.join(ENV['XDG_STATE_HOME'] || File.expand_path('~/.local/state'), 'fill_labels')
 
   LONG_HELP = <<~HELP
     Prepare an OpenDocument with addresses or images on a standard A4 sticker sheet.
 
     The <position> is 0-based, and supports several formats, for example: `1`, `1,3,5`, `3-7`.
-    When omitted, the active format's `next_position` from the config is used; after a
+    When omitted, the active format's `next_position` from the state file is used; after a
     successful run, `next_position` is advanced past the labels just used.
 
     The mode is auto-detected from the <recipient> argument:
@@ -32,8 +33,11 @@ class ConfigurationPreparer
 
     The configuration is stored in the `$HOME/.fill_labels` file as a sectioned INI.
     [defaults] selects the active format names per mode and the sender address (colon-separated, up to 3 lines).
-    [format.<name>] sections declare each format: `type` is `address` or `image`; image formats add cols/rows and cell_width_mm/cell_height_mm. Each format may carry a `next_position` field (auto-managed).
+    [format.<name>] sections declare each format: `type` is `address` or `image`; image formats add cols/rows and cell_width_mm/cell_height_mm.
     [address_book] maps a key to a colon-separated recipient address (1-4 lines).
+
+    The auto-managed `next_position` page state is kept out of the config, in the
+    `$XDG_STATE_HOME/fill_labels` file (sharing the `[format.<name>]` INI layout).
 
     Sample configuration:
 
@@ -45,7 +49,6 @@ class ConfigurationPreparer
       [format.labelwonderland_es0010]
       type          = address
       template      = labelwonderland_es0010
-      next_position = 0
 
       [format.topstick_8739]
       type           = image
@@ -54,7 +57,6 @@ class ConfigurationPreparer
       rows           = 4
       cell_width_mm  = 96.5
       cell_height_mm = 67.7
-      next_position  = 0
 
       [address_book]
       scrooge = Scrooge McDuck:McDuck Manor:Duckburg:Calisota
@@ -88,14 +90,16 @@ class ConfigurationPreparer
     [cfg.fetch(:sender), recipient_or_image, label_position, format, format_name]
   end
 
-  def save_next_position(format_name, used_positions_raw, path: CONFIG_PATH)
+  def save_next_position(format_name, used_positions_raw, path: STATE_PATH)
     next_pos = FillLabels.new.send(:decode_label_positions, used_positions_raw).to_a.map(&:to_i).max + 1
-    update_config_value(path, "format.#{format_name}", 'next_position', next_pos)
+    positions = load_next_positions(path)
+    positions[format_name] = next_pos
+    write_next_positions(path, positions)
   end
 
   private
 
-  def load_config(path = CONFIG_PATH)
+  def load_config(path = CONFIG_PATH, state_path = STATE_PATH)
     require 'parseconfig'
     raw = ParseConfig.new(path)
 
@@ -103,12 +107,14 @@ class ConfigurationPreparer
       name = g.sub(/\Aformat\./, '')
       h[name] = raw[g].each_with_object({}) do |(field, value), out|
         out[field.to_sym] = case field
-                            when 'cols', 'rows', 'next_position'   then value.to_i
+                            when 'cols', 'rows'                    then value.to_i
                             when 'cell_width_mm', 'cell_height_mm' then value.to_f
                             else                                        value
                             end
       end
     end
+
+    load_next_positions(state_path).each { |name, pos| formats[name][:next_position] = pos if formats.key?(name) }
 
     defaults_raw = raw['defaults']
 
@@ -138,32 +144,29 @@ class ConfigurationPreparer
     TTY::Prompt.new.select("Pick recipient:", choices, filter: true)
   end
 
-  # Replace `key`'s value in-place inside [section] if present (preserving the
-  # original `key   =` alignment); otherwise insert a new line before the
-  # section's trailing blank lines. Other lines are left untouched.
+  # The auto-managed `next_position` page state lives in the XDG state file (same
+  # `[format.<name>]` INI layout as the config), not in the config itself. Returns
+  # { format_name => Integer } for sections that carry it, or {} when absent.
   #
-  def update_config_value(path, section, key, value)
-    lines = File.readlines(path)
+  def load_next_positions(path = STATE_PATH)
+    return {} unless File.exist?(path)
 
-    section_start = lines.find_index { |l| l.strip == "[#{section}]" }
-    raise "Section [#{section}] not found in #{path}" if section_start.nil?
+    require 'parseconfig'
+    raw = ParseConfig.new(path)
 
-    after_section = lines[(section_start + 1)..].find_index { |l| l =~ /\A\s*\[/ }
-    section_end   = after_section ? section_start + 1 + after_section : lines.size
-
-    key_regex = /\A\s*#{Regexp.escape(key)}\s*=/
-    key_idx   = ((section_start + 1)...section_end).find { |i| lines[i] =~ key_regex }
-
-    if key_idx
-      prefix = lines[key_idx].split('=', 2).first
-      lines[key_idx] = "#{prefix}= #{value}\n"
-    else
-      insert_idx = section_end
-      insert_idx -= 1 while insert_idx > section_start + 1 && lines[insert_idx - 1].strip.empty?
-      lines.insert(insert_idx, "#{key} = #{value}\n")
+    raw.groups.select { |g| g.start_with?('format.') }.each_with_object({}) do |g, h|
+      name = g.sub(/\Aformat\./, '')
+      h[name] = raw[g]['next_position'].to_i if raw[g].key?('next_position')
     end
+  end
 
-    File.write(path, lines.join)
+  # The state file is machine-managed, so it's rewritten wholesale (no comments or
+  # alignment to preserve), creating the XDG state directory on first write.
+  #
+  def write_next_positions(path, positions)
+    FileUtils.mkdir_p(File.dirname(path))
+    content = positions.map { |name, pos| "[format.#{name}]\nnext_position = #{pos}\n" }.join("\n")
+    File.write(path, content)
   end
 end # ConfigurationPreparer
 

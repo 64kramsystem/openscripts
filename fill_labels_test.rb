@@ -295,6 +295,7 @@ end
 class ConfigurationPreparerLoadConfigTest < Minitest::Test
   def setup
     @config_path = "/tmp/fill_labels_test_#{Process.pid}.ini"
+    @state_path  = "/tmp/fill_labels_state_test_#{Process.pid}.ini"
     File.write(@config_path, <<~INI)
       [defaults]
       address = labelwonderland_es0010
@@ -304,7 +305,6 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
       [format.labelwonderland_es0010]
       type          = address
       template      = labelwonderland_es0010
-      next_position = 5
 
       [format.topstick_8739]
       type           = image
@@ -318,25 +318,30 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
       scrooge = Scrooge McDuck:McDuck Manor:Duckburg:Calisota
       homer   = Homer Simpson:742 Evergreen Terrace:Springfield
     INI
+    File.write(@state_path, <<~INI)
+      [format.labelwonderland_es0010]
+      next_position = 5
+    INI
   end
 
   def teardown
     File.delete(@config_path) if File.exist?(@config_path)
+    File.delete(@state_path)  if File.exist?(@state_path)
   end
 
   def test_loads_defaults
-    cfg = ConfigurationPreparer.new.send(:load_config, @config_path)
+    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     assert_equal "labelwonderland_es0010", cfg.fetch(:defaults).fetch(:address)
     assert_equal "topstick_8739",          cfg.fetch(:defaults).fetch(:image)
   end
 
   def test_loads_sender_from_defaults
-    cfg = ConfigurationPreparer.new.send(:load_config, @config_path)
+    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     assert_equal ["Donald Duck", "1313 Webfoot Walk", "Duckburg"], cfg.fetch(:sender)
   end
 
   def test_loads_formats_keyed_by_name
-    cfg = ConfigurationPreparer.new.send(:load_config, @config_path)
+    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     addr = cfg.fetch(:formats).fetch("labelwonderland_es0010")
     assert_equal "address",                addr.fetch(:type)
     assert_equal "labelwonderland_es0010", addr.fetch(:template)
@@ -351,125 +356,85 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
   end
 
   def test_loads_address_book_as_split_lines
-    cfg = ConfigurationPreparer.new.send(:load_config, @config_path)
+    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     book = cfg.fetch(:address_book)
     assert_equal ["Scrooge McDuck", "McDuck Manor", "Duckburg", "Calisota"], book["scrooge"]
     assert_equal ["Homer Simpson", "742 Evergreen Terrace", "Springfield"],   book["homer"]
   end
 
-  def test_loads_next_position_as_int_when_present
-    cfg = ConfigurationPreparer.new.send(:load_config, @config_path)
+  def test_merges_next_position_from_state_file
+    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     assert_equal 5, cfg.fetch(:formats).fetch("labelwonderland_es0010").fetch(:next_position)
   end
 
-  def test_next_position_absent_when_not_in_config
-    cfg = ConfigurationPreparer.new.send(:load_config, @config_path)
+  def test_next_position_absent_when_not_in_state_file
+    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     refute cfg.fetch(:formats).fetch("topstick_8739").key?(:next_position)
   end
 end
 
-class ConfigurationPreparerUpdateConfigValueTest < Minitest::Test
+class ConfigurationPreparerStateFileTest < Minitest::Test
   def setup
-    @config_path = "/tmp/fill_labels_update_test_#{Process.pid}.ini"
+    @state_dir  = "/tmp/fill_labels_statefile_test_#{Process.pid}"
+    @state_path = File.join(@state_dir, 'fill_labels')
   end
 
   def teardown
-    File.delete(@config_path) if File.exist?(@config_path)
+    FileUtils.rm_rf(@state_dir)
   end
 
-  def test_updates_existing_key_preserving_alignment
-    File.write(@config_path, <<~INI)
-      [format.topstick_8739]
-      type           = image
-      template       = topstick_8739
-      next_position  = 0
-    INI
-
-    ConfigurationPreparer.new.send(:update_config_value, @config_path, "format.topstick_8739", "next_position", 4)
-
-    assert_equal <<~INI, File.read(@config_path)
-      [format.topstick_8739]
-      type           = image
-      template       = topstick_8739
-      next_position  = 4
-    INI
+  def test_load_next_positions_returns_empty_when_file_absent
+    assert_equal({}, ConfigurationPreparer.new.send(:load_next_positions, @state_path))
   end
 
-  def test_inserts_key_when_missing_keeping_neighbouring_sections_intact
-    File.write(@config_path, <<~INI)
-      [format.topstick_8739]
-      type     = image
-      template = topstick_8739
-
-      [address_book]
-      scrooge = Scrooge McDuck:McDuck Manor:Duckburg
-    INI
-
-    ConfigurationPreparer.new.send(:update_config_value, @config_path, "format.topstick_8739", "next_position", 2)
-
-    assert_equal <<~INI, File.read(@config_path)
-      [format.topstick_8739]
-      type     = image
-      template = topstick_8739
-      next_position = 2
-
-      [address_book]
-      scrooge = Scrooge McDuck:McDuck Manor:Duckburg
-    INI
+  def test_save_creates_file_and_parent_dir_when_absent
+    refute File.exist?(@state_path)
+    ConfigurationPreparer.new.save_next_position("topstick_8739", "3", path: @state_path)
+    assert_equal 4, ConfigurationPreparer.new.send(:load_next_positions, @state_path).fetch("topstick_8739")
   end
 
-  def test_inserts_key_at_eof_when_section_is_last
-    File.write(@config_path, <<~INI)
-      [format.topstick_8739]
-      type     = image
-      template = topstick_8739
-    INI
-
-    ConfigurationPreparer.new.send(:update_config_value, @config_path, "format.topstick_8739", "next_position", 7)
-
-    assert_equal <<~INI, File.read(@config_path)
-      [format.topstick_8739]
-      type     = image
-      template = topstick_8739
-      next_position = 7
-    INI
+  def test_save_preserves_other_formats_positions
+    ConfigurationPreparer.new.save_next_position("topstick_8739", "0", path: @state_path)
+    ConfigurationPreparer.new.save_next_position("labelwonderland_es0010", "4", path: @state_path)
+    positions = ConfigurationPreparer.new.send(:load_next_positions, @state_path)
+    assert_equal 1, positions.fetch("topstick_8739")
+    assert_equal 5, positions.fetch("labelwonderland_es0010")
   end
 
-  def test_raises_when_section_missing
-    File.write(@config_path, "[other]\nx = 1\n")
-    assert_raises(RuntimeError) do
-      ConfigurationPreparer.new.send(:update_config_value, @config_path, "format.missing", "next_position", 0)
-    end
+  def test_writes_mergeable_ini_section
+    ConfigurationPreparer.new.save_next_position("topstick_8739", "3", path: @state_path)
+    assert_equal <<~INI, File.read(@state_path)
+      [format.topstick_8739]
+      next_position = 4
+    INI
   end
 end
 
 class ConfigurationPreparerSaveNextPositionTest < Minitest::Test
   def setup
-    @config_path = "/tmp/fill_labels_save_next_test_#{Process.pid}.ini"
-    File.write(@config_path, <<~INI)
+    @state_path = "/tmp/fill_labels_save_next_test_#{Process.pid}.ini"
+    File.write(@state_path, <<~INI)
       [format.topstick_8739]
-      type          = image
-      template      = topstick_8739
       next_position = 0
     INI
   end
 
   def teardown
-    File.delete(@config_path) if File.exist?(@config_path)
+    File.delete(@state_path) if File.exist?(@state_path)
   end
 
   def test_single_position_increments_by_one
-    ConfigurationPreparer.new.save_next_position("topstick_8739", "3", path: @config_path)
-    assert_match(/next_position = 4/, File.read(@config_path))
+    ConfigurationPreparer.new.save_next_position("topstick_8739", "3", path: @state_path)
+    assert_match(/next_position = 4/, File.read(@state_path))
   end
 
   def test_range_advances_past_highest_used
-    ConfigurationPreparer.new.save_next_position("topstick_8739", "3-7", path: @config_path)
-    assert_match(/next_position = 8/, File.read(@config_path))
+    ConfigurationPreparer.new.save_next_position("topstick_8739", "3-7", path: @state_path)
+    assert_match(/next_position = 8/, File.read(@state_path))
   end
 
   def test_comma_list_advances_past_highest_used
-    ConfigurationPreparer.new.save_next_position("topstick_8739", "1,3,5", path: @config_path)
-    assert_match(/next_position = 6/, File.read(@config_path))
+    ConfigurationPreparer.new.save_next_position("topstick_8739", "1,3,5", path: @state_path)
+    assert_match(/next_position = 6/, File.read(@state_path))
   end
 end
