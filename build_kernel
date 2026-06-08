@@ -706,6 +706,10 @@ function enable_native_cpu {
 # Extracted from kernel 6.11-rc3.
 #
 function disable_unused_modules {
+  # $1: building kernel version (e.g. 7.0.11); used to gate version-specific symbols.
+  local building_version
+  building_version=$(short_kernel_version "$1" no_rc)
+
   # DON'T FORGET TO APPLY THE UBUNTU FIXES, IF COPY/PASTING!
 
   # Some don't make any measurable comptime improvements, but anyway they're not used.
@@ -836,15 +840,11 @@ function disable_unused_modules {
   annotation_set      CONFIG_DRM_BOCHS n                       # QEMU bochs VGA
   annotation_set      CONFIG_DRM_VMWGFX n                      # VMware SVGA virtual GPU
   annotation_set      CONFIG_DRM_VIRTIO_GPU n                  # virtio GPU for VMs
-  annotation_set      CONFIG_DRM_PANEL n                       # Generic panel support
   annotation_set      CONFIG_DRM_LIMA n                        # ARM Mali 400/450
   annotation_set      CONFIG_DRM_PANFROST n                    # ARM Mali Midgard/Bifrost
   annotation_set      CONFIG_DRM_ETNAVIV n                     # Vivante GPU (embedded)
   annotation_set      CONFIG_DRM_TEGRA n                       # NVIDIA Tegra (ARM)
   annotation_set      CONFIG_DRM_GMA500 n                      # Intel GMA500/600
-  annotation_set      CONFIG_DRM_SIS n                         # SiS video cards
-  annotation_set      CONFIG_DRM_VIA n                         # VIA video cards
-  annotation_set      CONFIG_DRM_SAVAGE n                      # S3 Savage
   # VirtIO guest drivers (for when Linux runs as VM guest)
   annotation_set      CONFIG_VIRTIO_BLK n                      # VirtIO block device
   annotation_set      CONFIG_VIRTIO_NET n                      # VirtIO network
@@ -865,8 +865,6 @@ function disable_unused_modules {
   annotation_set      CONFIG_ICE n                             # Intel Ethernet Connection E800
   # Legacy/Old Ethernet Drivers (10/100 Mbps, 90s/2000s era)
   annotation_set      CONFIG_NET_VENDOR_3COM n                 # 3Com cards (3c59x, 3c509, etc.)
-  annotation_set      CONFIG_PCMCIA_3C574 n                    # 3Com 3c574
-  annotation_set      CONFIG_PCMCIA_3C589 n                    # 3Com 3c589
   annotation_set      CONFIG_VORTEX n                          # 3Com 3c59x
   annotation_set      CONFIG_TYPHOON n                         # 3Com Typhoon
   annotation_set      CONFIG_NET_VENDOR_AMD n                  # AMD PCnet32, etc.
@@ -889,7 +887,6 @@ function disable_unused_modules {
   annotation_set      CONFIG_SUNDANCE n                        # Sundance Alta
   annotation_set      CONFIG_NET_VENDOR_SMSC n                 # SMSC LAN91C111
   annotation_set      CONFIG_SMC91X n                          # SMC 91Cxx
-  annotation_set      CONFIG_PCMCIA_SMC91C92 n                 # SMC 91Cxx PCMCIA
   annotation_set      CONFIG_NET_VENDOR_SILAN n                # Silan SC92031
   annotation_set      CONFIG_SC92031 n                         # Silan SC92031
   # Very Old WiFi Drivers Only
@@ -910,7 +907,6 @@ function disable_unused_modules {
   annotation_set      CONFIG_RT73USB n                         # Ralink rt2501/rt73 USB
   annotation_set      CONFIG_RT2800PCI n                       # Ralink rt2800 PCI
   annotation_set      CONFIG_RT2800USB n                       # Ralink rt2800 USB
-  annotation_set      CONFIG_PCMCIA_RAYCS n                    # Raylink/WebGear
   annotation_set      CONFIG_LIBERTAS n                        # Marvell Libertas
   # PCMCIA/CardBus (obsolete laptop tech)
   annotation_set      CONFIG_PCCARD n                          # PCMCIA/CardBus support
@@ -918,17 +914,12 @@ function disable_unused_modules {
   annotation_set      CONFIG_CARDBUS n                         # CardBus support
   # Fibre Channel (datacenter SAN storage)
   annotation_set      CONFIG_SCSI_FC_ATTRS n                   # Fibre Channel transport
-  annotation_set      CONFIG_SCSI_QLOGIC_FC n                  # QLogic Fibre Channel
   annotation_set      CONFIG_SCSI_QLOGIC_1280 n                # QLogic ISP1280
   annotation_set      CONFIG_SCSI_LPFC n                       # Emulex LightPulse FC
   annotation_set      CONFIG_SCSI_BFA_FC n                     # Brocade BFA FC
   annotation_set      CONFIG_FCOE n                            # FCoE (Fibre Channel over Ethernet)
   # Hardware RAID controllers (enterprise servers)
-  annotation_set      CONFIG_SCSI_MEGARAID_MM n                # LSI MegaRAID
-  annotation_set      CONFIG_SCSI_MEGARAID_LEGACY n            # LSI MegaRAID legacy
-  annotation_set      CONFIG_SCSI_MEGARAID_NEWGEN n            # LSI MegaRAID new
-  annotation_set      CONFIG_SCSI_MEGARAID_SAS n               # LSI MegaRAID SAS
-  annotation_set      CONFIG_MEGARAID_SAS n                    # LSI MegaRAID SAS (new)
+  annotation_set      CONFIG_MEGARAID_SAS n                    # LSI MegaRAID SAS
   annotation_set      CONFIG_SCSI_MPT3SAS n                    # LSI MPT Fusion SAS 3.0
   annotation_set      CONFIG_SCSI_MPT2SAS n                    # LSI MPT Fusion SAS 2.0
   annotation_set      CONFIG_SCSI_3W_9XXX n                    # 3ware 9xxx RAID
@@ -948,12 +939,10 @@ function disable_unused_modules {
   annotation_set      CONFIG_SND_SB8 n                         # SoundBlaster 1.0/2.0
   annotation_set      CONFIG_SND_SB16 n                        # SoundBlaster 16
   annotation_set      CONFIG_SND_SBAWE n                       # SoundBlaster AWE32/64
-  annotation_set      CONFIG_SND_ES968 n                       # ESS ES968
   annotation_set      CONFIG_SND_ES1688 n                      # ESS ES1688/ES688
   annotation_set      CONFIG_SND_ES18XX n                      # ESS ES18xx
   annotation_set      CONFIG_SND_CS4231 n                      # CS4231
   annotation_set      CONFIG_SND_CS4236 n                      # CS4232/CS4236+
-  annotation_set      CONFIG_SND_GUS_SYNTH n                   # Gravis UltraSound
   annotation_set      CONFIG_SND_OPL3SA2 n                     # Yamaha OPL3-SA2/SA3
   annotation_set      CONFIG_SND_AD1816A n                     # AD1816A
   annotation_set      CONFIG_SND_ALS100 n                      # Avance Logic ALS100/ALS120
@@ -997,7 +986,6 @@ function disable_unused_modules {
   annotation_set      CONFIG_XFS_FS n
   annotation_set      CONFIG_F2FS_FS n
   annotation_set      CONFIG_JFS_FS n
-  annotation_set      CONFIG_REISERFS_FS n
   annotation_set      CONFIG_NTFS_FS n                         # Legacy driver
   annotation_set      CONFIG_OCFS2_FS n
   annotation_set      CONFIG_GFS2_FS n
@@ -1006,10 +994,8 @@ function disable_unused_modules {
   annotation_set      CONFIG_UBIFS_FS n
   annotation_set      CONFIG_CRAMFS n
   # Datacenter/specialty hardware
-  annotation_set      CONFIG_HAMRADIO n                        # Amateur Radio
-  annotation_set      CONFIG_ISDN n                            # Legacy telephony
   annotation_set      CONFIG_IIO n                             # Industrial I/O sensors
-  annotation_set      CONFIG_THUNDERBOLT n                     # unless you have TB ports
+  annotation_set      CONFIG_USB4 n                            # Thunderbolt/USB4 (was CONFIG_THUNDERBOLT)
   annotation_set      CONFIG_NVME_TARGET n                     # NVMe over Fabrics (datacenter)
   annotation_set      CONFIG_NVME_TCP n
   annotation_set      CONFIG_NVME_RDMA n
@@ -1081,6 +1067,12 @@ function disable_unused_modules {
   annotation_set      CONFIG_NET_VENDOR_WANGXUN n
   annotation_set      CONFIG_NET_VENDOR_WIZNET n
   annotation_set      CONFIG_NET_VENDOR_XILINX n
+  # SCSI-over-Ethernet offload selects the Broadcom/Chelsio gates above; disable it so they
+  # actually take effect (datacenter-only anyway).
+  annotation_set      CONFIG_SCSI_BNX2X_FCOE n                 # Broadcom FCoE offload
+  annotation_set      CONFIG_SCSI_BNX2_ISCSI n                 # Broadcom iSCSI offload
+  annotation_set      CONFIG_SCSI_CXGB3_ISCSI n                # Chelsio T3 iSCSI offload
+  annotation_set      CONFIG_SCSI_CXGB4_ISCSI n                # Chelsio T4 iSCSI offload
 
   # WiFi: unused on this machine (Bluetooth is independent and stays enabled). CFG80211 off
   # cascades to the whole 802.11 stack and every WLAN_VENDOR_* driver (~150 modules).
@@ -1101,7 +1093,7 @@ function disable_unused_modules {
   annotation_set      CONFIG_SND_FIREWIRE n                    # FireWire audio
   annotation_set      CONFIG_ATM n                             # ATM networking
   annotation_set      CONFIG_WAN n                             # legacy sync-serial WAN
-  annotation_set      CONFIG_GPIB_COMMON n                     # NEW in 7.1: lab instrument bus
+  annotation_set      CONFIG_GPIB n                            # lab instrument bus (GPIB/IEEE-488)
   annotation_set      CONFIG_MEMSTICK n                        # Sony Memory Stick
 
   # Pluggable peripherals not used (USB tethering via cdc_ether/rndis is kept)
@@ -1110,6 +1102,12 @@ function disable_unused_modules {
   annotation_set      CONFIG_USB_NET_AX8817X n                 # ASIX USB-Ethernet dongles
   annotation_set      CONFIG_USB_NET_AX88179_178A n            # ASIX USB-Ethernet (newer)
   annotation_set      CONFIG_PARPORT n                         # parallel port (printer is USB)
+
+  # Removed in 7.1: only annotate when building <= 7.0, otherwise these are dead no-ops.
+  if dpkg --compare-versions "$building_version" lt 7.1; then
+    annotation_set    CONFIG_HAMRADIO n                        # Amateur Radio (gone in 7.1)
+    annotation_set    CONFIG_ISDN n                            # Legacy telephony (gone in 7.1)
+  fi
 }
 
 # Verify that the disables actually took effect, before the (long) compilation starts.
@@ -1622,7 +1620,7 @@ function main {
   fi
 
   if [[ -z $v_enable_unused_modules ]]; then
-    disable_unused_modules
+    disable_unused_modules "$building_kernel_version"
 
     # Skip in bisect mode: an override is consistent across runs, so the prompt would only
     # block unattended bisects.
