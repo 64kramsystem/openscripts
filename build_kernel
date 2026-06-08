@@ -1103,6 +1103,39 @@ function disable_unused_modules {
   annotation_set      CONFIG_USB_NET_AX88179_178A n            # ASIX USB-Ethernet (newer)
   annotation_set      CONFIG_PARPORT n                         # parallel port (printer is USB)
 
+  # Platforms/buses this desktop will never be
+  annotation_set      CONFIG_X86_EXTENDED_PLATFORM n           # non-PC x86 (SGI UV, Intel MID, ...)
+  annotation_set      CONFIG_RAPIDIO n                         # datacenter interconnect
+  annotation_set      CONFIG_AGP n                             # legacy AGP bus (PCIe now)
+  annotation_set      CONFIG_FUSION n                          # old LSI Fusion-MPT
+  annotation_set      CONFIG_MACINTOSH_DRIVERS n               # Apple Mac hardware
+  annotation_set      CONFIG_CHROME_PLATFORMS n                # ChromeOS embedded controllers
+  annotation_set      CONFIG_SURFACE_PLATFORMS n               # MS Surface devices
+  annotation_set      CONFIG_COMEDI n                          # lab data-acquisition cards
+  # Linux-as-guest paravirt; this kernel never boots inside a VM. VMware/VBox/QEMU+VFIO run as
+  # HOSTS and are unaffected (VFIO/KVM/VHOST/VMCI/IOMMU all stay enabled).
+  annotation_set      CONFIG_HYPERVISOR_GUEST n
+  annotation_set      CONFIG_WWAN n                            # cellular modems
+  annotation_set      CONFIG_NFC n                             # near-field comm
+  annotation_set      CONFIG_INPUT_TOUCHSCREEN n               # no touchscreen
+  annotation_set      CONFIG_INPUT_TABLET n                    # old serial tablets (USB Wacom is HID)
+  # Other-vendor laptop platform drivers (this is an MSI desktop)
+  annotation_set      CONFIG_THINKPAD_ACPI n
+  annotation_set      CONFIG_DELL_LAPTOP n
+  annotation_set      CONFIG_DELL_WMI n
+  annotation_set      CONFIG_HP_ACCEL n
+  annotation_set      CONFIG_HP_WMI n
+  annotation_set      CONFIG_ASUS_LAPTOP n
+  annotation_set      CONFIG_ASUS_WMI n
+  annotation_set      CONFIG_EEEPC_LAPTOP n
+  annotation_set      CONFIG_SONY_LAPTOP n
+  annotation_set      CONFIG_FUJITSU_LAPTOP n
+  annotation_set      CONFIG_SAMSUNG_LAPTOP n
+  annotation_set      CONFIG_LG_LAPTOP n
+  annotation_set      CONFIG_PANASONIC_LAPTOP n
+  annotation_set      CONFIG_ACER_WMI n
+  annotation_set      CONFIG_SYSTEM76_ACPI n
+
   # Removed in 7.1: only annotate when building <= 7.0, otherwise these are dead no-ops.
   if dpkg --compare-versions "$building_version" lt 7.1; then
     annotation_set    CONFIG_HAMRADIO n                        # Amateur Radio (gone in 7.1)
