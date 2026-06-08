@@ -1112,6 +1112,39 @@ function disable_unused_modules {
   annotation_set      CONFIG_PARPORT n                         # parallel port (printer is USB)
 }
 
+# Verify that the disables actually took effect, before the (long) compilation starts.
+#
+# The Ubuntu build skips `annotations --check` (do_mainline_build forces do_skip_checks), so a
+# disabled option that another option `select`s back on would slip through silently. Here we
+# resolve a throwaway .config from the (modified) annotations and report only options annotated
+# 'n' that came back as 'y'/'m'. Orphaned children (annotated m/y, resolved to absent) are the
+# expected result of disabling a parent gate and are ignored.
+#
+function verify_disabled_modules {
+  local check_dir
+  check_dir=$(mktemp -d)
+
+  python3 debian/scripts/misc/annotations --arch amd64 --export > "$check_dir/.config"
+  make O="$check_dir" olddefconfig > /dev/null
+
+  local overridden
+  overridden=$(python3 debian/scripts/misc/annotations --arch amd64 --check "$check_dir/.config" 2>/dev/null \
+    | grep -E 'changed from n to [ym]' || true)
+
+  rm -rf "$check_dir"
+
+  if [[ -n $overridden ]]; then
+    >&2 echo "WARNING: these disabled options were forced back on (selected by another option):"
+    >&2 echo "$overridden"
+    local reply
+    read -rp "Continue with the build anyway? [y/N] " reply
+    if [[ $reply != [yY] ]]; then
+      >&2 echo "Build aborted."
+      exit 1
+    fi
+  fi
+}
+
 function display_config_diff {
   # Compare before/after annotations export.
   # The .config.before_modifications file is saved before config functions run.
@@ -1590,6 +1623,12 @@ function main {
 
   if [[ -z $v_enable_unused_modules ]]; then
     disable_unused_modules
+
+    # Skip in bisect mode: an override is consistent across runs, so the prompt would only
+    # block unattended bisects.
+    if [[ -z $v_bisect ]]; then
+      verify_disabled_modules
+    fi
   fi
 
   if [[ -n $v_display_config_diff ]]; then
