@@ -1015,6 +1015,101 @@ function disable_unused_modules {
   annotation_set      CONFIG_NVME_RDMA n
   # Staging drivers (experimental)
   annotation_set      CONFIG_STAGING n
+
+  # ==== Additions for 7.0/7.1 on this machine (9950X3D iGPU + RTX 5090, Realtek 2.5G NIC, ====
+  # ==== NVMe/SATA, HDA + USB audio, USB webcam, Bluetooth dongle/onboard; no WiFi) ============
+  #
+  # GPU note: nouveau already off above; nvidia-open is out-of-tree (no in-tree CONFIG), and
+  # amdgpu stays for the 9950X3D iGPU. No GPU config change is needed for the RTX 5090.
+
+  # Wired NIC vendors: keep only REALTEK (r8169 / RTL8126a). Gate off cascades to all drivers.
+  annotation_set      CONFIG_NET_VENDOR_ADAPTEC n
+  annotation_set      CONFIG_NET_VENDOR_ADI n
+  annotation_set      CONFIG_NET_VENDOR_AGERE n
+  annotation_set      CONFIG_NET_VENDOR_ALACRITECH n
+  annotation_set      CONFIG_NET_VENDOR_AMAZON n
+  annotation_set      CONFIG_NET_VENDOR_AQUANTIA n
+  annotation_set      CONFIG_NET_VENDOR_ARC n
+  annotation_set      CONFIG_NET_VENDOR_ASIX n
+  annotation_set      CONFIG_NET_VENDOR_ATHEROS n
+  annotation_set      CONFIG_NET_VENDOR_BROADCOM n
+  annotation_set      CONFIG_NET_VENDOR_BROCADE n
+  annotation_set      CONFIG_NET_VENDOR_CADENCE n
+  annotation_set      CONFIG_NET_VENDOR_CAVIUM n
+  annotation_set      CONFIG_NET_VENDOR_CHELSIO n
+  annotation_set      CONFIG_NET_VENDOR_CISCO n
+  annotation_set      CONFIG_NET_VENDOR_CORTINA n
+  annotation_set      CONFIG_NET_VENDOR_DAVICOM n
+  annotation_set      CONFIG_NET_VENDOR_EMULEX n
+  annotation_set      CONFIG_NET_VENDOR_ENGLEDER n
+  annotation_set      CONFIG_NET_VENDOR_EZCHIP n
+  annotation_set      CONFIG_NET_VENDOR_FUNGIBLE n
+  annotation_set      CONFIG_NET_VENDOR_GOOGLE n
+  annotation_set      CONFIG_NET_VENDOR_HUAWEI n
+  annotation_set      CONFIG_NET_VENDOR_I825XX n
+  annotation_set      CONFIG_NET_VENDOR_INTEL n
+  annotation_set      CONFIG_NET_VENDOR_LITEX n
+  annotation_set      CONFIG_NET_VENDOR_MARVELL n
+  annotation_set      CONFIG_NET_VENDOR_MELLANOX n
+  annotation_set      CONFIG_NET_VENDOR_META n
+  annotation_set      CONFIG_NET_VENDOR_MICREL n
+  annotation_set      CONFIG_NET_VENDOR_MICROCHIP n
+  annotation_set      CONFIG_NET_VENDOR_MICROSEMI n
+  annotation_set      CONFIG_NET_VENDOR_MICROSOFT n
+  annotation_set      CONFIG_NET_VENDOR_MUCSE n
+  annotation_set      CONFIG_NET_VENDOR_MYRI n
+  annotation_set      CONFIG_NET_VENDOR_NETRONOME n
+  annotation_set      CONFIG_NET_VENDOR_NI n
+  annotation_set      CONFIG_NET_VENDOR_NVIDIA n
+  annotation_set      CONFIG_NET_VENDOR_OKI n
+  annotation_set      CONFIG_NET_VENDOR_PENSANDO n
+  annotation_set      CONFIG_NET_VENDOR_QLOGIC n
+  annotation_set      CONFIG_NET_VENDOR_QUALCOMM n
+  annotation_set      CONFIG_NET_VENDOR_RDC n
+  annotation_set      CONFIG_NET_VENDOR_RENESAS n
+  annotation_set      CONFIG_NET_VENDOR_ROCKER n
+  annotation_set      CONFIG_NET_VENDOR_SAMSUNG n
+  annotation_set      CONFIG_NET_VENDOR_SEEQ n
+  annotation_set      CONFIG_NET_VENDOR_SOCIONEXT n
+  annotation_set      CONFIG_NET_VENDOR_SOLARFLARE n
+  annotation_set      CONFIG_NET_VENDOR_STMICRO n
+  annotation_set      CONFIG_NET_VENDOR_SUN n
+  annotation_set      CONFIG_NET_VENDOR_SYNOPSYS n
+  annotation_set      CONFIG_NET_VENDOR_TEHUTI n
+  annotation_set      CONFIG_NET_VENDOR_TI n
+  annotation_set      CONFIG_NET_VENDOR_VERTEXCOM n
+  annotation_set      CONFIG_NET_VENDOR_WANGXUN n
+  annotation_set      CONFIG_NET_VENDOR_WIZNET n
+  annotation_set      CONFIG_NET_VENDOR_XILINX n
+
+  # WiFi: unused on this machine (Bluetooth is independent and stays enabled). CFG80211 off
+  # cascades to the whole 802.11 stack and every WLAN_VENDOR_* driver (~150 modules).
+  annotation_set      CONFIG_WLAN n
+  annotation_set      CONFIG_CFG80211 n
+  annotation_set      CONFIG_MAC80211 n
+
+  # Media: keep USB webcam (UVC) + HDMI CEC; drop analog TV / DVB / radio / SDR / PCI capture.
+  annotation_set      CONFIG_MEDIA_ANALOG_TV_SUPPORT n
+  annotation_set      CONFIG_MEDIA_DIGITAL_TV_SUPPORT n        # drops DVB_CORE + all frontends
+  annotation_set      CONFIG_MEDIA_RADIO_SUPPORT n
+  annotation_set      CONFIG_MEDIA_SDR_SUPPORT n
+  annotation_set      CONFIG_MEDIA_PCI_SUPPORT n               # no PCI capture card
+
+  # Buses absent from this board
+  annotation_set      CONFIG_CAN n                             # CAN bus (automotive)
+  annotation_set      CONFIG_FIREWIRE n                        # IEEE-1394
+  annotation_set      CONFIG_SND_FIREWIRE n                    # FireWire audio
+  annotation_set      CONFIG_ATM n                             # ATM networking
+  annotation_set      CONFIG_WAN n                             # legacy sync-serial WAN
+  annotation_set      CONFIG_GPIB_COMMON n                     # NEW in 7.1: lab instrument bus
+  annotation_set      CONFIG_MEMSTICK n                        # Sony Memory Stick
+
+  # Pluggable peripherals not used (USB tethering via cdc_ether/rndis is kept)
+  annotation_set      CONFIG_MMC n                             # no SD/MMC reader
+  annotation_set      CONFIG_USB_SERIAL n                      # FTDI/CP210x/CH341 adapters
+  annotation_set      CONFIG_USB_NET_AX8817X n                 # ASIX USB-Ethernet dongles
+  annotation_set      CONFIG_USB_NET_AX88179_178A n            # ASIX USB-Ethernet (newer)
+  annotation_set      CONFIG_PARPORT n                         # parallel port (printer is USB)
 }
 
 function display_config_diff {
