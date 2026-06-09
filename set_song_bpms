@@ -1,0 +1,204 @@
+#!/usr/bin/env ruby
+
+require 'etc'
+require 'json'
+require 'shellwords'
+
+class SetSongBpms
+  HELP = <<~HELP
+    Usage: set_song_bpms [-h|--help] <audio_file...>
+
+    Detects each song's BPM with beat-this and writes it to the Comment tag as "BPM=NNN"
+    (zero-padded). On detecting a sustained tempo change (e.g. a slow section followed by a
+    double-time one), asks for confirmation and writes "BPM=MAX/MIN". Also asks before
+    overwriting an existing comment BPM that disagrees by more than 25% (likely a
+    metrical-level detection error).
+  HELP
+
+  SECTION_RATIO = 1.5
+  MIN_SECTION_BEATS = 32
+  SAMPLE_RATE = 22_050
+
+  PYTHON_HELPER = <<~PYTHON
+    import subprocess, sys
+    import numpy as np
+    import torch
+
+    device = sys.argv[1]
+    if device == "cpu":
+        torch.set_num_threads(4)
+    from beat_this.inference import Audio2Beats
+    a2b = Audio2Beats(checkpoint_path="final0", device=device, dbn=False)
+    for path in sys.argv[2:]:
+        try:
+            raw = subprocess.run(
+                ["ffmpeg", "-v", "quiet", "-i", path, "-f", "f32le", "-ac", "1", "-ar", "#{SAMPLE_RATE}", "-"],
+                capture_output=True,
+            ).stdout
+            signal = np.frombuffer(raw, dtype=np.float32)
+            beats, _ = a2b(signal, #{SAMPLE_RATE})
+        except Exception as e:
+            print(f"{path}: {e}", file=sys.stderr)
+            beats = []
+        print(path + "\\t" + " ".join(f"{b:.3f}" for b in beats), flush=True)
+  PYTHON
+
+  def run(args)
+    (puts HELP; exit 1) if args.empty?
+    (puts HELP; exit 0) if args.intersect?(['-h', '--help'])
+
+    python = python_executable
+    device = detect_device(python)
+    workers = worker_count(device, Etc.nprocessors)
+    puts "Device: #{device}, workers: #{workers}"
+
+    all_beats = detect_beats(python, device, args, workers)
+
+    args.each do |file|
+      beats = all_beats[file] || []
+      tempos = bpms(beats)
+      (warn "#{file}: beat detection failed, skipped"; next) if tempos.empty?
+
+      if tempos.size == 2 && !confirm("#{file}: detected #{tempos.join('/')} BPM - real tempo change?")
+        tempos = [dominant_bpm(beats)]
+      end
+
+      old_bpm = existing_bpm(file)
+      if suspicious_overwrite?(tempos.first, old_bpm) &&
+         !confirm("#{file}: existing BPM=#{old_bpm}, detected #{tempos.first} - overwrite?")
+        puts "#{file}: kept existing BPM=#{old_bpm}"
+        next
+      end
+
+      comment = format_comment(tempos)
+      system(*tag_command(file, comment, darwin: RUBY_PLATFORM.include?('darwin')),
+             out: File::NULL, exception: true)
+      puts "#{file}: #{comment}"
+    end
+  end
+
+  def bpms(beats)
+    intervals = beats.each_cons(2).map { |a, b| b - a }
+    return [] if intervals.size < 2
+
+    if intervals.size >= 2 * MIN_SECTION_BEATS
+      split = best_split(intervals)
+      left, right = intervals[...split], intervals[split..]
+      medians = [median(left), median(right)]
+      if medians.max / medians.min > SECTION_RATIO
+        tempos = [refined_bpm(left), refined_bpm(right)]
+        return [tempos.max, tempos.min]
+      end
+    end
+
+    [refined_bpm(intervals)]
+  end
+
+  def dominant_bpm(beats)
+    refined_bpm(beats.each_cons(2).map { |a, b| b - a })
+  end
+
+  def format_comment(tempos)
+    "BPM=#{tempos.map { |bpm| format('%03d', bpm) }.join('/')}"
+  end
+
+  def suspicious_overwrite?(new_bpm, old_bpm)
+    return false unless old_bpm
+
+    [new_bpm, old_bpm].max.fdiv([new_bpm, old_bpm].min) > 1.25
+  end
+
+  def worker_count(device, nproc)
+    { 'cuda' => 4, 'mps' => 2 }[device] || [[nproc / 4, 1].max, 7].min
+  end
+
+  TAG_PYTHON = <<~PYTHON
+    import sys
+    from mutagen.mp4 import MP4
+    tags = MP4(sys.argv[1])
+    tags["\\xa9cmt"] = [sys.argv[2]]
+    tags.save()
+  PYTHON
+
+  def tag_command(file, comment, darwin:)
+    if darwin
+      ['/opt/homebrew/bin/kid3-cli', '-c', "set comment '#{comment}'", file]
+    elsif file.downcase.end_with?('.mp3')
+      # --remove-all-comments avoids stacking a second COMM frame next to an existing one with a
+      # different language id, which would keep showing the old value in players.
+      ['eyeD3', '--remove-all-comments', '--comment', comment, file]
+    else
+      ['/usr/bin/python3', '-c', TAG_PYTHON, file, comment]
+    end
+  end
+
+  private
+
+  # The mean of the intervals close to the median: robust to breaks/rubato like the median, but
+  # not snapped to beat-this's 20 ms frame grid, since the frame rounding errors average out.
+  def refined_bpm(intervals)
+    med = median(intervals)
+    good = intervals.select { |interval| (interval - med).abs < 0.1 * med }
+    (60.0 / (good.sum / good.size)).round
+  end
+
+  # The split point maximizing the tempo difference between the two sides.
+  def best_split(intervals)
+    (MIN_SECTION_BEATS..intervals.size - MIN_SECTION_BEATS).max_by do |k|
+      (median(intervals[...k]) - median(intervals[k..])).abs
+    end
+  end
+
+  def median(values)
+    sorted = values.sort
+    mid = sorted.size / 2
+    sorted.size.odd? ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2.0
+  end
+
+  def python_executable
+    beat_this = `which beat_this`.strip
+    abort 'beat_this not found in PATH' if beat_this.empty?
+    File.read(beat_this).lines.first.delete_prefix('#!').strip
+  end
+
+  def detect_device(python)
+    IO.popen([python, '-c', <<~PYTHON]).read.strip
+      import torch
+      print("cuda" if torch.cuda.is_available()
+            else "mps" if torch.backends.mps.is_available() else "cpu")
+    PYTHON
+  end
+
+  def detect_beats(python, device, files, workers)
+    chunks = files.each_slice((files.size.to_f / workers).ceil).to_a
+    threads = chunks.map do |chunk|
+      Thread.new do
+        IO.popen([python, '-', device, *chunk], 'r+') do |io|
+          io.write(PYTHON_HELPER)
+          io.close_write
+          io.readlines.map do |line|
+            path, beats = line.chomp.split("\t", 2)
+            [path, beats.to_s.split.map(&:to_f)]
+          end
+        end
+      end
+    end
+    threads.flat_map(&:value).to_h
+  end
+
+  def existing_bpm(file)
+    out = `ffprobe -v quiet -show_entries format_tags -of json #{file.shellescape}`
+    tags = JSON.parse(out).dig('format', 'tags') || {}
+    comment = tags.find { |key, _| key.casecmp?('comment') }&.last.to_s
+    comment[/BPM=(\d+)/, 1]&.to_i
+  end
+
+  def confirm(message)
+    print "#{message} [y/N] "
+    $stdin.gets.to_s.strip.casecmp?('y')
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  SetSongBpms.new.run(ARGV)
+end

@@ -26,6 +26,16 @@ jobs:
           ruby-version: '4.0'
       - run: ruby kernel_packages_maintenance/kernel_version_test.rb
 
+  set_song_bpms:
+    name: set_song_bpms (minitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+      - run: ruby set_song_bpms_test.rb
+
   fill_labels:
     name: fill_labels (minitest)
     runs-on: ubuntu-latest
