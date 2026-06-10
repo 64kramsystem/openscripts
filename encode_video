@@ -301,10 +301,15 @@ function encode_files {
   # Hardware decoding is not enabled automatically; without this, codecs whose ffmpeg decoder is
   # hwaccel-only (e.g. AV1 on builds without libdav1d) fail to decode. For codecs the GPU can't
   # handle, ffmpeg falls back to software decoding.
+  local hwaccel=vaapi
+  if [[ $OSTYPE == darwin* ]]; then
+    hwaccel=videotoolbox
+  fi
+
   local ffmpeg_command="\
 ffmpeg \
   ${global_options[*]} \
-  -hwaccel vaapi \
+  -hwaccel $hwaccel \
   -i {1} \
   ${video_options[*]} \
   -c:a copy \
