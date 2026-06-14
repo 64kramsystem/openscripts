@@ -28,7 +28,6 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `record_desktop`: records a video of the desktop, using FFmpeg
   - `spell`: spell a phrase, with customizable alphabets
   - `split_cue_audio_file`: splits an audio file based on the provided cue file
-  - `tag_mp3s_bpm`: tag mp3 files with the BPM field, using the Mixxx analysis
   - `texerak`: convenient wrapper around Tesseract, to OCR images/documents
   - `whisp`: convenient wrapper around Whisper.cpp
 - git
