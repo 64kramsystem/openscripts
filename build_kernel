@@ -644,24 +644,47 @@ function finalize_ubuntu_config {
   mv -f .config debian.master/config/amd64/config.common.amd64
 }
 
-# Helper: set a config option in the annotations file.
+# Helpers: stage config option changes, applied in one pass by flush_annotations.
 #
 # Usage:
 #   annotation_set CONFIG_NAME value     # set to y/n/m/number/string
 #   annotation_undefine CONFIG_NAME      # remove from annotations
 #
-# This modifies debian.master/config/annotations, which is the source of truth
-# for the Ubuntu build system. The build regenerates .config from annotations,
-# so scripts/config modifications to .config or config.common.amd64 are discarded.
+# These modify debian.master/config/annotations, the source of truth for the Ubuntu build system.
+# The build regenerates .config from annotations, so scripts/config modifications to .config or
+# config.common.amd64 are discarded.
 #
+# Applying each change via a separate `annotations` invocation reparses and rewrites the large
+# annotations file every time, which adds over a minute across all the options set below; instead
+# the changes are accumulated and flushed in a single `annotations` process.
+#
+_annotation_ops=()
+
 function annotation_set {
-  local config=$1 value=$2
-  python3 debian/scripts/misc/annotations --config "$config" --arch amd64 --write "$value" > /dev/null
+  _annotation_ops+=("set $1 $2")
 }
 
 function annotation_undefine {
-  local config=$1
-  python3 debian/scripts/misc/annotations --config "$config" --arch amd64 --write null > /dev/null
+  _annotation_ops+=("remove $1")
+}
+
+function flush_annotations {
+  printf '%s\n' "${_annotation_ops[@]}" | PYTHONPATH=debian/scripts/misc python3 -c '
+import sys
+from kconfig.annotations import Annotation
+from kconfig.utils import autodetect_annotations
+
+fname = autodetect_annotations()
+a = Annotation(fname)
+for line in sys.stdin:
+    op, *rest = line.split()
+    if op == "set":
+        a.set(rest[0], arch="amd64", value=rest[1])
+    elif op == "remove":
+        a.remove(rest[0], arch="amd64")
+a.save(fname)
+'
+  _annotation_ops=()
 }
 
 function fix_ubuntu_config {
@@ -1654,12 +1677,14 @@ function main {
 
   if [[ -z $v_enable_unused_modules ]]; then
     disable_unused_modules "$building_kernel_version"
+  fi
 
-    # Skip in bisect mode: an override is consistent across runs, so the prompt would only
-    # block unattended bisects.
-    if [[ -z $v_bisect ]]; then
-      verify_disabled_modules
-    fi
+  flush_annotations
+
+  # Skip in bisect mode: an override is consistent across runs, so the prompt would only block
+  # unattended bisects.
+  if [[ -z $v_enable_unused_modules && -z $v_bisect ]]; then
+    verify_disabled_modules
   fi
 
   if [[ -n $v_display_config_diff ]]; then
