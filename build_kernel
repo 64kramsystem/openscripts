@@ -676,7 +676,9 @@ function annotation_undefine {
 }
 
 function flush_annotations {
-  printf '%s\n' "${_annotation_ops[@]}" | PYTHONPATH=debian/scripts/misc python3 -c '
+  # -B: don't write .pyc into the kernel tree (the annotations wrapper disables this too, to avoid
+  # accidentally committing bytecode), since we import kconfig directly rather than via the wrapper.
+  printf '%s\n' "${_annotation_ops[@]}" | PYTHONPATH=debian/scripts/misc python3 -B -c '
 import sys
 from kconfig.annotations import Annotation
 from kconfig.utils import autodetect_annotations
