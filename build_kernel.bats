@@ -4,6 +4,7 @@ setup_file() {
   source "$BATS_TEST_DIRNAME/build_kernel"
   export -f find_latest_packaged_version short_kernel_version
   export -f mainline_package_version generate_abi_number
+  export -f annotation_set annotation_undefine
 }
 
 teardown_file() {
@@ -260,4 +261,32 @@ make_pkg() {
   first=$(printf '%s\n%s\n' "$ga_release" "$rc_release" \
           | LC_ALL=C /usr/lib/grub/grub-sort-version -r | head -n 1)
   [ "$first" = "$ga_release" ]
+}
+
+# ── annotation_set / annotation_undefine staging ───────────────────────────────
+#
+# Changes are staged into _annotation_ops (applied in one pass by flush_annotations) and, for
+# n-disables, also into _disabled_configs, which scopes verify_disabled_modules to our own
+# disables so stock-n annotations forced on by the build don't trigger a spurious prompt.
+
+@test "annotation_set n stages a set op and records the config as ours to verify" {
+  _annotation_ops=(); _disabled_configs=()
+  annotation_set CONFIG_FOO n
+  [ "${_annotation_ops[*]}" = "set CONFIG_FOO n" ]
+  [ "${_disabled_configs[*]}" = "CONFIG_FOO" ]
+}
+
+@test "annotation_set y/m stages set ops but records no disable" {
+  _annotation_ops=(); _disabled_configs=()
+  annotation_set CONFIG_FOO y
+  annotation_set CONFIG_BAR m
+  [ "${_annotation_ops[*]}" = "set CONFIG_FOO y set CONFIG_BAR m" ]
+  [ "${#_disabled_configs[@]}" -eq 0 ]
+}
+
+@test "annotation_undefine stages a remove op and records no disable" {
+  _annotation_ops=(); _disabled_configs=()
+  annotation_undefine CONFIG_FOO
+  [ "${_annotation_ops[*]}" = "remove CONFIG_FOO" ]
+  [ "${#_disabled_configs[@]}" -eq 0 ]
 }

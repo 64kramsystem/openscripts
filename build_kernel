@@ -660,8 +660,15 @@ function finalize_ubuntu_config {
 #
 _annotation_ops=()
 
+# Configs we explicitly set to n. verify_disabled_modules checks only these, so that stock-n
+# annotations forced back on by the build (e.g. CONFIG_GENKSYMS) don't trigger a spurious prompt.
+_disabled_configs=()
+
 function annotation_set {
   _annotation_ops+=("set $1 $2")
+  if [[ $2 == n ]]; then
+    _disabled_configs+=("$1")
+  fi
 }
 
 function annotation_undefine {
@@ -1181,9 +1188,12 @@ function verify_disabled_modules {
   python3 debian/scripts/misc/annotations --arch amd64 --export > "$check_dir/.config"
   make O="$check_dir" olddefconfig > /dev/null
 
+  # Restrict to the options we disabled (--check reports every n→y/m flip, including stock-n
+  # annotations the build legitimately forces on).
   local overridden
   overridden=$(python3 debian/scripts/misc/annotations --arch amd64 --check "$check_dir/.config" 2>/dev/null \
-    | grep -E 'changed from n to [ym]' || true)
+    | grep -E 'changed from n to [ym]' \
+    | grep -Fw -f <(printf '%s\n' "${_disabled_configs[@]}") || true)
 
   rm -rf "$check_dir"
 
