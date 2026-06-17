@@ -69,6 +69,40 @@ function find_first_addition_hash {
   git log --pretty=format:%H -- "$v_filename" | tail -n 1
 }
 
+# The merge reorders all the commits not including the file before the first one including it. If
+# that first commit also changes other files which a later (reordered) commit depends on, the
+# rebase breaks halfway; detect this and bail out before touching the history.
+#
+function ensure_first_addition_is_movable {
+  local first_addition_hash=$1
+
+  local first_other_paths
+  first_other_paths=$(
+    git diff-tree --no-commit-id --name-only -r "$first_addition_hash" | grep -vxF "$v_filename" || true
+  )
+
+  [[ -z $first_other_paths ]] && return 0
+
+  local reordered_paths
+  reordered_paths=$(
+    git rev-list "$first_addition_hash"..HEAD | while read -r hash; do
+      if ! git diff-tree --no-commit-id --name-only -r "$hash" | grep -qxF "$v_filename"; then
+        git diff-tree --no-commit-id --name-only -r "$hash"
+      fi
+    done
+  )
+
+  local conflicts
+  conflicts=$(comm -12 <(sort -u <<< "$first_other_paths") <(sort -u <<< "$reordered_paths"))
+
+  if [[ -n $conflicts ]]; then
+    echo "Error: the first commit adding '$v_filename' ($(git log -1 --format='%h %s' "$first_addition_hash")) also changes files that later commits depend on, so the history can't be merged automatically:" >&2
+    while IFS= read -r path; do echo "  $path" >&2; done <<< "$conflicts"
+    echo "Rewrite the history manually to give '$v_filename' a dedicated first commit, then re-run." >&2
+    exit 1
+  fi
+}
+
 function print_history_from_first_addition {
   local first_addition_hash=$1
 
@@ -150,6 +184,9 @@ function main {
   local first_addition_hash
 
   register_exit_hook
+
+  # Guard before pulling, so that an unmergeable history leaves the repository untouched.
+  ensure_first_addition_is_movable "$(find_first_addition_hash)"
 
   pull_and_rebase_branch
 
