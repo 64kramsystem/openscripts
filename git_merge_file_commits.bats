@@ -36,6 +36,20 @@ standard_fixture() {
   c_v3_hash=$(make_commit FILE v3 'FILE v3')
 }
 
+# FILE is born in a broad commit that also adds sibling.txt, which a later non-file commit removes.
+# Reordering the broad commit after that removal (as the merge does) would break the rebase.
+broad_fixture() {
+  make_commit other.txt base 'unrelated 0' > /dev/null
+  echo sibling > sibling.txt
+  echo v1 > FILE
+  git add .
+  git commit -qm 'Initial broad'
+  git rm -q sibling.txt
+  git commit -qm 'Remove sibling'
+  make_commit other.txt change1 'unrelated 1' > /dev/null
+  c_v2_hash=$(make_commit FILE v2 'FILE v2')
+}
+
 # ── First addition hash ───────────────────────────────────────────────────────
 
 @test "find_first_addition_hash: file name also matching a ref" {
@@ -43,6 +57,25 @@ standard_fixture() {
   git tag FILE
 
   [ "$(find_first_addition_hash)" = "$c_add_hash" ]
+}
+
+# ── Movability guard ──────────────────────────────────────────────────────────
+
+@test "ensure_first_addition_is_movable: errors when the first-addition commit is broad" {
+  broad_fixture
+
+  run ensure_first_addition_is_movable "$(find_first_addition_hash)"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *sibling.txt* ]]
+}
+
+@test "ensure_first_addition_is_movable: passes when the first-addition commit only adds the file" {
+  standard_fixture
+
+  run ensure_first_addition_is_movable "$(find_first_addition_hash)"
+
+  [ "$status" -eq 0 ]
 }
 
 # ── Rebase commands ───────────────────────────────────────────────────────────
