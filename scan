@@ -8,7 +8,7 @@ shopt -s inherit_errexit
 
 c_help="Usage: $(basename "$0") [-h|--help] <dpi>
 
-Sets the simple-scan color-profile DPI to <dpi>, then launches simple-scan."
+Sets the simple-scan photo DPI to <dpi> and forces maximum-quality PDF storage (jpeg-quality 100), then launches simple-scan."
 
 v_dpi=
 
@@ -39,6 +39,8 @@ function decode_cmdline_args {
 
 function main {
   gsettings set org.gnome.SimpleScan photo-dpi "$v_dpi"
+  gsettings set org.gnome.SimpleScan save-format 'application/pdf'
+  gsettings set org.gnome.SimpleScan jpeg-quality 100
   exec simple-scan
 }
 
