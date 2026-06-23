@@ -72,6 +72,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `scan`: set the simple-scan color-profile DPI, and launch simple-scan
   - `script_template`: create a Bash script template, and sets the permissions
   - `send_display_to_sleep`: send the display to sleep, working around GNOME's screensaver interference
+  - `toggle_screen_black`: toggle the screen black, as a fast-wakeup alternative to display sleep (only for OLEDs)
   - `upgrade_bluez_from_source`: upgrade the system Bluez to the latest version, from source
   - `upgrade_mainline_kernel`: installs an upgraded Ubuntu mainline kernel, if present
   - `update_mainline_kernel`: automatically installs the latest version of the current (or chosen) kernel, from the Ubuntu mainline builds
