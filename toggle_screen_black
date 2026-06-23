@@ -6,15 +6,19 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-h|--help]
+c_help="Usage: $(basename "$0") [-h|--help] [on|off]
 
 Toggles the screen between black and visible, by setting the xrandr brightness to 0 and back.
+
+With no argument, toggles the current state; 'on' forces black and 'off' forces visible, each a no-op if already in that state.
 
 On an OLED, a fully black image turns the pixels off, so this saves the panel like sleep does, but without dropping the video signal; restoring is therefore instant, unlike waking from DPMS sleep.
 
 The pre-black brightness is saved to a state file under \$XDG_RUNTIME_DIR, whose presence also flags the current black state."
 
 c_state_file=${XDG_RUNTIME_DIR:-/tmp}/toggle_screen_black.state
+
+v_action=
 
 function decode_cmdline_args {
   local params
@@ -33,9 +37,17 @@ function decode_cmdline_args {
     esac
   done
 
-  if [[ $# -ne 0 ]]; then
+  if [[ $# -gt 1 ]]; then
     echo "$c_help"
     exit 1
+  elif [[ $# -eq 1 ]]; then
+    case $1 in
+      on|off)
+        v_action=$1 ;;
+      *)
+        echo "$c_help"
+        exit 1 ;;
+    esac
   fi
 }
 
@@ -50,6 +62,16 @@ function current_brightness {
 }
 
 function main {
+  local is_black=false
+  [[ -f $c_state_file ]] && is_black=true
+
+  # With an explicit action, do nothing when already in the target state; with no action, toggle.
+  #
+  case $v_action in
+    on)  $is_black && return 0 ;;
+    off) $is_black || return 0 ;;
+  esac
+
   local output xflux_pid
   output=$(find_connected_output)
 
@@ -58,7 +80,7 @@ function main {
   #
   xflux_pid=$(pgrep -x xflux || true)
 
-  if [[ -f $c_state_file ]]; then
+  if $is_black; then
     xrandr --output "$output" --brightness "$(< "$c_state_file")"
     [[ -n $xflux_pid ]] && kill -CONT "$xflux_pid"
     rm "$c_state_file"
