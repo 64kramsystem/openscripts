@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help]
+
+Toggles the screen between black and visible, by setting the xrandr brightness to 0 and back.
+
+On an OLED, a fully black image turns the pixels off, so this saves the panel like sleep does, but without dropping the video signal; restoring is therefore instant, unlike waking from DPMS sleep.
+
+The pre-black brightness is saved to a state file under \$XDG_RUNTIME_DIR, whose presence also flags the current black state."
+
+c_state_file=${XDG_RUNTIME_DIR:-/tmp}/toggle_screen_black.state
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function find_connected_output {
+  # No `last`/early-exit after the match: it closes the pipe and SIGPIPEs xrandr, which (with
+  # pipefail + errexit) aborts the script.
+  xrandr --verbose | perl -ne 'print $1 if /^(\S+) connected/'
+}
+
+function current_brightness {
+  xrandr --verbose | perl -ne 'print $1 if /Brightness:\s+(\S+)/'
+}
+
+function main {
+  local output xflux_pid
+  output=$(find_connected_output)
+
+  # f.lux (xflux) keeps rewriting the gamma LUT that --brightness uses, undoing the blackout.
+  # Freeze it while black; resume it on restore.
+  #
+  xflux_pid=$(pgrep -x xflux || true)
+
+  if [[ -f $c_state_file ]]; then
+    xrandr --output "$output" --brightness "$(< "$c_state_file")"
+    [[ -n $xflux_pid ]] && kill -CONT "$xflux_pid"
+    rm "$c_state_file"
+  else
+    current_brightness > "$c_state_file"
+    [[ -n $xflux_pid ]] && kill -STOP "$xflux_pid"
+    xrandr --output "$output" --brightness 0
+  fi
+}
+
+decode_cmdline_args "$@"
+main
