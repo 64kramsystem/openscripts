@@ -8,8 +8,8 @@ shopt -s inherit_errexit
 
 c_help="Usage: $(basename "$0") [-h|--help]
 
-Prints the currently-visible terminal screen content to stdout, trimmed of leading/trailing blank
-lines.
+Prints the currently-visible terminal screen content to stdout, with per-line trailing whitespace
+and leading/trailing blank lines trimmed (iTerm2 pads visible lines with trailing spaces).
 
 Backends:
   - macOS/iTerm2: reads the session buffer via AppleScript
@@ -75,7 +75,7 @@ function main {
     scrape_macos
   else
     scrape_linux
-  fi | perl -0777 -pe 's/^\n+|\n+$//g'
+  fi | perl -0777 -pe 's/[ \t]+$//mg; s/^\n+|\n+$//g'
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
