@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help]
+
+Prints the currently-visible terminal screen content to stdout, trimmed of leading/trailing blank
+lines.
+
+Backends:
+  - macOS/iTerm2: reads the session buffer via AppleScript
+  - Linux:        select-all + copy via xdotool, then read it back via xsel (gnome-terminal or
+                  mate-terminal)"
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h --long help --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+}
+
+function scrape_macos {
+  if [[ "${TERM_PROGRAM:-}" != "iTerm.app" && -z "${ITERM_SESSION_ID:-}" ]]; then
+    echo "$(basename "$0"): requires iTerm2 (TERM_PROGRAM=${TERM_PROGRAM:-})" >&2
+    return 1
+  fi
+
+  osascript -e 'tell application "iTerm2" to tell current session of current window to get contents'
+}
+
+function scrape_linux {
+  if command -v gnome-terminal > /dev/null; then
+    sleep 0.2 # hilarity ensues if xdotool is called immediately on a key binding
+    xdotool key alt+e End Up Up Return Ctrl+Shift+C
+  elif command -v mate-terminal > /dev/null; then
+    sleep 0.2 # let the key binding dispatch settle, same as gnome-terminal
+    printf '' | xsel -bi # clear so the post-copy poll can detect completion
+    xdotool key Ctrl+Shift+A Ctrl+Shift+C
+    # mate-terminal's copy is async; wait up to ~1s for the clipboard to populate
+    local i
+    for ((i = 0; i < 20; i++)); do
+      [[ -n "$(xsel -b)" ]] && break
+      sleep 0.05
+    done
+  else
+    echo "$(basename "$0"): terminal not recognized (need gnome-terminal or mate-terminal)" >&2
+    return 1
+  fi
+
+  xsel -b
+}
+
+function main {
+  if [[ "$OSTYPE" == darwin* ]]; then
+    scrape_macos
+  else
+    scrape_linux
+  fi | perl -0777 -pe 's/^\n+|\n+$//g'
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  decode_cmdline_args "$@"
+  main
+fi
