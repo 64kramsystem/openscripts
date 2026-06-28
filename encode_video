@@ -29,9 +29,9 @@ declare -A c_rotation_to_filter=(
   [cw]="transpose=clock"
   [ccw]="transpose=cclock"
 )
-c_help="Usage: $(basename "$0") [-h|--help] [--encoder h265|av1] [-b|--batch] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] [-k|--keep-input-files] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [--encoder h265|av1] [-b|--batch] [-c|--concat] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] [-k|--keep-input-files] <input> {<input>, ...}
 
-Encodes video files to h265 or AV1 (default), in parallel; copies the audio. Multiple cut ranges re-encode audio to AAC. The number of parallel procs is based on an internal table.
+Encodes video files to h265 or AV1 (default), in parallel; copies the audio. Multiple cut ranges re-encode audio to libfdk_aac VBR q5 mono. The number of parallel procs is based on an internal table.
 Encoder selection: --encoder av1 (default) uses libsvtav1; --encoder h265 uses libx265.
 Default preset/crf: h265=${c_default_preset[h265]}/${c_default_crf[h265]}, av1=${c_default_preset[av1]}/${c_default_crf[av1]}.
 The file extension is replaced with '$c_default_extension' (or '--extension', when provided).
@@ -69,6 +69,7 @@ v_file_segments=()
 v_parallel_procs=         # numeric
 v_video_codec=av1         # "h265" or "av1"
 v_batch_mode=             # boolean; false=blank, true=anything else
+v_concat=                 # boolean; false=blank, true=anything else
 v_deinterlace=            # boolean; false=blank, true=anything else
 v_dar_ratio=              # string
 v_resize=                 # numeric; vertical size
@@ -79,9 +80,13 @@ v_extension=$c_default_extension
 v_output_dir=             # optional; when set, has never a trailing slash
 v_delete_input_files=1    # boolean; false=blank, true=anything else
 
+# Identical for every input, so computed once in encode_files (see the like-named functions).
+v_hwaccel_options=
+v_video_codec_options=
+
 function decode_cmdline_args {
   local params
-  if ! params=$(getopt --options hbds:r:R:p:e:o:k --long help,encoder:,batch,deinterlace,square:,resize:,rotate:,preset:,extension:,output-dir:,keep-input-files --name "$(basename "$0")" -- "$@"); then
+  if ! params=$(getopt --options hbcds:r:R:p:e:o:k --long help,encoder:,batch,concat,deinterlace,square:,resize:,rotate:,preset:,extension:,output-dir:,keep-input-files --name "$(basename "$0")" -- "$@"); then
     exit 1
   fi
 
@@ -101,6 +106,9 @@ function decode_cmdline_args {
         shift 2 ;;
       -b|--batch)
         v_batch_mode=1
+        shift ;;
+      -c|--concat)
+        v_concat=1
         shift ;;
       -d|--deinterlace)
         v_deinterlace=1
@@ -181,6 +189,12 @@ function decode_cmdline_args {
     v_file_segments+=("$segments")
   done
 
+  if [[ -n $v_concat && ${#v_orig_input_files[@]} -eq 1 ]]; then
+    >&2 echo "Concat requires more than one input."
+    echo "$c_help"
+    exit 1
+  fi
+
   local file
   for file in "${v_orig_input_files[@]}"; do
     v_temp_input_files+=("$file.$c_tmp_extension")
@@ -188,6 +202,10 @@ function decode_cmdline_args {
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
     v_output_files+=("${file%.*}.$v_extension")
   done
+
+  if [[ -n $v_concat ]]; then
+    v_output_files=("${v_output_files[0]}")
+  fi
 
   local processors_count
   processors_count=$(nproc)
@@ -199,17 +217,8 @@ function decode_cmdline_args {
   fi
 }
 
-function validate_segments {
-  local segments=$1
-  if ! segments_are_valid "$segments"; then
-    >&2 echo "Invalid segment format."
-    echo "$c_help"
-    exit 1
-  fi
-}
-
 function segments_are_valid {
-  local segments=$1 segment
+  local segments=$1 segment split_segments
   IFS=, read -ra split_segments <<< "$segments"
   for segment in "${split_segments[@]}"; do
     local timestamp='([[:digit:]]{1,2}:){0,2}[[:digit:]]{1,2}(\.[[:digit:]]+)?'
@@ -280,6 +289,14 @@ function register_exit_hooks {
 }
 
 function encode_files {
+  v_hwaccel_options=$(hwaccel_options)
+  v_video_codec_options=$(video_codec_options)
+
+  if [[ -n $v_concat ]]; then
+    build_concat_ffmpeg_command | parallel --max-procs 1 --line-buffer
+    return
+  fi
+
   local commands=()
 
   for (( i = 0; i < "${#v_temp_input_files[@]}"; i++ )); do
@@ -325,6 +342,10 @@ function video_codec_options {
   echo "$video_codec_options"
 }
 
+function reencoded_audio_options {
+  echo "-c:a libfdk_aac -vbr 5 -ac 1"
+}
+
 function hwaccel_options {
   # Hardware decoding is not enabled automatically; without this, codecs whose ffmpeg decoder is
   # hwaccel-only (e.g. AV1 on builds without libdav1d) fail to decode. For codecs the GPU can't
@@ -352,6 +373,14 @@ function shell_quote {
   printf '%q' "$1"
 }
 
+# Quote each argument for reuse as shell input. Unlike a bare `printf '%q ' "${arr[@]}"`, this emits
+# nothing for an empty array, rather than a stray '' that ffmpeg would read as an empty filename.
+function shell_quote_args {
+  if (( $# > 0 )); then
+    printf '%q ' "$@"
+  fi
+}
+
 function build_ffmpeg_command {
   local input_file=$1 segments=$2 output_file=$3
   local global_options= output_options=
@@ -369,7 +398,8 @@ function build_ffmpeg_command {
 }
 
 function build_single_segment_ffmpeg_command {
-  local input_file=$1 segment=$2 output_file=$3 global_options=$4 output_options=$5
+  local input_file=$1 segment=$2 output_file=$3
+  local global_options_str=$4 output_options_str=$5
   local video_options=()
 
   if [[ -n $segment ]]; then
@@ -392,18 +422,19 @@ function build_single_segment_ffmpeg_command {
   fi
 
   printf 'ffmpeg %s %s -i %s %s -c:a copy %s %s %s %s' \
-    "$global_options" \
-    "$(hwaccel_options)" \
+    "$global_options_str" \
+    "$v_hwaccel_options" \
     "$(shell_quote "$input_file")" \
-    "$(printf '%q ' "${video_options[@]}")" \
-    "$(printf '%q ' "${video_filters_par[@]}")" \
-    "$(video_codec_options)" \
-    "$output_options" \
+    "$(shell_quote_args "${video_options[@]}")" \
+    "$(shell_quote_args "${video_filters_par[@]}")" \
+    "$v_video_codec_options" \
+    "$output_options_str" \
     "$(shell_quote "$output_file")"
 }
 
 function build_multi_segment_ffmpeg_command {
-  local input_file=$1 segments=$2 output_file=$3 global_options=$4 output_options=$5
+  local input_file=$1 segments=$2 output_file=$3
+  local global_options_str=$4 output_options_str=$5
   local has_audio=
 
   if ffprobe -v error -select_streams a:0 -show_entries stream=codec_type -of default=noprint_wrappers=1:nokey=1 "$input_file" | grep -qx audio; then
@@ -415,19 +446,92 @@ function build_multi_segment_ffmpeg_command {
 
   local audio_options="-an"
   if [[ -n $has_audio ]]; then
-    audio_options="-map $(shell_quote '[aout]') -c:a aac"
+    audio_options="-map $(shell_quote '[aout]') $(reencoded_audio_options)"
   fi
 
   printf 'ffmpeg %s %s -i %s -filter_complex %s -map %s %s %s %s %s' \
-    "$global_options" \
-    "$(hwaccel_options)" \
+    "$global_options_str" \
+    "$v_hwaccel_options" \
     "$(shell_quote "$input_file")" \
     "$(shell_quote "$filter_complex")" \
     "$(shell_quote '[vout]')" \
     "$audio_options" \
-    "$(video_codec_options)" \
-    "$output_options" \
+    "$v_video_codec_options" \
+    "$output_options_str" \
     "$(shell_quote "$output_file")"
+}
+
+function build_concat_ffmpeg_command {
+  local global_options=() output_options=()
+  local hwaccel_opts=() input_options=()
+
+  if [[ -n $v_rotate ]]; then
+    global_options+=("-noautorotate")
+    output_options+=("-metadata:s:v:0" "rotate=0")
+  fi
+
+  read -ra hwaccel_opts <<< "$v_hwaccel_options"
+  for input_file in "${v_temp_input_files[@]}"; do
+    input_options+=("${hwaccel_opts[@]}" "-i" "$input_file")
+  done
+
+  printf 'ffmpeg %s %s -filter_complex %s -map %s -map %s %s %s %s %s' \
+    "${global_options[*]}" \
+    "$(shell_quote_args "${input_options[@]}")" \
+    "$(shell_quote "$(build_concat_filter_complex)")" \
+    "$(shell_quote '[vout]')" \
+    "$(shell_quote '[aout]')" \
+    "$(reencoded_audio_options)" \
+    "$v_video_codec_options" \
+    "${output_options[*]}" \
+    "$(shell_quote "${v_output_files[0]}")"
+}
+
+function build_concat_filter_complex {
+  # Concat mode intentionally supports only inputs with audio. All inputs are assumed to have an
+  # audio stream and the same video resolution, so the filter graph always references [N:a] pads,
+  # always maps [aout], and applies video filters after concat.
+  local parts=() concat_inputs=() fragment_index=0
+
+  for (( input_index = 0; input_index < "${#v_file_segments[@]}"; input_index++ )); do
+    local segments=${v_file_segments[$input_index]}
+    if [[ -z $segments ]]; then
+      parts+=("[$input_index:v]setpts=PTS-STARTPTS[v${fragment_index}]")
+      parts+=("[$input_index:a]asetpts=PTS-STARTPTS[a${fragment_index}]")
+      concat_inputs+=("[v${fragment_index}][a${fragment_index}]")
+      ((++fragment_index))
+      continue
+    fi
+
+    local split_segments segment start_segment end_segment trim_options
+    IFS=, read -ra split_segments <<< "$segments"
+    for segment in "${split_segments[@]}"; do
+      start_segment=${segment%-*}
+      end_segment=${segment#*-}
+      trim_options=()
+
+      [[ -n $start_segment ]] && trim_options+=("start=$(timestamp_to_seconds "$start_segment")")
+      [[ -n $end_segment ]] && trim_options+=("end=$(timestamp_to_seconds "$end_segment")")
+
+      parts+=("[$input_index:v]trim=$(IFS=:; echo "${trim_options[*]}"),setpts=PTS-STARTPTS[v${fragment_index}]")
+      parts+=("[$input_index:a]atrim=$(IFS=:; echo "${trim_options[*]}"),asetpts=PTS-STARTPTS[a${fragment_index}]")
+      concat_inputs+=("[v${fragment_index}][a${fragment_index}]")
+      ((++fragment_index))
+    done
+  done
+
+  parts+=("$(IFS=; echo "${concat_inputs[*]}")concat=n=$fragment_index:v=1:a=1[vconcat][aout]")
+
+  local filters
+  filters=$(video_filters)
+  if [[ -n $filters ]]; then
+    parts+=("[vconcat]${filters}[vout]")
+  else
+    parts+=("[vconcat]null[vout]")
+  fi
+
+  local IFS=';'
+  echo "${parts[*]}"
 }
 
 function build_multi_segment_filter_complex {
@@ -444,11 +548,11 @@ function build_multi_segment_filter_complex {
     [[ -n $start_segment ]] && trim_options+=("start=$(timestamp_to_seconds "$start_segment")")
     [[ -n $end_segment ]] && trim_options+=("end=$(timestamp_to_seconds "$end_segment")")
 
-    parts+=("[0:v]trim=$(IFS=:; echo "${trim_options[*]}"),setpts=PTS-STARTPTS[v$i]")
+    parts+=("[0:v]trim=$(IFS=:; echo "${trim_options[*]}"),setpts=PTS-STARTPTS[v${i}]")
     concat_inputs+=("[v$i]")
 
     if [[ -n $has_audio ]]; then
-      parts+=("[0:a]atrim=$(IFS=:; echo "${trim_options[*]}"),asetpts=PTS-STARTPTS[a$i]")
+      parts+=("[0:a]atrim=$(IFS=:; echo "${trim_options[*]}"),asetpts=PTS-STARTPTS[a${i}]")
       concat_inputs+=("[a$i]")
     fi
   done
@@ -487,6 +591,18 @@ function trash_original_files {
 
 function list_files {
   echo
+
+  if [[ -n $v_concat ]]; then
+    # shellcheck disable=2012 # find has no advantage here
+    # shellcheck disable=2016 # $ in the single quotes are not expressions
+    (
+      ls -lh --sort=none "${v_temp_input_files[@]}"
+      ls -lh --sort=none "${v_output_files[@]}"
+    ) \
+    | ruby -ane 'puts "#{$F[4]}\t #{File.basename($F[8..].join(" "))}"'
+    echo
+    return
+  fi
 
   for ((i = 0; i < "${#v_temp_input_files[@]}"; i++)); do
     # shellcheck disable=2012 # find has no advantage here
