@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_logfile=$(dirname "$(mktemp)")/$(basename "$0").log
+c_logfile=$(dirname "$(mktemp --dry-run)")/$(basename "$0").log
 c_bisect_local_version=bisect
 c_cherry_pick_branch=temporary_cherry_picks
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
@@ -114,6 +114,8 @@ v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
 v_enable_unused_modules= # boolean; false=blank; true=anything else
 v_faster_build=         # boolean; false=blank; true=anything else
+v_cherry_pick_branch_created= # boolean; set when this run creates $c_cherry_pick_branch, so the
+                              # exit hook only deletes a branch we created (not a user's own)
 
 function decode_cmdline_args {
   local params
@@ -203,9 +205,21 @@ function cache_sudo {
 #
 function find_running_kernel_version {
   local raw_version
-  # Supports all the formats.
+  # Supports all the formats, including the Ubuntu-mainline-PPA RC form this script itself
+  # produces, where the RC marker is embedded in the ABI rather than as a `-rcN` suffix:
   #
-  raw_version=$(uname -r | sed -E 's/^([0-9]+\.[0-9]+(\.[0-9]+)?(-rc[0-9]+)?).*/\1/')
+  #   7.0.0-070000rc7-sav-generic  -> 7.0-rc7   (RC: rc in ABI)
+  #   6.8.0-060800rc1-generic      -> 6.8-rc1   (RC: rc in ABI)
+  #   7.0-rc7-generic              -> 7.0-rc7   (RC: -rcN suffix, kernel.org form)
+  #   7.0.0-070000-sav-generic     -> 7.0.0     (GA with ABI)
+  #   6.19.6-061906-sav-generic    -> 6.19.6    (stable patch)
+  #
+  raw_version=$(uname -r | perl -ne '
+    if (/^(\d+\.\d+)(?:\.(\d+)|-rc(\d+))?(?:-(\d+)(?:rc(\d+))?)?/) {
+      my ($mm, $patch, $ver_rc, $abi_rc) = ($1, $2, $3, $5);
+      my $rc = defined $ver_rc ? $ver_rc : $abi_rc;
+      print defined $rc ? "$mm-rc$rc" : (defined $patch ? "$mm.$patch" : $mm);
+    }')
 
   if [[ ! $raw_version =~ ^[0-9]+\.[0-9]+ ]]; then
     >&2 echo "Error: Could not extract kernel version from '$(uname -r)'"
@@ -257,7 +271,9 @@ function register_exit_hook {
 
     rm -f "$c_crack_bundle_temp_file"
 
-    if git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
+    # Only clean up the cherry-pick branch if THIS run created it; otherwise a user's own branch
+    # that happens to share the name must be left untouched.
+    if [[ -n $v_cherry_pick_branch_created ]] && git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
       local current_branch
       current_branch=$(git rev-parse --abbrev-ref HEAD)
 
@@ -430,8 +446,13 @@ function find_amd64_modules_package_link {
 function download_and_extract_config_file_from_modules_package {
   local amd64_modules_package_link=$1
 
-  local local_package_name=
-  local_package_name=$(dirname "$(mktemp --dry-run)")/${amd64_modules_package_link##*/}
+  # Download into a unique temp dir (not a predictable /tmp/<basename>) so concurrent runs don't
+  # collide on the same path. The package is only needed to extract the config, so drop it after.
+  #
+  local download_dir
+  download_dir=$(mktemp -d)
+
+  local local_package_name=$download_dir/${amd64_modules_package_link##*/}
 
   curl -L "$amd64_modules_package_link" --output "$local_package_name"
 
@@ -448,6 +469,9 @@ function download_and_extract_config_file_from_modules_package {
       | tar xv -C "$v_packages_destination" --wildcards --transform="s|^\./boot/||" "./boot/config-*" \
       | perl -pe 's|^\./boot/||'
   )
+
+  # The config has been extracted to the destination; the package itself is no longer needed.
+  rm -rf "$download_dir"
 
   # We can't unify the regex easily, because of the required dash preceding the `rc` in the desired
   # output.
@@ -1245,7 +1269,13 @@ function cherry_pick_commits {
         current_branch=$(git rev-parse --abbrev-ref HEAD)
 
         if [[ $current_branch != "$c_cherry_pick_branch" ]]; then
+          # Refuse to adopt (and later delete) a branch this run didn't create.
+          if git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
+            >&2 echo "Branch '$c_cherry_pick_branch' already exists; remove it manually if it's stale."
+            exit 1
+          fi
           git checkout -b "$c_cherry_pick_branch"
+          v_cherry_pick_branch_created=1
         fi
 
         local entry_raw_commits=${cherry_picks_entry#*:}
@@ -1403,8 +1433,8 @@ for fname, img in [('image.postinst.in', '$image_path'), ('extra.postinst.in', '
         old = (f'DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version \\\n'
                f'    --arg={img} /etc/kernel/postinst.d /usr/share/kernel/postinst.d')
         new = ('for _kd in /etc/kernel/postinst.d /usr/share/kernel/postinst.d; do\n'
-               '    if [ -d "\\$_kd" ]; then\n'
-               '        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version --arg=$image_path "\\$_kd"\n'
+               '    if [ -d "$_kd" ]; then\n'
+               '        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version --arg=$image_path "$_kd"\n'
                '    fi\n'
                'done')
         patch(p, old, new)
@@ -1474,7 +1504,7 @@ function compile_kernel {
   export KBUILD_BUILD_TIMESTAMP=''
 
   # Mainline PPA flags: disable tools, extras, rust-lib; enable mainline mode
-  local build_flags="do_mainline_build=true do_extras_package=false do_tools=0 do_lib_rust=false no_dumpfile=1"
+  local build_flags=(do_mainline_build=true do_extras_package=false do_tools=0 do_lib_rust=false no_dumpfile=1)
 
   # Work around fakeroot+lchown incompatibility on newer kernels (6.19+) where
   # lchown fails with EINVAL under fakeroot's LD_PRELOAD. This causes cpio
@@ -1493,10 +1523,10 @@ function compile_kernel {
 
   # Build kernel (yes '' auto-answers prompts)
   # The 'yes' command will receive SIGPIPE when build-arch closes stdin, so we ignore that error
-  (yes '' || test $? -eq 141) | debian/rules $build_flags build-arch
+  (yes '' || test $? -eq 141) | debian/rules "${build_flags[@]}" build-arch
 
   # Package into .deb files
-  fakeroot debian/rules $build_flags binary-debs
+  fakeroot debian/rules "${build_flags[@]}" binary-debs
 
   # Remove extra packages that mainline PPA doesn't publish.
   #
@@ -1529,9 +1559,9 @@ function remove_destination_old_version_files {
     local config_basename
     config_basename=$(basename "$source_config_file")
 
-    # Sample filenames:
+    # Sample filenames (GA configs are stored in short form, without the .0 patch):
     #
-    # - config-6.9.0
+    # - config-6.9
     # - config-6.10-rc2
     #
     # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
@@ -1550,7 +1580,16 @@ function remove_destination_old_version_files {
 }
 
 function move_packages_and_cleanup {
-  mv ../*.deb "$v_packages_destination"/
+  local normalized_version=$1
+
+  local short_version
+  short_version=$(short_kernel_version "$normalized_version" no_rc)
+
+  # Move only the packages for the version just built. A blanket `mv ../*.deb` would also sweep in
+  # unrelated/stale .debs sitting in the parent directory, which could then be reported on FD 3 or
+  # installed. See find_built_packages() for the filename pattern.
+  #
+  find .. -maxdepth 1 -name "linux-*[-_]$short_version*-*.deb" -exec mv -t "$v_packages_destination"/ {} +
 }
 
 # Output the package filenames, newline-separated.
@@ -1650,8 +1689,11 @@ function main {
 
   verify_or_setup_ubuntu_packaging "$building_kernel_version"
 
+  # Configs are stored in short form (config-7.0 for GA, config-7.0-rc7 for RC, config-6.19.6 for
+  # patch releases), so the lookup must use the short version, not the full M.m.0 form.
+  #
   local source_config_file
-  source_config_file=$(find_local_config_file_for_version "$building_kernel_version")
+  source_config_file=$(find_local_config_file_for_version "$(short_kernel_version "$building_kernel_version" with_rc)")
 
   # If the matching version is not found locally, search it on the mainline PPA.
   #
@@ -1710,7 +1752,7 @@ function main {
   #
   remove_destination_old_version_files "$building_kernel_version" "$source_config_file"
 
-  move_packages_and_cleanup
+  move_packages_and_cleanup "$building_kernel_version"
 
   local built_packages
   built_packages=$(find_built_packages "$building_kernel_version")
