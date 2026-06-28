@@ -5,6 +5,8 @@ setup_file() {
   export -f find_latest_packaged_version short_kernel_version
   export -f mainline_package_version generate_abi_number
   export -f annotation_set annotation_undefine
+  export -f find_running_kernel_version normalize_kernel_version
+  export -f find_local_config_file_for_version
 }
 
 teardown_file() {
@@ -289,4 +291,82 @@ make_pkg() {
   annotation_undefine CONFIG_FOO
   [ "${_annotation_ops[*]}" = "remove CONFIG_FOO" ]
   [ "${#_disabled_configs[@]}" -eq 0 ]
+}
+
+# ── find_running_kernel_version ─────────────────────────────────────────────────
+#
+# Must recognize the Ubuntu-mainline-PPA RC form this script itself produces, where the RC marker
+# lives in the ABI segment (070000rc7) rather than as a -rcN suffix. A plain
+# `M.m(.p)?(-rcN)?` extraction silently drops the rc and reports the kernel as GA.
+
+@test "find_running_kernel_version: RC built by this script (rc in ABI) → M.m-rcN" {
+  uname() { echo "7.0.0-070000rc7-sav-generic"; }
+  export -f uname
+  run find_running_kernel_version
+  [ "$output" = "7.0-rc7" ]
+}
+
+@test "find_running_kernel_version: mainline-PPA RC form → M.m-rcN" {
+  uname() { echo "6.8.0-060800rc1-generic"; }
+  export -f uname
+  run find_running_kernel_version
+  [ "$output" = "6.8-rc1" ]
+}
+
+@test "find_running_kernel_version: kernel.org RC form (-rcN suffix) → M.m-rcN" {
+  uname() { echo "7.0-rc7-generic"; }
+  export -f uname
+  run find_running_kernel_version
+  [ "$output" = "7.0-rc7" ]
+}
+
+@test "find_running_kernel_version: GA with ABI → M.m.0" {
+  uname() { echo "7.0.0-070000-sav-generic"; }
+  export -f uname
+  run find_running_kernel_version
+  [ "$output" = "7.0.0" ]
+}
+
+@test "find_running_kernel_version: stable patch → M.m.p" {
+  uname() { echo "6.19.6-061906-sav-generic"; }
+  export -f uname
+  run find_running_kernel_version
+  [ "$output" = "6.19.6" ]
+}
+
+@test "find_running_kernel_version: bare M.m → normalized to M.m.0" {
+  uname() { echo "6.6-generic"; }
+  export -f uname
+  run find_running_kernel_version
+  [ "$output" = "6.6.0" ]
+}
+
+# ── find_local_config_file_for_version ──────────────────────────────────────────
+#
+# GA configs are stored in short form (config-7.0, not config-7.0.0), so the lookup must be done
+# with the short version. These lock in that contract, which is why main() shortens
+# building_kernel_version before the local lookup.
+
+@test "find_local_config_file_for_version: GA config found by short version" {
+  make_pkg "config-7.0"
+  run find_local_config_file_for_version "7.0"
+  [ "$output" = "$v_packages_destination/config-7.0" ]
+}
+
+@test "find_local_config_file_for_version: GA config NOT found by full M.m.0 form" {
+  make_pkg "config-7.0"
+  run find_local_config_file_for_version "7.0.0"
+  [ "$output" = "" ]
+}
+
+@test "find_local_config_file_for_version: RC config found by short rc version" {
+  make_pkg "config-7.0-rc7"
+  run find_local_config_file_for_version "7.0-rc7"
+  [ "$output" = "$v_packages_destination/config-7.0-rc7" ]
+}
+
+@test "find_local_config_file_for_version: patch config found by full patch version" {
+  make_pkg "config-6.19.6"
+  run find_local_config_file_for_version "6.19.6"
+  [ "$output" = "$v_packages_destination/config-6.19.6" ]
 }
