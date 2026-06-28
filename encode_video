@@ -88,7 +88,7 @@ function decode_cmdline_args {
         echo "$c_help"
         exit 0 ;;
       --encoder)
-        if [[ ! $2 =~ ^h265|av1$ ]]; then
+        if [[ ! $2 =~ ^(h265|av1)$ ]]; then
           >&2 echo "Invalid encoder: $2 (valid: h265, av1)"
           exit 1
         fi
@@ -107,7 +107,7 @@ function decode_cmdline_args {
         v_resize=$2
         shift 2 ;;
       -R|--rotate)
-        if [[ ! $2 =~ ^cw|ccw$ ]]; then
+        if [[ ! $2 =~ ^(cw|ccw)$ ]]; then
           >&2 echo "Invalid rotation value: $2"
           exit 1
         fi
