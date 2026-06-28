@@ -487,48 +487,75 @@ function build_concat_ffmpeg_command {
     "$(shell_quote "${v_output_files[0]}")"
 }
 
-function build_concat_filter_complex {
-  # Concat mode intentionally supports only inputs with audio. All inputs are assumed to have an
-  # audio stream and the same video resolution, so the filter graph always references [N:a] pads,
-  # always maps [aout], and applies video filters after concat.
-  local parts=() concat_inputs=() fragment_index=0
+# Appends one fragment's video (and, when $include_audio, audio) filter parts and its concat input
+# label(s) to the named arrays. An empty $segment passes the whole input through (no trim).
+function append_segment_fragment {
+  local -n _parts=$1 _concat_inputs=$2
+  local input_index=$3 segment=$4 include_audio=$5 fragment_index=$6
 
-  for (( input_index = 0; input_index < "${#v_file_segments[@]}"; input_index++ )); do
-    local segments=${v_file_segments[$input_index]}
-    if [[ -z $segments ]]; then
-      parts+=("[$input_index:v]setpts=PTS-STARTPTS[v${fragment_index}]")
-      parts+=("[$input_index:a]asetpts=PTS-STARTPTS[a${fragment_index}]")
-      concat_inputs+=("[v${fragment_index}][a${fragment_index}]")
-      ((++fragment_index))
-      continue
-    fi
+  local vfilter=setpts afilter=asetpts
+  if [[ -n $segment ]]; then
+    local start_segment=${segment%-*} end_segment=${segment#*-} trim_options=()
+    [[ -n $start_segment ]] && trim_options+=("start=$(timestamp_to_seconds "$start_segment")")
+    [[ -n $end_segment ]] && trim_options+=("end=$(timestamp_to_seconds "$end_segment")")
+    local trim_spec
+    trim_spec=$(IFS=:; echo "${trim_options[*]}")
+    vfilter="trim=$trim_spec,setpts"
+    afilter="atrim=$trim_spec,asetpts"
+  fi
 
-    local split_segments segment start_segment end_segment trim_options
-    IFS=, read -ra split_segments <<< "$segments"
-    for segment in "${split_segments[@]}"; do
-      start_segment=${segment%-*}
-      end_segment=${segment#*-}
-      trim_options=()
+  _parts+=("[$input_index:v]${vfilter}=PTS-STARTPTS[v${fragment_index}]")
+  _concat_inputs+=("[v${fragment_index}]")
+  if [[ -n $include_audio ]]; then
+    _parts+=("[$input_index:a]${afilter}=PTS-STARTPTS[a${fragment_index}]")
+    _concat_inputs+=("[a${fragment_index}]")
+  fi
+}
 
-      [[ -n $start_segment ]] && trim_options+=("start=$(timestamp_to_seconds "$start_segment")")
-      [[ -n $end_segment ]] && trim_options+=("end=$(timestamp_to_seconds "$end_segment")")
+# Appends the concat node followed by the post-concat video-filter tail to the named arrays.
+function append_concat_tail {
+  # shellcheck disable=2178   # _parts/_concat_inputs are namerefs to caller arrays
+  local -n _parts=$1 _concat_inputs=$2
+  local fragment_count=$3 include_audio=$4
 
-      parts+=("[$input_index:v]trim=$(IFS=:; echo "${trim_options[*]}"),setpts=PTS-STARTPTS[v${fragment_index}]")
-      parts+=("[$input_index:a]atrim=$(IFS=:; echo "${trim_options[*]}"),asetpts=PTS-STARTPTS[a${fragment_index}]")
-      concat_inputs+=("[v${fragment_index}][a${fragment_index}]")
-      ((++fragment_index))
-    done
-  done
-
-  parts+=("$(IFS=; echo "${concat_inputs[*]}")concat=n=$fragment_index:v=1:a=1[vconcat][aout]")
+  local audio_flag=0 audio_out=
+  if [[ -n $include_audio ]]; then
+    audio_flag=1
+    audio_out='[aout]'
+  fi
+  _parts+=("$(IFS=; echo "${_concat_inputs[*]}")concat=n=${fragment_count}:v=1:a=${audio_flag}[vconcat]${audio_out}")
 
   local filters
   filters=$(video_filters)
   if [[ -n $filters ]]; then
-    parts+=("[vconcat]${filters}[vout]")
+    _parts+=("[vconcat]${filters}[vout]")
   else
-    parts+=("[vconcat]null[vout]")
+    _parts+=("[vconcat]null[vout]")
   fi
+}
+
+function build_concat_filter_complex {
+  # Concat mode intentionally supports only inputs with audio. All inputs are assumed to have an
+  # audio stream and the same video resolution, so the filter graph always references [N:a] pads,
+  # always maps [aout], and applies video filters after concat.
+  local parts=() concat_inputs=() fragment_index=0 input_index segments split_segments segment
+
+  for (( input_index = 0; input_index < "${#v_file_segments[@]}"; input_index++ )); do
+    segments=${v_file_segments[$input_index]}
+    if [[ -z $segments ]]; then
+      append_segment_fragment parts concat_inputs "$input_index" "" 1 "$fragment_index"
+      ((++fragment_index))
+      continue
+    fi
+
+    IFS=, read -ra split_segments <<< "$segments"
+    for segment in "${split_segments[@]}"; do
+      append_segment_fragment parts concat_inputs "$input_index" "$segment" 1 "$fragment_index"
+      ((++fragment_index))
+    done
+  done
+
+  append_concat_tail parts concat_inputs "$fragment_index" 1
 
   local IFS=';'
   echo "${parts[*]}"
@@ -536,40 +563,15 @@ function build_concat_filter_complex {
 
 function build_multi_segment_filter_complex {
   local segments=$1 has_audio=$2
-  local parts=() concat_inputs=() split_segments segment start_segment end_segment trim_options
+  # shellcheck disable=2034   # concat_inputs is populated and read via nameref in the helpers
+  local parts=() concat_inputs=() split_segments i
 
   IFS=, read -ra split_segments <<< "$segments"
   for (( i = 0; i < "${#split_segments[@]}"; i++ )); do
-    segment=${split_segments[$i]}
-    start_segment=${segment%-*}
-    end_segment=${segment#*-}
-    trim_options=()
-
-    [[ -n $start_segment ]] && trim_options+=("start=$(timestamp_to_seconds "$start_segment")")
-    [[ -n $end_segment ]] && trim_options+=("end=$(timestamp_to_seconds "$end_segment")")
-
-    parts+=("[0:v]trim=$(IFS=:; echo "${trim_options[*]}"),setpts=PTS-STARTPTS[v${i}]")
-    concat_inputs+=("[v$i]")
-
-    if [[ -n $has_audio ]]; then
-      parts+=("[0:a]atrim=$(IFS=:; echo "${trim_options[*]}"),asetpts=PTS-STARTPTS[a${i}]")
-      concat_inputs+=("[a$i]")
-    fi
+    append_segment_fragment parts concat_inputs 0 "${split_segments[$i]}" "$has_audio" "$i"
   done
 
-  if [[ -n $has_audio ]]; then
-    parts+=("$(IFS=; echo "${concat_inputs[*]}")concat=n=${#split_segments[@]}:v=1:a=1[vconcat][aout]")
-  else
-    parts+=("$(IFS=; echo "${concat_inputs[*]}")concat=n=${#split_segments[@]}:v=1:a=0[vconcat]")
-  fi
-
-  local filters
-  filters=$(video_filters)
-  if [[ -n $filters ]]; then
-    parts+=("[vconcat]${filters}[vout]")
-  else
-    parts+=("[vconcat]null[vout]")
-  fi
+  append_concat_tail parts concat_inputs "${#split_segments[@]}" "$has_audio"
 
   local IFS=';'
   echo "${parts[*]}"
