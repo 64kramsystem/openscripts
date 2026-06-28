@@ -10,8 +10,8 @@ c_default_extension=mkv
 # The combinations h265:slow+25 vs. av1:4+29 yield similar size, with av1 being much faster and
 # significantly higher quality.
 declare -A c_default_preset=(
-  [h265]=slow # M4=17 FPS
-  [av1]=4     # M4=68 FPS (!)
+  [h265]=slow # FPS: M4: slow=18
+  [av1]=4     # FPS: M4: 4=72, 3=49, 2=28
 )
 declare -A c_default_crf=(
   [h265]=25
