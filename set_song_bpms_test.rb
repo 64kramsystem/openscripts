@@ -76,18 +76,59 @@ class SetSongBpmsTest < Minitest::Test
 
   # ── tag_command ──────────────────────────────────────────────────────────
 
-  def test_tag_command_darwin_uses_homebrew_kid3
+  def test_tag_command_darwin_defaults_to_comment
     assert_equal ['/opt/homebrew/bin/kid3-cli', '-c', "set comment 'BPM=098'", 'a.mp3'],
                  @script.tag_command('a.mp3', 'BPM=098', darwin: true)
   end
 
-  def test_tag_command_linux_mp3_uses_eyed3
+  def test_tag_command_darwin_multiple_fields_in_one_invocation
+    assert_equal ['/opt/homebrew/bin/kid3-cli',
+                  '-c', "set comment 'BPM=098'",
+                  '-c', "set composer 'BPM=098'", 'a.mp3'],
+                 @script.tag_command('a.mp3', 'BPM=098', fields: %w[comment composer], darwin: true)
+  end
+
+  def test_tag_command_linux_mp3_defaults_to_comment
     assert_equal ['eyeD3', '--remove-all-comments', '--comment', 'BPM=142', 'a.mp3'],
                  @script.tag_command('a.mp3', 'BPM=142', darwin: false)
   end
 
-  def test_tag_command_linux_m4a_uses_system_python_mutagen
-    assert_equal ['/usr/bin/python3', '-c', SetSongBpms::TAG_PYTHON, 'b.m4a', 'BPM=236/115'],
-                 @script.tag_command('b.m4a', 'BPM=236/115', darwin: false)
+  def test_tag_command_linux_mp3_non_comment_field_uses_text_frame
+    assert_equal ['eyeD3', '--remove-all-comments', '--comment', 'BPM=142',
+                  '--set-text-frame=TCOM:BPM=142', 'a.mp3'],
+                 @script.tag_command('a.mp3', 'BPM=142', fields: %w[comment composer], darwin: false)
+  end
+
+  def test_tag_command_linux_m4a_passes_field_names_to_mutagen
+    assert_equal ['/usr/bin/python3', '-c', SetSongBpms::TAG_PYTHON,
+                  'b.m4a', 'BPM=236/115', 'comment', 'composer'],
+                 @script.tag_command('b.m4a', 'BPM=236/115', fields: %w[comment composer], darwin: false)
+  end
+
+  def test_tag_command_rejects_unknown_field
+    assert_raises(RuntimeError) { @script.tag_command('a.mp3', 'BPM=098', fields: %w[bogus], darwin: true) }
+  end
+
+  # ── extract_fields ───────────────────────────────────────────────────────
+
+  def test_extract_fields_defaults_to_comment
+    args = ['a.mp3']
+    assert_equal %w[comment], @script.extract_fields(args)
+    assert_equal ['a.mp3'], args
+  end
+
+  def test_extract_fields_parses_and_removes_the_option
+    args = ['--fields', 'comment,composer', 'a.mp3']
+    assert_equal %w[comment composer], @script.extract_fields(args)
+    assert_equal ['a.mp3'], args
+  end
+
+  def test_extract_fields_accepts_short_flag_and_is_case_insensitive
+    args = ['-f', 'Comment,Composer', 'a.mp3']
+    assert_equal %w[comment composer], @script.extract_fields(args)
+  end
+
+  def test_extract_fields_rejects_unknown_field
+    assert_raises(RuntimeError) { @script.extract_fields(['-f', 'comments', 'a.mp3']) }
   end
 end

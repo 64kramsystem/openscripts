@@ -5,16 +5,29 @@ require 'shellwords'
 
 class SetSongBpms
   HELP = <<~HELP
-    Usage: set_song_bpms [-h|--help] <audio_file...>
+    Usage: set_song_bpms [-h|--help] [-f|--fields F1,F2,...] <audio_file...>
 
-    Detects each song's BPM with beat-this and writes it to the Comment tag as "BPM=NNN"
-    (zero-padded). On detecting a sustained tempo change (e.g. a slow section followed by a
-    double-time one), asks for confirmation and writes "BPM=MAX/MIN".
+    Detects each song's BPM with beat-this and writes it as "BPM=NNN" (zero-padded). On
+    detecting a sustained tempo change (e.g. a slow section followed by a double-time one),
+    asks for confirmation and writes "BPM=MAX/MIN".
+
+    By default the value is written to the Comment tag; with -f|--fields, it's written to
+    each of the given fields instead. Available fields: comment, composer.
   HELP
 
   SECTION_RATIO = 1.5
   MIN_SECTION_BEATS = 32
   SAMPLE_RATE = 22_050
+
+  # Tag fields the value can be written to, mapped to each backend's identifier: kid3-cli frame
+  # name (macOS, all formats), and ID3 text-frame id (eyeD3, mp3). For mutagen (m4a) the field name
+  # itself is passed through, since the atom mapping lives in TAG_PYTHON. Comment is special-cased
+  # per backend, so it has no ID3 frame here.
+  FIELDS = {
+    'comment'  => { kid3: 'comment',  id3: nil },
+    'composer' => { kid3: 'composer', id3: 'TCOM' },
+  }.freeze
+  DEFAULT_FIELDS = %w[comment].freeze
 
   PYTHON_HELPER = <<~PYTHON
     import subprocess, sys
@@ -41,8 +54,11 @@ class SetSongBpms
   PYTHON
 
   def run(args)
-    (puts HELP; exit 1) if args.empty?
+    args = args.dup
     (puts HELP; exit 0) if args.intersect?(['-h', '--help'])
+
+    fields = extract_fields(args)
+    (puts HELP; exit 1) if args.empty?
 
     python = python_executable
     device = detect_device(python)
@@ -61,7 +77,7 @@ class SetSongBpms
       end
 
       comment = format_comment(tempos)
-      system(*tag_command(file, comment, darwin: RUBY_PLATFORM.include?('darwin')),
+      system(*tag_command(file, comment, fields: fields, darwin: RUBY_PLATFORM.include?('darwin')),
              out: File::NULL, exception: true)
       puts "#{file}: #{comment}"
     end
@@ -99,20 +115,43 @@ class SetSongBpms
   TAG_PYTHON = <<~PYTHON
     import sys
     from mutagen.mp4 import MP4
-    tags = MP4(sys.argv[1])
-    tags["\\xa9cmt"] = [sys.argv[2]]
+    atoms = {"comment": "\\xa9cmt", "composer": "\\xa9wrt"}
+    file, value, fields = sys.argv[1], sys.argv[2], sys.argv[3:]
+    tags = MP4(file)
+    for field in fields:
+        tags[atoms[field]] = [value]
     tags.save()
   PYTHON
 
-  def tag_command(file, comment, darwin:)
+  # Returns the field list from -f/--fields (default: comment), removing the option from `args`.
+  def extract_fields(args)
+    index = args.index('-f') || args.index('--fields')
+    return DEFAULT_FIELDS unless index
+
+    list = args[index + 1] or raise 'Missing value for --fields'
+    fields = list.split(',').map { |field| field.strip.downcase }
+    unknown = fields - FIELDS.keys
+    raise "Unknown field(s): #{unknown.join(', ')} (known: #{FIELDS.keys.join(', ')})" unless unknown.empty?
+
+    args.slice!(index, 2)
+    fields
+  end
+
+  def tag_command(file, value, fields: DEFAULT_FIELDS, darwin:)
+    fields.each { |field| FIELDS.key?(field) or raise "Unknown field: #{field}" }
+
     if darwin
-      ['/opt/homebrew/bin/kid3-cli', '-c', "set comment '#{comment}'", file]
+      # kid3-cli writes every field in a single invocation, for any format (mp3, m4a, ...).
+      sets = fields.flat_map { |field| ['-c', "set #{FIELDS[field][:kid3]} '#{value}'"] }
+      ['/opt/homebrew/bin/kid3-cli', *sets, file]
     elsif file.downcase.end_with?('.mp3')
       # --remove-all-comments avoids stacking a second COMM frame next to an existing one with a
       # different language id, which would keep showing the old value in players.
-      ['eyeD3', '--remove-all-comments', '--comment', comment, file]
+      comment_args = fields.include?('comment') ? ['--remove-all-comments', '--comment', value] : []
+      frame_args = fields.filter_map { |field| "--set-text-frame=#{FIELDS[field][:id3]}:#{value}" if FIELDS[field][:id3] }
+      ['eyeD3', *comment_args, *frame_args, file]
     else
-      ['/usr/bin/python3', '-c', TAG_PYTHON, file, comment]
+      ['/usr/bin/python3', '-c', TAG_PYTHON, file, value, *fields]
     end
   end
 
