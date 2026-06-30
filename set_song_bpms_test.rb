@@ -61,22 +61,6 @@ class SetSongBpmsTest < Minitest::Test
     assert_equal 236, @script.dominant_bpm(beats_from(intervals))
   end
 
-  # ── suspicious_overwrite? ────────────────────────────────────────────────
-
-  def test_overwrite_suspicious_when_metrical_level_differs
-    assert @script.suspicious_overwrite?(189, 66)
-    assert @script.suspicious_overwrite?(115, 236)
-  end
-
-  def test_overwrite_not_suspicious_for_small_differences
-    refute @script.suspicious_overwrite?(143, 142)
-    refute @script.suspicious_overwrite?(130, 115)
-  end
-
-  def test_overwrite_not_suspicious_without_existing_bpm
-    refute @script.suspicious_overwrite?(143, nil)
-  end
-
   # ── worker_count ─────────────────────────────────────────────────────────
 
   def test_worker_count_cpu_uses_quarter_of_cores_capped_at_seven

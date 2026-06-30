@@ -1,7 +1,6 @@
 #!/usr/bin/env ruby
 
 require 'etc'
-require 'json'
 require 'shellwords'
 
 class SetSongBpms
@@ -10,9 +9,7 @@ class SetSongBpms
 
     Detects each song's BPM with beat-this and writes it to the Comment tag as "BPM=NNN"
     (zero-padded). On detecting a sustained tempo change (e.g. a slow section followed by a
-    double-time one), asks for confirmation and writes "BPM=MAX/MIN". Also asks before
-    overwriting an existing comment BPM that disagrees by more than 25% (likely a
-    metrical-level detection error).
+    double-time one), asks for confirmation and writes "BPM=MAX/MIN".
   HELP
 
   SECTION_RATIO = 1.5
@@ -63,13 +60,6 @@ class SetSongBpms
         tempos = [dominant_bpm(beats)]
       end
 
-      old_bpm = existing_bpm(file)
-      if suspicious_overwrite?(tempos.first, old_bpm) &&
-         !confirm("#{file}: existing BPM=#{old_bpm}, detected #{tempos.first} - overwrite?")
-        puts "#{file}: kept existing BPM=#{old_bpm}"
-        next
-      end
-
       comment = format_comment(tempos)
       system(*tag_command(file, comment, darwin: RUBY_PLATFORM.include?('darwin')),
              out: File::NULL, exception: true)
@@ -100,12 +90,6 @@ class SetSongBpms
 
   def format_comment(tempos)
     "BPM=#{tempos.map { |bpm| format('%03d', bpm) }.join('/')}"
-  end
-
-  def suspicious_overwrite?(new_bpm, old_bpm)
-    return false unless old_bpm
-
-    [new_bpm, old_bpm].max.fdiv([new_bpm, old_bpm].min) > 1.25
   end
 
   def worker_count(device, nproc)
@@ -184,13 +168,6 @@ class SetSongBpms
       end
     end
     threads.flat_map(&:value).to_h
-  end
-
-  def existing_bpm(file)
-    out = `ffprobe -v quiet -show_entries format_tags -of json #{file.shellescape}`
-    tags = JSON.parse(out).dig('format', 'tags') || {}
-    comment = tags.find { |key, _| key.casecmp?('comment') }&.last.to_s
-    comment[/BPM=(\d+)/, 1]&.to_i
   end
 
   def confirm(message)
