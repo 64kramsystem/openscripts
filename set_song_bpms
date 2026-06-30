@@ -12,7 +12,7 @@ class SetSongBpms
     asks for confirmation and writes "BPM=MAX/MIN".
 
     By default the value is written to the Comment tag; with -f|--fields, it's written to
-    each of the given fields instead. Available fields: comment, composer.
+    each of the given fields instead. Available fields: comment, genre.
   HELP
 
   SECTION_RATIO = 1.5
@@ -24,8 +24,8 @@ class SetSongBpms
   # itself is passed through, since the atom mapping lives in TAG_PYTHON. Comment is special-cased
   # per backend, so it has no ID3 frame here.
   FIELDS = {
-    'comment'  => { kid3: 'comment',  id3: nil },
-    'composer' => { kid3: 'composer', id3: 'TCOM' },
+    'comment' => { kid3: 'comment', id3: nil },
+    'genre'   => { kid3: 'genre',   id3: 'TCON' },
   }.freeze
   DEFAULT_FIELDS = %w[comment].freeze
 
@@ -115,7 +115,7 @@ class SetSongBpms
   TAG_PYTHON = <<~PYTHON
     import sys
     from mutagen.mp4 import MP4
-    atoms = {"comment": "\\xa9cmt", "composer": "\\xa9wrt"}
+    atoms = {"comment": "\\xa9cmt", "genre": "\\xa9gen"}
     file, value, fields = sys.argv[1], sys.argv[2], sys.argv[3:]
     tags = MP4(file)
     for field in fields:
