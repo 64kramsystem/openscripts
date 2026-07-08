@@ -30,9 +30,12 @@ class SetSongBpms
   DEFAULT_FIELDS = %w[comment].freeze
 
   PYTHON_HELPER = <<~PYTHON
-    import subprocess, sys
+    import subprocess, sys, warnings
     import numpy as np
     import torch
+
+    # Harmless warning emitted by torch's MPS stft implementation (as of torch 2.12).
+    warnings.filterwarnings("ignore", message="An output with one or more elements was resized")
 
     device = sys.argv[1]
     if device == "cpu":
