@@ -237,6 +237,11 @@ function check_input_files {
       >&2 echo "The input '$file' is not/doesn't contain a video"
       exit 1
     fi
+
+    if [[ -n $v_concat ]] && ! ffprobe -v error -select_streams a:0 -show_entries stream=codec_type -of default=noprint_wrappers=1:nokey=1 "$file" | grep -qx audio; then
+      >&2 echo "The input '$file' has no audio (required in concat mode)"
+      exit 1
+    fi
   done
 }
 
@@ -548,9 +553,9 @@ function append_concat_tail {
 }
 
 function build_concat_filter_complex {
-  # Concat mode intentionally supports only inputs with audio. All inputs are assumed to have an
-  # audio stream and the same video resolution, so the filter graph always references [N:a] pads,
-  # always maps [aout], and applies video filters after concat.
+  # Concat mode intentionally supports only inputs with audio (enforced in check_input_files). All
+  # inputs are assumed to have the same video resolution, so the filter graph always references
+  # [N:a] pads, always maps [aout], and applies video filters after concat.
   local parts=() concat_inputs=() fragment_index=0 input_index segments split_segments segment
 
   for (( input_index = 0; input_index < "${#v_file_segments[@]}"; input_index++ )); do
