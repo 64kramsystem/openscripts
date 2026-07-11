@@ -268,7 +268,7 @@ FAKE
   [[ ! -f "$WORK_DIR/pizza.mkv" ]]
 }
 
-@test "aborts if the output file already exists, restoring the input" {
+@test "aborts if the output file already exists, leaving the input untouched" {
   make_input pizza.mp4
   echo existing > "$WORK_DIR/pizza.mkv"
   run "$SCRIPT" -b "$WORK_DIR/pizza.mp4"
@@ -277,7 +277,34 @@ FAKE
   [[ -f "$WORK_DIR/pizza.mp4" ]]
 }
 
-@test "aborts if the output directory doesn't exist, restoring the input" {
+@test "aborts if the temp input file already exists, leaving both files untouched" {
+  make_input pizza.mp4 pizza.orig.mp4
+  run "$SCRIPT" -b "$WORK_DIR/pizza.mp4"
+  [[ $status -eq 1 ]]
+  [[ $output == *"Temporary file"*"exists!"* ]]
+  [[ -f "$WORK_DIR/pizza.mp4" ]]
+  [[ -f "$WORK_DIR/pizza.orig.mp4" ]]
+}
+
+@test "aborts if inputs with different extensions map to the same output file" {
+  make_input pizza.mp4 pizza.avi
+  run "$SCRIPT" -b "$WORK_DIR/pizza.mp4" "$WORK_DIR/pizza.avi"
+  [[ $status -eq 1 ]]
+  [[ $output == *"same output file"* ]]
+  [[ -f "$WORK_DIR/pizza.mp4" ]]
+  [[ -f "$WORK_DIR/pizza.avi" ]]
+}
+
+@test "aborts if inputs with the same basename map to the same output file via --output-dir" {
+  mkdir "$WORK_DIR/a" "$WORK_DIR/b" "$WORK_DIR/out"
+  echo data > "$WORK_DIR/a/pizza.mp4"
+  echo data > "$WORK_DIR/b/pizza.mp4"
+  run "$SCRIPT" -b -o "$WORK_DIR/out" "$WORK_DIR/a/pizza.mp4" "$WORK_DIR/b/pizza.mp4"
+  [[ $status -eq 1 ]]
+  [[ $output == *"same output file"* ]]
+}
+
+@test "aborts if the output directory doesn't exist, leaving the input untouched" {
   make_input pizza.mp4
   run "$SCRIPT" -b -o "$WORK_DIR/missing" "$WORK_DIR/pizza.mp4"
   [[ $status -eq 1 ]]
@@ -285,7 +312,7 @@ FAKE
   [[ -f "$WORK_DIR/pizza.mp4" ]]
 }
 
-@test "rejects a filename containing a double quote, restoring the input" {
+@test "rejects a filename containing a double quote, leaving the input untouched" {
   make_input 'piz"za.mp4'
   run "$SCRIPT" -b "$WORK_DIR/piz\"za.mp4"
   [[ $status -eq 1 ]]
