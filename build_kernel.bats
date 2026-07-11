@@ -258,6 +258,8 @@ make_pkg() {
 }
 
 @test "mainline_package_version: GA sorts above matching RC under grub-sort-version" {
+  [ -x /usr/lib/grub/grub-sort-version ] || skip "grub-sort-version not available"
+
   ga_release="$(mainline_package_version "7.0.0"   "sav" "202604141930")-generic"
   rc_release="$(mainline_package_version "7.0-rc7" "sav" "202604081639")-generic"
   first=$(printf '%s\n%s\n' "$ga_release" "$rc_release" \
