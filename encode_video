@@ -19,7 +19,7 @@ declare -A c_default_crf=(
   [h265]=25
   [av1]=29
 )
-c_tmp_extension=tmp
+c_tmp_infix=orig
 # Very roughly tested; set 1 process less than the amount saturating the given CPU.
 declare -A c_procs_mapping=(
   [32]=2 # 7950X
@@ -197,7 +197,7 @@ function decode_cmdline_args {
 
   local file
   for file in "${v_orig_input_files[@]}"; do
-    v_temp_input_files+=("$file.$c_tmp_extension")
+    v_temp_input_files+=("${file%.*}.$c_tmp_infix.${file##*.}")
 
     [[ -n $v_output_dir ]] && file="$v_output_dir/$(basename "$file")"
     v_output_files+=("${file%.*}.$v_extension")
