@@ -259,11 +259,24 @@ function perform_checks {
     fi
   done
 
+  for file in "${v_temp_input_files[@]}"; do
+    if [[ -e $file ]]; then
+      >&2 echo "Temporary file '$file' exists!"
+      exit 1
+    fi
+  done
+
+  local -A seen_output_files=()
   for file in "${v_output_files[@]}"; do
     if [[ -f $file ]]; then
       >&2 echo "File '$file' exists!"
       exit 1
     fi
+    if [[ -v seen_output_files[$file] ]]; then
+      >&2 echo "Multiple inputs map to the same output file '$file'!"
+      exit 1
+    fi
+    seen_output_files[$file]=1
   done
 }
 
@@ -624,13 +637,12 @@ function main {
   # may leave the files half moved.
   # In order to avoid this, we check the files first.
   check_input_files
-
-  # First move the files, as the error exit hook assumes it. For simplicity, if there is an interruption
-  # or error while moving, we let the use handle it.
-  rename_input_files
-
-  register_exit_hooks
   perform_checks
+
+  # The hook is registered before renaming, so that an interruption/error halfway through the renames
+  # still restores the already renamed inputs.
+  register_exit_hooks
+  rename_input_files
   encode_files
   if [[ -z $v_batch_mode ]]; then
     list_files
