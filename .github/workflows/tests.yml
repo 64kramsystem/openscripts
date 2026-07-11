@@ -8,22 +8,13 @@ on:
 
 jobs:
   bats:
-    name: build_kernel (bats)
+    name: bats
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      # The action only installs bats; tests must be run in a separate step.
       - uses: bats-core/bats-action@4.0.0
-        with:
-          tests: build_kernel.bats
-
-  encode_video:
-    name: encode_video (bats)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: bats-core/bats-action@4.0.0
-        with:
-          tests: encode_video.bats
+      - run: bats ./*.bats
 
   minitest:
     name: kernel_version (minitest)
