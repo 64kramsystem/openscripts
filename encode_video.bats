@@ -28,7 +28,7 @@ echo "ffprobe $*" >> "$CMD_LOG"
 if [[ $* == *"-select_streams v:0"* ]]; then
   echo "${FFPROBE_VIDEO_TYPE:-video}"
 else
-  echo audio
+  echo "${FFPROBE_AUDIO_TYPE-audio}"
 fi
 FAKE
 
@@ -256,6 +256,21 @@ FAKE
   [[ $status -eq 1 ]]
   [[ $output == *"is not/doesn't contain a video"* ]]
   [[ -f "$WORK_DIR/pizza.mp4" ]]
+}
+
+@test "rejects a concat input without audio" {
+  make_input pizza.mp4 pasta.mp4
+  FFPROBE_AUDIO_TYPE= run "$SCRIPT" -b -c "$WORK_DIR/pizza.mp4" "$WORK_DIR/pasta.mp4"
+  [[ $status -eq 1 ]]
+  [[ $output == *"has no audio (required in concat mode)"* ]]
+  [[ -f "$WORK_DIR/pizza.mp4" ]]
+}
+
+@test "audio is not required outside concat mode" {
+  make_input pizza.mp4
+  FFPROBE_AUDIO_TYPE= run "$SCRIPT" -b "$WORK_DIR/pizza.mp4"
+  [[ $status -eq 0 ]]
+  [[ -f "$WORK_DIR/pizza.mkv" ]]
 }
 
 @test "on encoding failure, restores the input and deletes the output" {
