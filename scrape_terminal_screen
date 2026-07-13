@@ -13,8 +13,7 @@ and leading/trailing blank lines trimmed (iTerm2 pads visible lines with trailin
 
 Backends:
   - macOS/iTerm2: reads the session buffer via AppleScript
-  - Linux:        select-all + copy via xdotool, then read it back via xsel (gnome-terminal or
-                  mate-terminal)"
+  - Linux/Tilix:  reads the focused terminal through AT-SPI"
 
 function decode_cmdline_args {
   local params
@@ -49,25 +48,7 @@ function scrape_macos {
 }
 
 function scrape_linux {
-  if command -v gnome-terminal > /dev/null; then
-    sleep 0.2 # hilarity ensues if xdotool is called immediately on a key binding
-    xdotool key alt+e End Up Up Return Ctrl+Shift+C
-  elif command -v mate-terminal > /dev/null; then
-    sleep 0.2 # let the key binding dispatch settle, same as gnome-terminal
-    printf '' | xsel -bi # clear so the post-copy poll can detect completion
-    xdotool key Ctrl+Shift+A Ctrl+Shift+C
-    # mate-terminal's copy is async; wait up to ~1s for the clipboard to populate
-    local i
-    for ((i = 0; i < 20; i++)); do
-      [[ -n "$(xsel -b)" ]] && break
-      sleep 0.05
-    done
-  else
-    echo "$(basename "$0"): terminal not recognized (need gnome-terminal or mate-terminal)" >&2
-    return 1
-  fi
-
-  xsel -b
+  /usr/bin/python3 "$(dirname "${BASH_SOURCE[0]}")/scrape_terminal_screen_atspi.py"
 }
 
 function main {
