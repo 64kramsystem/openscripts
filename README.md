@@ -14,6 +14,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `bedtime`: sets two (systemd) timers, one to suspend the computer, and the other to shut it down
   - `compress_dvd`: compresses an unencrypted DVD iso to h265/aac
   - `convert_cb_archive_to_pdf`: convert CBR/CBZ files to PDF
+  - `create_jp2_pdf`: packs image files into a PDF using JPEG 2000 compression
   - `convert_video_to_animated_gif`: convert a video to animated gid (via FFmpeg)
   - `control_music_player`: performs actions on a music player running in the background (supports Clementine, MPV, GMusicBrowser...)
   - `encode_to_m4a`: encodes and normalizes input files to m4a, using ffmpeg/libsdk_aac

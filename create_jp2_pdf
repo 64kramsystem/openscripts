@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+"""
+Pack image files of any format into a single PDF using JPEG 2000 (/JPXDecode) compression.
+
+Input images may be any format Pillow can read (PNG, JPEG, GIF, BMP, WebP, TIFF, ...).
+
+Requires: pypdf, imagecodecs, numpy, Pillow
+"""
+
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import BytesIO
+import os
+import sys
+from pathlib import Path
+
+DEFAULT_DPI = 96.0
+DEFAULT_QUALITY = 40
+MAX_WORKERS = 16
+
+
+def worker_count(cpu_count: int | None = None) -> int:
+    """Number of encode threads: the CPU count, capped at MAX_WORKERS, floored at 1."""
+    cpu = cpu_count if cpu_count is not None else (os.cpu_count() or 1)
+    return max(1, min(cpu, MAX_WORKERS))
+
+DEPENDENCY_ERROR = None
+
+try:
+    import numpy as np
+    from imagecodecs import jpeg2k_encode
+    from PIL import Image
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject, NumberObject
+except ModuleNotFoundError as exc:
+    DEPENDENCY_ERROR = exc
+
+
+def require_dependencies() -> None:
+    if DEPENDENCY_ERROR is not None:
+        print(f"Missing dependency: {DEPENDENCY_ERROR.name}", file=sys.stderr)
+        sys.exit(1)
+
+
+def pixels_to_points(length: int, dpi: float) -> float:
+    return 72.0 * length / dpi
+
+
+def _resolve_target(value: int | float, original: int) -> int:
+    """A float resize value is a proportion of the original; an int is absolute pixels."""
+    if isinstance(value, float):
+        return max(1, round(original * value))
+    return value
+
+
+def resize_dimensions(
+    width: int,
+    height: int,
+    width_resize: int | float | None = None,
+    height_resize: int | float | None = None,
+) -> tuple[int, int]:
+    """Return the new (width, height) after resizing to a target width or height,
+    preserving the aspect ratio. Each target is either absolute pixels (int) or a
+    proportion of the original (float, e.g. 0.5). Only one axis may be set."""
+    if width_resize is not None and height_resize is not None:
+        raise ValueError("width_resize and height_resize are mutually exclusive")
+    if width_resize is not None:
+        target_w = _resolve_target(width_resize, width)
+        return target_w, max(1, round(height * target_w / width))
+    if height_resize is not None:
+        target_h = _resolve_target(height_resize, height)
+        return max(1, round(width * target_h / height)), target_h
+    return width, height
+
+
+def print_progress(done: int, total: int, message: str) -> None:
+    bar_width = 20
+    filled = bar_width * done // total
+    bar = "#" * filled + "-" * (bar_width - filled)
+    print(f"\r[{bar}] {done}/{total} {message}", end="", file=sys.stderr, flush=True)
+
+
+def image_dpi(img) -> tuple[float, float]:
+    ndpi = img.info.get("dpi")
+    if ndpi is None:
+        aspect = img.info.get("aspect")
+        if img.format == "PNG" and aspect is not None and aspect[0] != 0 and aspect[1] != 0:
+            if aspect[0] > aspect[1]:
+                ndpi = (DEFAULT_DPI * aspect[0] / aspect[1], DEFAULT_DPI)
+            else:
+                ndpi = (DEFAULT_DPI, DEFAULT_DPI * aspect[1] / aspect[0])
+        else:
+            ndpi = (DEFAULT_DPI, DEFAULT_DPI)
+
+    ndpi = (int(round(ndpi[0])), int(round(ndpi[1])))
+    if ndpi == (0, 0):
+        return (DEFAULT_DPI, DEFAULT_DPI)
+    return ndpi
+
+
+def load_rgb_pixels(
+    raw: bytes,
+    width_resize: int | None = None,
+    height_resize: int | None = None,
+) -> tuple["np.ndarray", tuple[float, float]]:
+    """Decode any image format to an RGB uint8 array (transparency flattened onto
+    white) plus its DPI, optionally resizing to a target width or height."""
+    with Image.open(BytesIO(raw)) as img:
+        dpi = image_dpi(img)
+        image = img.convert("RGBA")
+        if width_resize is not None or height_resize is not None:
+            new_size = resize_dimensions(img.width, img.height, width_resize, height_resize)
+            image = image.resize(new_size, Image.LANCZOS)
+        pixels = np.asarray(image)
+
+    height, width = pixels.shape[:2]
+    alpha = pixels[:, :, 3:4] / 255.0
+    white_bg = np.full((height, width, 3), 255, dtype=np.uint8)
+    rgb = (pixels[:, :, :3] * alpha + white_bg * (1 - alpha)).astype(np.uint8)
+    return rgb, dpi
+
+
+def image_to_jp2(
+    image_path: Path,
+    quality: int,
+    width_resize: int | None = None,
+    height_resize: int | None = None,
+) -> tuple[bytes, int, int, float, float]:
+    raw = image_path.read_bytes()
+    pixels, dpi = load_rgb_pixels(raw, width_resize, height_resize)
+    height, width = pixels.shape[:2]
+    jp2_bytes = jpeg2k_encode(pixels, level=quality)
+    return (
+        jp2_bytes,
+        width,
+        height,
+        pixels_to_points(width, dpi[0]),
+        pixels_to_points(height, dpi[1]),
+    )
+
+
+def build_pdf(
+    image_paths: list[Path],
+    output_path: Path,
+    quality: int,
+    width_resize: int | None = None,
+    height_resize: int | None = None,
+) -> None:
+    require_dependencies()
+    writer = PdfWriter()
+    source_size = sum(p.stat().st_size for p in image_paths)
+
+    total = len(image_paths)
+
+    # Encode pages in parallel (imagecodecs releases the GIL), preserving input order.
+    encoded: list[tuple[bytes, int, int, float, float] | None] = [None] * total
+    done = 0
+    print_progress(0, total, "Encoding")
+    with ThreadPoolExecutor(max_workers=worker_count()) as pool:
+        futures = {
+            pool.submit(image_to_jp2, image_path, quality, width_resize, height_resize): index
+            for index, image_path in enumerate(image_paths)
+        }
+        for future in as_completed(futures):
+            index = futures[future]
+            encoded[index] = future.result()
+            done += 1
+            print_progress(done, total, f"Encoded {image_paths[index]}")
+
+    print(file=sys.stderr)
+
+    # Assemble pages sequentially, in input order (PdfWriter is not thread-safe).
+    for jp2_bytes, width, height, page_width, page_height in encoded:
+        page = writer.add_blank_page(width=page_width, height=page_height)
+
+        img_obj = DecodedStreamObject()
+        img_obj.set_data(jp2_bytes)
+        img_obj.update({
+            NameObject("/Type"): NameObject("/XObject"),
+            NameObject("/Subtype"): NameObject("/Image"),
+            NameObject("/Width"): NumberObject(width),
+            NameObject("/Height"): NumberObject(height),
+            NameObject("/ColorSpace"): NameObject("/DeviceRGB"),
+            NameObject("/BitsPerComponent"): NumberObject(8),
+            NameObject("/Filter"): NameObject("/JPXDecode"),
+        })
+
+        resources = page[NameObject("/Resources")]
+        xobjects = resources.get(NameObject("/XObject"))
+        if xobjects is None:
+            xobjects = DictionaryObject()
+            resources[NameObject("/XObject")] = xobjects
+        xobjects[NameObject("/Im0")] = writer._add_object(img_obj)
+
+        contents = DecodedStreamObject()
+        contents.set_data(f"q {page_width} 0 0 {page_height} 0 0 cm /Im0 Do Q\n".encode("ascii"))
+        page[NameObject("/Contents")] = writer._add_object(contents)
+
+    with output_path.open("wb") as f:
+        writer.write(f)
+
+    output_size = output_path.stat().st_size
+    print(f"Wrote {output_path}  ({len(image_paths)} page{'' if len(image_paths) == 1 else 's'})")
+    print(
+        f"PDF/source size: {output_size / source_size * 100:.1f}% "
+        f"({output_size / 1024 / 1024:.1f}M/{source_size / 1024 / 1024:.1f}M)"
+    )
+
+
+def parse_resize(text: str) -> int | float:
+    """An integer is an absolute pixel size; a decimal is a proportion of the
+    original and must be > 0 and < 1.0 (e.g. 0.5)."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid resize value: {text!r}")
+    if value.is_integer():
+        pixels = int(value)
+        if pixels < 1:
+            raise argparse.ArgumentTypeError(f"pixel size must be >= 1 (got {text})")
+        return pixels
+    if not 0.0 < value < 1.0:
+        raise argparse.ArgumentTypeError(
+            f"a decimal resize value is a proportion and must be < 1.0 (got {text})"
+        )
+    return value
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        usage="%(prog)s [-h] [-q QUALITY] [-w N | -H N] <img1> [img2 ...] <output.pdf>",
+        description="Pack image files of any format into a single PDF using JPEG 2000 compression.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Output size by quality, averaged over 10 sample pages (~51 MP total):\n"
+            "\n"
+            "  -q 30                239 KB\n"
+            "  -q 40  (default)     753 KB\n"
+            "  -q 50              1,587 KB\n"
+            "  -q 60              2,186 KB\n"
+            "  -q 90              2,332 KB\n"
+            "  lossless           3,045 KB\n"
+        ),
+    )
+    parser.add_argument(
+        "-q",
+        "--quality",
+        type=int,
+        default=DEFAULT_QUALITY,
+        help=f"JPEG 2000 quality (default: {DEFAULT_QUALITY})",
+    )
+    resize_group = parser.add_mutually_exclusive_group()
+    resize_group.add_argument(
+        "-w",
+        "--width-resize",
+        type=parse_resize,
+        metavar="N",
+        help="resize width to N pixels, or (if N is a decimal < 1.0) to that "
+             "proportion of the original; aspect ratio preserved",
+    )
+    resize_group.add_argument(
+        "-H",
+        "--height-resize",
+        type=parse_resize,
+        metavar="N",
+        help="resize height to N pixels, or (if N is a decimal < 1.0) to that "
+             "proportion of the original; aspect ratio preserved",
+    )
+    parser.add_argument(
+        "paths",
+        nargs="+",
+        metavar="path",
+        help="input image files (any format) followed by output PDF",
+    )
+    args = parser.parse_args(argv)
+
+    if len(args.paths) < 2:
+        parser.error("expected at least one input PNG and an output PDF")
+
+    return args
+
+
+def expand_input_paths(paths: list[Path]) -> list[Path]:
+    expanded = []
+    for path in paths:
+        if not path.is_dir():
+            expanded.append(path)
+            continue
+
+        children = sorted(path.iterdir())
+        subdirs = [p for p in children if p.is_dir()]
+        subdir_list = ", ".join(str(p) for p in subdirs)
+        assert not subdirs, f"Input directory contains subdirectories: {subdir_list}"
+        expanded.extend(p for p in children if p.is_file())
+    return expanded
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+
+    *image_args, pdf_arg = args.paths
+    image_paths = expand_input_paths([Path(p) for p in image_args])
+    output_path = Path(pdf_arg)
+
+    missing = [p for p in image_paths if not p.is_file()]
+    if missing:
+        print("Missing input files:", ", ".join(str(p) for p in missing), file=sys.stderr)
+        sys.exit(1)
+
+    build_pdf(image_paths, output_path, args.quality, args.width_resize, args.height_resize)
+
+
+if __name__ == "__main__":
+    main()
