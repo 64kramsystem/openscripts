@@ -95,12 +95,12 @@ class SetSongBpmsTest < Minitest::Test
 
   def test_tag_command_linux_mp3_comment_and_genre
     assert_equal ['eyeD3', '--remove-all-comments', '--comment', 'BPM=142',
-                  '--set-text-frame=TCON:BPM=142', 'a.mp3'],
+                  '--non-std-genres', '-G', 'BPM=142', 'a.mp3'],
                  @script.tag_command('a.mp3', 'BPM=142', fields: %w[comment genre], darwin: false)
   end
 
   def test_tag_command_linux_mp3_genre_only_omits_comment_args
-    assert_equal ['eyeD3', '--set-text-frame=TCON:BPM=142', 'a.mp3'],
+    assert_equal ['eyeD3', '--non-std-genres', '-G', 'BPM=142', 'a.mp3'],
                  @script.tag_command('a.mp3', 'BPM=142', fields: %w[genre], darwin: false)
   end
 
