@@ -19,13 +19,11 @@ class SetSongBpms
   MIN_SECTION_BEATS = 32
   SAMPLE_RATE = 22_050
 
-  # Tag fields the value can be written to, mapped to each backend's identifier: kid3-cli frame
-  # name (macOS, all formats), and ID3 text-frame id (eyeD3, mp3). For mutagen (m4a) the field name
-  # itself is passed through, since the atom mapping lives in TAG_PYTHON. Comment is special-cased
-  # per backend, so it has no ID3 frame here.
+  # Tag fields the value can be written to, mapped to kid3-cli frame names. For mutagen (m4a),
+  # the field name itself is passed through, since the atom mapping lives in TAG_PYTHON.
   FIELDS = {
-    'comment' => { kid3: 'comment', id3: nil },
-    'genre'   => { kid3: 'genre',   id3: 'TCON' },
+    'comment' => { kid3: 'comment' },
+    'genre'   => { kid3: 'genre' },
   }.freeze
   DEFAULT_FIELDS = %w[comment].freeze
 
@@ -151,8 +149,8 @@ class SetSongBpms
       # --remove-all-comments avoids stacking a second COMM frame next to an existing one with a
       # different language id, which would keep showing the old value in players.
       comment_args = fields.include?('comment') ? ['--remove-all-comments', '--comment', value] : []
-      frame_args = fields.filter_map { |field| "--set-text-frame=#{FIELDS[field][:id3]}:#{value}" if FIELDS[field][:id3] }
-      ['eyeD3', *comment_args, *frame_args, file]
+      genre_args = fields.include?('genre') ? ['--non-std-genres', '-G', value] : []
+      ['eyeD3', *comment_args, *genre_args, file]
     else
       ['/usr/bin/python3', '-c', TAG_PYTHON, file, value, *fields]
     end
