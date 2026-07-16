@@ -20,7 +20,8 @@ On execution, the script:
 - checks out the branch
 - runs the binary specified in the '$c_binary_path' file
 
-If the script is executed without arguments, all the branches, except main/master, are listed."
+If the script is executed without arguments, choose from all branches except main/master and
+branches prefixed with _wine."
 
 v_branch=
 
@@ -53,7 +54,12 @@ function decode_cmdline_args {
 #
 function list_branches {
   git for-each-ref --format='%(refname:short)' refs/heads/ \
-    | grep -vP '^(main|master)$'
+    | grep -vP '^(main|master)$|^_wine'
+}
+
+function choose_branch {
+  v_branch=$(list_branches | fzf) || return 1
+  [[ -n $v_branch ]]
 }
 
 function run_branch {
@@ -82,11 +88,11 @@ function main {
   cd "$WINEPREFIX"
 
   if [[ -z $v_branch ]]; then
-    list_branches
-  else
-    run_branch
-    wait_for_wine_to_exit
+    choose_branch || return 0
   fi
+
+  run_branch
+  wait_for_wine_to_exit
 }
 
 decode_cmdline_args "$@"
