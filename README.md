@@ -43,8 +43,8 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `meld`: wrapper around meld, that opens two blank panels, if no files are passed
   - `move_vsc_folder_top`: move a given VSC directory to the top position in a project
   - `prettify`: prettifies files; supports XML and JSON
+  - `publish_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
   - `rename_variables`: rename variables/constants with composite names
-  - `ship_gem`: ships a gem, performing all the maintenance operation (version increase, tag, build, push, ...)
   - `unpack_gem`: unpacks a gem, with additional operations like directory creation, gemspec extraction (when not present), etc.
 - system
   - `add_repo_key`: add a repository key, according to the parameters passed
