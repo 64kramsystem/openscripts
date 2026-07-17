@@ -167,8 +167,8 @@ class ConfigurationPreparer
 
   def address_lines(card)
     components = card[:adr].to_s.split(';').map { |component| component.gsub(/\\n/i, "\n") }
-    street, locality, region, postcode, country = components.values_at(2, 3, 4, 5, 6).map { |component| component || '' }
-    [card[:fn], street, locality, [region, postcode].reject(&:empty?).join(' '), country].reject(&:empty?)
+    po_box, extended_address, street, locality, region, postcode, country = components.values_at(0, 1, 2, 3, 4, 5, 6).map { |component| component || '' }
+    [card[:fn], po_box, extended_address, street, locality, [region, postcode].reject(&:empty?).join(' '), country].reject(&:empty?)
   end
 
   # The auto-managed `next_position` page state lives in the XDG state file (same
