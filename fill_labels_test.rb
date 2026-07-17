@@ -117,44 +117,210 @@ end
 
 class ConfigurationPreparerFindRecipientTest < Minitest::Test
   def setup
-    @book = {
-      "scrooge" => ["Scrooge McDuck", "McDuck Manor", "Duckburg", "Calisota"],
-      "homer"   => ["Homer Simpson", "742 Evergreen Terrace", "Springfield"],
-    }
+    @directory = Dir.mktmpdir('fill_labels_vcard_test')
+    @vcard_path = File.join(@directory, 'address_book.vcf')
+    # Fictional contacts only; never copy entries from a personal address book.
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Donald Duck
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Scrooge McDuck
+      NICKNAME:Uncle Scrooge
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Mickey Mouse
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Example Parcel Office
+      ADR:;;Beispielstraße\n 42;Duckburg;;00000;
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Huey Duckling
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Dewey Duckling
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Fixture Only
+      END:VCARD
+    VCARD
   end
 
-  def test_pattern_matches_book_key
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "scrooge", @book)
-    assert_equal @book["scrooge"], out
+  def teardown
+    FileUtils.rm_rf(@directory)
   end
 
-  def test_pattern_matches_first_address_line
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "homer simpson", @book)
-    assert_equal @book["homer"], out
+  def test_pattern_matches_fn
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Donald Duck", @vcard_path)
+    assert_equal ["Donald Duck"], out
   end
 
-  def test_pattern_is_case_insensitive
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "SCROOGE", @book)
-    assert_equal @book["scrooge"], out
+  def test_pattern_matches_nickname
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "uNcLe ScRoOgE", @vcard_path)
+    assert_equal ["Scrooge McDuck"], out
   end
 
-  def test_partial_pattern_matches
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "homer", @book)
-    assert_equal @book["homer"], out
+  def test_pattern_matches_case_insensitive_partial_fn
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "mIcKeY MoU", @vcard_path)
+    assert_equal ["Mickey Mouse"], out
+  end
+
+  def test_converts_adr_with_escaped_newline_and_empty_components
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Example Parcel Office", @vcard_path)
+    assert_equal ["Example Parcel Office", "Beispielstraße", " 42", "Duckburg 00000"], out
+  end
+
+  def test_search_uses_controlled_temporary_fixture
+    assert_equal ["Fixture Only"], ConfigurationPreparer.new.send(:find_recipient_address, "Fixture Only", @vcard_path)
+  end
+
+  def test_packs_full_address_into_four_lines_without_dropping_data
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Example Recipient
+      ADR:Postfach 42;c/o Reception\nSuite 5;Example Street 7;Berlin;Berlin;10115;Germany
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Example Recipient", @vcard_path)
+
+    assert_equal [
+      "Example Recipient",
+      "Postfach 42",
+      "c/o Reception, Suite 5, Example Street 7",
+      "Berlin Berlin 10115 Germany",
+    ], out
+  end
+
+  def test_unescapes_vcard_3_text_sequences
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Escaped\, Recipient
+      NICKNAME:escaped\;friend
+      ADR:;;12 Backslash\\ Alley\, Building\; A\nRear Door\NLoading Dock;;;;
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Escaped", @vcard_path)
+
+    assert_equal [
+      "Escaped, Recipient",
+      "12 Backslash\\ Alley, Building; A",
+      "Rear Door, Loading Dock",
+    ], out
+  end
+
+  def test_unescapes_nickname_text
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Nickname Recipient
+      NICKNAME:escaped\;friend
+      END:VCARD
+    VCARD
+
+    card = ConfigurationPreparer.new.send(:parse_vcards, @vcard_path).first
+
+    assert_equal "escaped;friend", card.fetch(:nickname)
+  end
+
+  def test_keeps_escaped_semicolon_in_single_adr_component
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Semicolon Recipient
+      ADR:;;Unit 2\; Rear;Dresden;Saxony;01067;Germany
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Semicolon Recipient", @vcard_path)
+
+    assert_equal ["Semicolon Recipient", "Unit 2; Rear", "Dresden Saxony 01067 Germany"], out
+  end
+
+  def test_prefers_home_adr_case_insensitively
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Home Recipient
+      ADR;TYPE=hOmE:;;1 Home Street;Home City;Home Region;11111;Home Country
+      ADR;TYPE=WORK:;;2 Work Street;Work City;Work Region;22222;Work Country
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Home Recipient", @vcard_path)
+
+    assert_equal ["Home Recipient", "1 Home Street", "Home City Home Region 11111 Home Country"], out
+  end
+
+  def test_falls_back_to_first_adr_when_home_absent
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Fallback Recipient
+      ADR;TYPE=WORK:;;1 First Street;First City;First Region;11111;First Country
+      ADR;TYPE=OTHER:;;2 Second Street;Second City;Second Region;22222;Second Country
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Fallback Recipient", @vcard_path)
+
+    assert_equal ["Fallback Recipient", "1 First Street", "First City First Region 11111 First Country"], out
+  end
+
+  def test_omits_empty_final_address_line
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Delivery Only
+      ADR:PO Box 9;Building A;Street 1;;;;
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Delivery Only", @vcard_path)
+
+    assert_equal ["Delivery Only", "PO Box 9", "Building A, Street 1"], out
+  end
+
+  def test_full_lookup_address_passes_renderer_line_limit
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Rendered Recipient
+      ADR:PO Box 5;North Wing\nThird Floor;5 Main Street;Leipzig;Saxony;04109;Germany
+      END:VCARD
+    VCARD
+
+    address = ConfigurationPreparer.new.send(:find_recipient_address, "Rendered Recipient", @vcard_path)
+
+    assert_operator address.length, :<=, 4
+    assert_equal address.length, address.join("\n").lines(chomp: true).length
+    FillLabels.new.send(:check_addresses!, ["Sender"], address)
   end
 
   def test_no_match_raises
-    assert_raises(RuntimeError) { ConfigurationPreparer.new.send(:find_recipient_address, "nobody", @book) }
+    assert_raises(RuntimeError) do
+      ConfigurationPreparer.new.send(:find_recipient_address, "nobody", @vcard_path)
+    end
   end
 
   def test_multiline_input_returned_as_is_without_lookup
     raw = "Manual Name\nLine 2\nLine 3"
-    out = ConfigurationPreparer.new.send(:find_recipient_address, raw, @book)
+    out = ConfigurationPreparer.new.send(:find_recipient_address, raw, @vcard_path)
     assert_equal ["Manual Name", "Line 2", "Line 3"], out
   end
 
   def test_multiple_matches_prompt_user_to_pick
-    book = @book.merge("scrooger_jr" => ["Scrooge Junior", "Other Manor", "Duckburg"])
     captured = nil
     fake_prompt = Object.new
     fake_prompt.define_singleton_method(:select) do |_msg, choices, **|
@@ -164,28 +330,123 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
     original_new = TTY::Prompt.method(:new)
     TTY::Prompt.define_singleton_method(:new) { fake_prompt }
     begin
-      out = ConfigurationPreparer.new.send(:find_recipient_address, "scrooge", book)
-      assert_equal book["scrooger_jr"], out
+      out = ConfigurationPreparer.new.send(:find_recipient_address, "duckling", @vcard_path)
+      assert_equal ["Dewey Duckling"], out
     ensure
       TTY::Prompt.define_singleton_method(:new, &original_new)
     end
     assert_equal 2, captured.size
-    assert(captured.keys.any? { |k| k.start_with?("scrooge:") })
-    assert(captured.keys.any? { |k| k.start_with?("scrooger_jr:") })
+    assert(captured.keys.any? { |k| k.include?("Huey Duckling") })
+    assert(captured.keys.any? { |k| k.include?("Dewey Duckling") })
+  end
+
+  def test_vcf_picker_displays_nickname_without_putting_it_in_the_address
+    captured = nil
+    fake_prompt = Object.new
+    fake_prompt.define_singleton_method(:select) do |_message, choices, **|
+      captured = choices
+      choices.fetch("Scrooge McDuck (Uncle Scrooge)")
+    end
+    original_new = TTY::Prompt.method(:new)
+    TTY::Prompt.define_singleton_method(:new) { fake_prompt }
+    begin
+      out = ConfigurationPreparer.new.send(:select_recipient_address, @vcard_path)
+      assert_equal ["Scrooge McDuck"], out
+    ensure
+      TTY::Prompt.define_singleton_method(:new, &original_new)
+    end
+    assert captured.key?("Scrooge McDuck (Uncle Scrooge)")
+    refute captured.keys.any? { |choice| choice.include?(':') }
+  end
+
+  private
+
+  def write_vcards(contents)
+    File.write(@vcard_path, contents)
   end
 end
 
-class FillLabelsModeDetectionTest < Minitest::Test
-  def test_newline_in_input_means_address_mode
-    assert_equal :address, FillLabels.new.send(:detect_mode, "Foo\nBar")
+
+class ConfigurationPreparerExecuteTest < Minitest::Test
+  def setup
+    @directory = Dir.mktmpdir('fill_labels_execute_test')
+    @config_path = File.join(@directory, 'fill_labels.ini')
+    @state_path = File.join(@directory, 'state.ini')
+    @vcard_path = File.join(@directory, 'address_book.vcf')
+    File.write(@config_path, <<~INI)
+      [defaults]
+      address = address_format
+      image   = image_format
+      sender  = Sender
+      address_book = #{@vcard_path}
+
+      [format.address_format]
+      type     = address
+      template = address_template
+
+      [format.image_format]
+      type           = image
+      template       = image_template
+      cols           = 2
+      rows           = 4
+      cell_width_mm  = 96.5
+      cell_height_mm = 67.7
+    INI
+    File.write(@vcard_path, <<~VCARD)
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Recipient
+      ADR:;;Street;Berlin;;12345;
+      END:VCARD
+    VCARD
   end
 
-  def test_dot_in_input_means_image_mode
-    assert_equal :image, FillLabels.new.send(:detect_mode, "/tmp/foo.png")
+  def teardown
+    FileUtils.rm_rf(@directory)
   end
 
-  def test_no_dot_no_newline_means_address_mode
-    assert_equal :address, FillLabels.new.send(:detect_mode, "scrooge")
+  def test_no_argument_uses_vcf_mode
+    with_prompt_selection do
+      _sender, recipient, _position, format, format_name = execute([])
+      assert_equal ["Recipient", "Street", "Berlin 12345"], recipient
+      assert_equal "address", format.fetch(:type)
+      assert_equal "address_format", format_name
+    end
+  end
+
+  def test_one_argument_uses_file_mode
+    File.write(@config_path, File.read(@config_path).sub(/.*address_book = .*\n/, ''))
+    _sender, image, _position, format, format_name = execute(["/tmp/label.png"])
+    assert_equal "/tmp/label.png", image
+    assert_equal "image", format.fetch(:type)
+    assert_equal "image_format", format_name
+  end
+
+  def test_address_mode_requires_configured_address_book
+    File.write(@config_path, File.read(@config_path).sub(/.*address_book = .*\n/, ''))
+
+    error = assert_raises(RuntimeError) { execute([]) }
+    assert_includes error.message, "Set address_book in [defaults] in #{@config_path}"
+  end
+
+  private
+
+  def execute(arguments)
+    ConfigurationPreparer.new.execute(
+      arguments: arguments,
+      config_path: @config_path,
+      state_path: @state_path
+    )
+  end
+
+  def with_prompt_selection
+    fake_prompt = Object.new
+    fake_prompt.define_singleton_method(:select) { |_message, choices, **| choices.values.first }
+    original_new = TTY::Prompt.method(:new)
+    TTY::Prompt.define_singleton_method(:new) { fake_prompt }
+    yield
+  ensure
+    TTY::Prompt.define_singleton_method(:new, &original_new)
   end
 end
 
@@ -292,6 +553,28 @@ class FillLabelsEnsureCleanupTest < Minitest::Test
   end
 end
 
+class FillLabelsCompressDirectoryTest < Minitest::Test
+  def setup
+    @directory = Dir.mktmpdir('fill_labels_zip_test')
+    @source = File.join(@directory, 'source')
+    @output = File.join(@directory, 'labels.odt')
+    FileUtils.mkdir_p(@source)
+    File.write(File.join(@source, 'content.xml'), '<document/>')
+  end
+
+  def teardown
+    FileUtils.rm_rf(@directory)
+  end
+
+  def test_creates_archive_with_directory_contents
+    FillLabels.new.send(:compress_directory, @source, @output)
+
+    Zip::File.open(@output) do |archive|
+      assert_equal '<document/>', archive.read('content.xml')
+    end
+  end
+end
+
 class ConfigurationPreparerLoadConfigTest < Minitest::Test
   def setup
     @config_path = "/tmp/fill_labels_test_#{Process.pid}.ini"
@@ -301,6 +584,7 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
       address = labelwonderland_es0010
       image   = topstick_8739
       sender  = Donald Duck:1313 Webfoot Walk:Duckburg
+      address_book = ~/contacts.vcf
 
       [format.labelwonderland_es0010]
       type          = address
@@ -314,9 +598,6 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
       cell_width_mm  = 96.5
       cell_height_mm = 67.7
 
-      [address_book]
-      scrooge = Scrooge McDuck:McDuck Manor:Duckburg:Calisota
-      homer   = Homer Simpson:742 Evergreen Terrace:Springfield
     INI
     File.write(@state_path, <<~INI)
       [format.labelwonderland_es0010]
@@ -355,13 +636,6 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
     assert_in_delta 67.7,         img.fetch(:cell_height_mm), 0.001
   end
 
-  def test_loads_address_book_as_split_lines
-    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
-    book = cfg.fetch(:address_book)
-    assert_equal ["Scrooge McDuck", "McDuck Manor", "Duckburg", "Calisota"], book["scrooge"]
-    assert_equal ["Homer Simpson", "742 Evergreen Terrace", "Springfield"],   book["homer"]
-  end
-
   def test_merges_next_position_from_state_file
     cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     assert_equal 5, cfg.fetch(:formats).fetch("labelwonderland_es0010").fetch(:next_position)
@@ -370,6 +644,11 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
   def test_next_position_absent_when_not_in_state_file
     cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     refute cfg.fetch(:formats).fetch("topstick_8739").key?(:next_position)
+  end
+
+  def test_loads_address_book_from_defaults
+    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
+    assert_equal "~/contacts.vcf", cfg.fetch(:address_book)
   end
 end
 

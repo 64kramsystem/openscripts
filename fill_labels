@@ -20,22 +20,13 @@ class ConfigurationPreparer
     When omitted, the active format's `next_position` from the state file is used; after a
     successful run, `next_position` is advanced past the labels just used.
 
-    The mode is auto-detected from the <recipient> argument:
-      - contains a newline -> multi-line address (used verbatim, 1-4 lines)
-      - contains a dot     -> image file path (PNG only)
-      - otherwise          -> address-book key/pattern (case-insensitive search of
-                              keys and first address line; single match returns
-                              directly, multiple matches prompt interactively)
-
-    Address-book keys MUST NOT contain dots, since a single-line input containing a
-    dot is interpreted as an image path. Multi-line addresses passed verbatim may
-    contain anything (the newline triggers address mode before the dot is examined).
+    With no <file>, select a recipient from the vCard address book. With <file>,
+    prepare image labels from that PNG file.
 
     The configuration is stored in the `$HOME/.fill_labels` file as a sectioned INI.
     [defaults] selects the active format names per mode and the sender address (colon-separated, up to 3 lines).
+    Its `address_book` sets the vCard file path (required for address labels; `~` is expanded).
     [format.<name>] sections declare each format: `type` is `address` or `image`; image formats add cols/rows and cell_width_mm/cell_height_mm.
-    [address_book] maps a key to a colon-separated recipient address (1-4 lines).
-
     The auto-managed `next_position` page state is kept out of the config, in the
     `$XDG_STATE_HOME/fill_labels` file (sharing the `[format.<name>]` INI layout).
 
@@ -45,6 +36,7 @@ class ConfigurationPreparer
       address = labelwonderland_es0010
       image   = topstick_8739
       sender  = Donald Duck:1313 Webfoot Walk:Duckburg
+      address_book = ~/contacts.vcf
 
       [format.labelwonderland_es0010]
       type          = address
@@ -58,34 +50,31 @@ class ConfigurationPreparer
       cell_width_mm  = 96.5
       cell_height_mm = 67.7
 
-      [address_book]
-      scrooge = Scrooge McDuck:McDuck Manor:Duckburg:Calisota
-      homer   = Homer Simpson:742 Evergreen Terrace:Springfield
-
   HELP
 
-  def execute
+  def execute(arguments: ARGV, config_path: CONFIG_PATH, state_path: STATE_PATH)
     options = SimpleScripting::Argv.decode(
       ['-p', '--position POSITION', 'Label position (default: per-format next_position from config)'],
-      "recipient",
-      long_help: LONG_HELP
+      '[file]',
+      long_help: LONG_HELP,
+      arguments: arguments
     ) || exit
 
-    raw_input = options.fetch(:recipient)
-
-    cfg  = load_config
-    mode = FillLabels.new.send(:detect_mode, raw_input)
+    file = options[:file]
+    cfg  = load_config(config_path, state_path)
+    mode = file ? :image : :address
 
     format_name = cfg.fetch(:defaults).fetch(mode)
     format      = cfg.fetch(:formats).fetch(format_name)
 
     label_position = options[:position] || format.fetch(:next_position, 0).to_s
 
-    recipient_or_image =
-      case mode
-      when :address then find_recipient_address(raw_input, cfg.fetch(:address_book))
-      when :image   then raw_input
-      end
+    recipient_or_image = file || begin
+      address_book = cfg.fetch(:address_book)
+      raise "Set address_book in [defaults] in #{config_path}" if address_book.to_s.strip.empty?
+
+      select_recipient_address(File.expand_path(address_book))
+    end
 
     [cfg.fetch(:sender), recipient_or_image, label_position, format, format_name]
   end
@@ -121,27 +110,124 @@ class ConfigurationPreparer
     {
       defaults:     { address: defaults_raw['address'], image: defaults_raw['image'] },
       sender:       defaults_raw['sender'].split(':'),
+      address_book: defaults_raw['address_book'],
       formats:      formats,
-      address_book: raw['address_book'].each_with_object({}) { |(k, v), h| h[k] = v.split(':') },
     }
   end
 
-  def find_recipient_address(raw_recipient, address_book)
+  def find_recipient_address(raw_recipient, vcard_path)
     recipient_address = raw_recipient.split("\n")
     return recipient_address if recipient_address.size > 1
 
     pattern = raw_recipient.downcase
 
-    matches = address_book.select do |key, address_lines|
-      key.downcase.include?(pattern) || address_lines[0].downcase.include?(pattern)
-    end
+    matches = recipient_matches(vcard_path, pattern)
 
     raise "Recipient (pattern) not found" if matches.empty?
-    return matches.values.first                if matches.size == 1
+    return matches.first[:address] if matches.size == 1
 
+    prompt_for_recipient(matches)
+  end
+
+  def select_recipient_address(vcard_path)
+    matches = recipient_matches(vcard_path)
+    raise "No recipients found" if matches.empty?
+
+    prompt_for_recipient(matches)
+  end
+
+  def recipient_matches(vcard_path, pattern = nil)
+    parse_vcards(vcard_path).filter_map do |card|
+      name = card[:fn].to_s
+      nickname = card[:nickname].to_s
+      next if pattern && !name.downcase.include?(pattern) && !nickname.downcase.include?(pattern)
+
+      { name: name, nickname: nickname, address: address_lines(card) }
+    end
+  end
+
+  def prompt_for_recipient(matches)
     require 'tty-prompt'
-    choices = matches.each_with_object({}) { |(key, lines), h| h["#{key}: #{lines.join(', ')}"] = lines }
+    choices = matches.each_with_object({}) do |match, result|
+      nickname = match[:nickname]
+      display_name = nickname.empty? ? match[:name] : "#{match[:name]} (#{nickname})"
+      result[[display_name, *match[:address].drop(1)].join(', ')] = match[:address]
+    end
     TTY::Prompt.new.select("Pick recipient:", choices, filter: true)
+  end
+
+  def parse_vcards(path)
+    unfolded_lines = File.readlines(path, chomp: true).each_with_object([]) do |line, lines|
+      line.start_with?(' ', "\t") ? lines[-1] << line[1..] : lines << line
+    end
+
+    cards = []
+    card = nil
+    unfolded_lines.each do |line|
+      case line
+      when 'BEGIN:VCARD' then card = { adrs: [] }
+      when 'END:VCARD'   then cards << card if card
+      else
+        next unless card && line.include?(':')
+
+        field, value = line.split(':', 2)
+        property, *parameters = field.split(';')
+        case property.upcase
+        when 'FN'       then card[:fn] = unescape_vcard_text(value)
+        when 'NICKNAME' then card[:nickname] = unescape_vcard_text(value)
+        when 'ADR'      then card[:adrs] << { parameters: parameters, value: value }
+        end
+      end
+    end
+    cards
+  end
+
+  def address_lines(card)
+    addresses = card.fetch(:adrs, [])
+    address = addresses.find { |candidate| home_address?(candidate) } || addresses.first
+    components = split_adr_components(address&.fetch(:value, '').to_s).map { |component| unescape_vcard_text(component) }
+    po_box, extended_address, street, locality, region, postcode, country = components.values_at(0, 1, 2, 3, 4, 5, 6).map { |component| component || '' }
+
+    delivery_fragments = [po_box, extended_address, street].flat_map { |component| component.split("\n", -1) }.reject(&:empty?)
+    delivery_lines = if delivery_fragments.size <= 2
+                       delivery_fragments
+                     else
+                       [delivery_fragments.first, delivery_fragments.drop(1).join(', ')]
+                     end
+
+    final_line = [locality, region, postcode, country]
+      .flat_map { |component| component.split("\n", -1) }
+      .reject(&:empty?)
+      .join(' ')
+    name_line = card[:fn].to_s.split("\n", -1).reject(&:empty?).join(' ')
+
+    [name_line, *delivery_lines, final_line].reject(&:empty?)
+  end
+
+  def split_adr_components(value)
+    components = [String.new]
+    backslash_count = 0
+
+    value.each_char do |character|
+      character == ';' && backslash_count.even? ? components << String.new : components.last << character
+      backslash_count = character == '\\' ? backslash_count + 1 : 0
+    end
+
+    components
+  end
+
+  def unescape_vcard_text(value)
+    value.gsub(/\\([\\,;nN])/) do
+      escaped_character = Regexp.last_match(1)
+      escaped_character.match?(/[nN]/) ? "\n" : escaped_character
+    end
+  end
+
+  def home_address?(address)
+    address.fetch(:parameters).any? do |parameter|
+      name, value = parameter.split('=', 2)
+      name.casecmp?('TYPE') && value.to_s.split(',').any? { |type| type.casecmp?('HOME') }
+    end
   end
 
   # The auto-managed `next_position` page state lives in the XDG state file (same
@@ -187,12 +273,6 @@ class FillLabels
   end
 
   private
-
-  def detect_mode(raw_input)
-    return :address if raw_input.include?("\n")
-    return :image   if raw_input.include?(".")
-    :address
-  end
 
   def fill_address(sender_address, recipient_address, raw_label_positions, format, debug:)
     template_dir  = File.join(TEMPLATES_ROOT, format.fetch(:template))
@@ -357,7 +437,7 @@ class FillLabels
   end
 
   def compress_directory(directory, zipfile_name, ignore: [], rename: {}, debug: false)
-    Zip::File.open(zipfile_name, Zip::File::CREATE) do |zipfile|
+    Zip::File.open(zipfile_name, create: true) do |zipfile|
       raw_input_filenames = find_all_directory_files(directory)
 
       raw_input_filenames.each do |raw_filename|
