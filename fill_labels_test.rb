@@ -490,10 +490,6 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
       cell_width_mm  = 96.5
       cell_height_mm = 67.7
 
-      [address_book]
-      scrooge = Scrooge McDuck:McDuck Manor:Duckburg:Calisota
-      homer   = Homer Simpson:742 Evergreen Terrace:Springfield
-
     INI
     File.write(@state_path, <<~INI)
       [format.labelwonderland_es0010]
@@ -542,6 +538,10 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
     refute cfg.fetch(:formats).fetch("topstick_8739").key?(:next_position)
   end
 
+  def test_does_not_expose_address_book
+    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
+    refute cfg.key?(:address_book)
+  end
 end
 
 class ConfigurationPreparerStateFileTest < Minitest::Test
