@@ -12,6 +12,7 @@ require_relative 'helpers/system_helper'
 class ConfigurationPreparer
   CONFIG_PATH = File.expand_path('~/.fill_labels')
   STATE_PATH  = File.join(ENV['XDG_STATE_HOME'] || File.expand_path('~/.local/state'), 'fill_labels')
+  ADDRESS_BOOK_PATH = File.expand_path('~/saver/address_book.saversolve.vcf')
 
   LONG_HELP = <<~HELP
     Prepare an OpenDocument with addresses or images on a standard A4 sticker sheet.
@@ -23,19 +24,17 @@ class ConfigurationPreparer
     The mode is auto-detected from the <recipient> argument:
       - contains a newline -> multi-line address (used verbatim, 1-4 lines)
       - contains a dot     -> image file path (PNG only)
-      - otherwise          -> address-book key/pattern (case-insensitive search of
-                              keys and first address line; single match returns
-                              directly, multiple matches prompt interactively)
+      - otherwise          -> address-book name/nickname pattern (case-insensitive
+                              substring search; single match returns directly,
+                              multiple matches prompt interactively)
 
-    Address-book keys MUST NOT contain dots, since a single-line input containing a
+    A single-line recipient pattern MUST NOT contain dots, since input containing a
     dot is interpreted as an image path. Multi-line addresses passed verbatim may
     contain anything (the newline triggers address mode before the dot is examined).
 
     The configuration is stored in the `$HOME/.fill_labels` file as a sectioned INI.
     [defaults] selects the active format names per mode and the sender address (colon-separated, up to 3 lines).
     [format.<name>] sections declare each format: `type` is `address` or `image`; image formats add cols/rows and cell_width_mm/cell_height_mm.
-    [address_book] maps a key to a colon-separated recipient address (1-4 lines).
-
     The auto-managed `next_position` page state is kept out of the config, in the
     `$XDG_STATE_HOME/fill_labels` file (sharing the `[format.<name>]` INI layout).
 
@@ -58,10 +57,6 @@ class ConfigurationPreparer
       cell_width_mm  = 96.5
       cell_height_mm = 67.7
 
-      [address_book]
-      scrooge = Scrooge McDuck:McDuck Manor:Duckburg:Calisota
-      homer   = Homer Simpson:742 Evergreen Terrace:Springfield
-
   HELP
 
   def execute
@@ -83,7 +78,7 @@ class ConfigurationPreparer
 
     recipient_or_image =
       case mode
-      when :address then find_recipient_address(raw_input, cfg.fetch(:address_book))
+      when :address then find_recipient_address(raw_input, ADDRESS_BOOK_PATH)
       when :image   then raw_input
       end
 
@@ -122,26 +117,58 @@ class ConfigurationPreparer
       defaults:     { address: defaults_raw['address'], image: defaults_raw['image'] },
       sender:       defaults_raw['sender'].split(':'),
       formats:      formats,
-      address_book: raw['address_book'].each_with_object({}) { |(k, v), h| h[k] = v.split(':') },
     }
   end
 
-  def find_recipient_address(raw_recipient, address_book)
+  def find_recipient_address(raw_recipient, vcard_path)
     recipient_address = raw_recipient.split("\n")
     return recipient_address if recipient_address.size > 1
 
     pattern = raw_recipient.downcase
 
-    matches = address_book.select do |key, address_lines|
-      key.downcase.include?(pattern) || address_lines[0].downcase.include?(pattern)
+    matches = parse_vcards(vcard_path).filter_map do |card|
+      name = card[:fn].to_s
+      nickname = card[:nickname].to_s
+      { name: name, address: address_lines(card) } if name.downcase.include?(pattern) || nickname.downcase.include?(pattern)
     end
 
     raise "Recipient (pattern) not found" if matches.empty?
-    return matches.values.first                if matches.size == 1
+    return matches.first[:address]             if matches.size == 1
 
     require 'tty-prompt'
-    choices = matches.each_with_object({}) { |(key, lines), h| h["#{key}: #{lines.join(', ')}"] = lines }
+    choices = matches.each_with_object({}) { |match, h| h["#{match[:name]}: #{match[:address].join(', ')}"] = match[:address] }
     TTY::Prompt.new.select("Pick recipient:", choices, filter: true)
+  end
+
+  def parse_vcards(path)
+    unfolded_lines = File.readlines(path, chomp: true).each_with_object([]) do |line, lines|
+      line.start_with?(' ', "\t") ? lines[-1] << line[1..] : lines << line
+    end
+
+    cards = []
+    card = nil
+    unfolded_lines.each do |line|
+      case line
+      when 'BEGIN:VCARD' then card = {}
+      when 'END:VCARD'   then cards << card if card
+      else
+        next unless card && line.include?(':')
+
+        field, value = line.split(':', 2)
+        case field.split(';', 2).first.upcase
+        when 'FN'       then card[:fn] = value
+        when 'NICKNAME' then card[:nickname] = value
+        when 'ADR'      then card[:adr] = value
+        end
+      end
+    end
+    cards
+  end
+
+  def address_lines(card)
+    components = card[:adr].to_s.split(';').map { |component| component.gsub(/\\n/i, "\n") }
+    street, locality, region, postcode, country = components.values_at(2, 3, 4, 5, 6).map { |component| component || '' }
+    [card[:fn], street, locality, [region, postcode].reject(&:empty?).join(' '), country].reject(&:empty?)
   end
 
   # The auto-managed `next_position` page state lives in the XDG state file (same
