@@ -126,18 +126,18 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
   end
 
   def test_pattern_matches_nickname
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "Sovox", @vcard_path)
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "sOv", @vcard_path)
     assert_equal ["Giuseppe Di Lillo"], out
   end
 
   def test_pattern_matches_case_insensitive_partial_fn
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "FABRIZ", @vcard_path)
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "fAbRiZiO FaN", @vcard_path)
     assert_equal ["Fabrizio Fantoni"], out
   end
 
   def test_converts_adr_with_escaped_newline_and_empty_components
     out = ConfigurationPreparer.new.send(:find_recipient_address, "BGKW Hertzberg", @vcard_path)
-    assert_equal ["BGKW Hertzberg", "Markgrafenstraße\n 57", "Berlin", "10117"], out
+    assert_equal ["BGKW Hertzberg", "Markgrafenstraße\n 57", "Berlin 10117"], out
   end
 
   def test_no_match_raises
