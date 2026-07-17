@@ -117,44 +117,42 @@ end
 
 class ConfigurationPreparerFindRecipientTest < Minitest::Test
   def setup
-    @book = {
-      "scrooge" => ["Scrooge McDuck", "McDuck Manor", "Duckburg", "Calisota"],
-      "homer"   => ["Homer Simpson", "742 Evergreen Terrace", "Springfield"],
-    }
+    @vcard_path = "/home/saverio/saver/address_book.saversolve.vcf"
   end
 
-  def test_pattern_matches_book_key
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "scrooge", @book)
-    assert_equal @book["scrooge"], out
+  def test_pattern_matches_fn
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Benoit Bovy", @vcard_path)
+    assert_equal ["Benoit Bovy"], out
   end
 
-  def test_pattern_matches_first_address_line
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "homer simpson", @book)
-    assert_equal @book["homer"], out
+  def test_pattern_matches_nickname
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Sovox", @vcard_path)
+    assert_equal ["Giuseppe Di Lillo"], out
   end
 
-  def test_pattern_is_case_insensitive
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "SCROOGE", @book)
-    assert_equal @book["scrooge"], out
+  def test_pattern_matches_case_insensitive_partial_fn
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "FABRIZ", @vcard_path)
+    assert_equal ["Fabrizio Fantoni"], out
   end
 
-  def test_partial_pattern_matches
-    out = ConfigurationPreparer.new.send(:find_recipient_address, "homer", @book)
-    assert_equal @book["homer"], out
+  def test_converts_adr_with_escaped_newline_and_empty_components
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "BGKW Hertzberg", @vcard_path)
+    assert_equal ["BGKW Hertzberg", "Markgrafenstraße\n 57", "Berlin", "10117"], out
   end
 
   def test_no_match_raises
-    assert_raises(RuntimeError) { ConfigurationPreparer.new.send(:find_recipient_address, "nobody", @book) }
+    assert_raises(RuntimeError) do
+      ConfigurationPreparer.new.send(:find_recipient_address, "nobody", @vcard_path)
+    end
   end
 
   def test_multiline_input_returned_as_is_without_lookup
     raw = "Manual Name\nLine 2\nLine 3"
-    out = ConfigurationPreparer.new.send(:find_recipient_address, raw, @book)
+    out = ConfigurationPreparer.new.send(:find_recipient_address, raw, @vcard_path)
     assert_equal ["Manual Name", "Line 2", "Line 3"], out
   end
 
   def test_multiple_matches_prompt_user_to_pick
-    book = @book.merge("scrooger_jr" => ["Scrooge Junior", "Other Manor", "Duckburg"])
     captured = nil
     fake_prompt = Object.new
     fake_prompt.define_singleton_method(:select) do |_msg, choices, **|
@@ -164,14 +162,14 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
     original_new = TTY::Prompt.method(:new)
     TTY::Prompt.define_singleton_method(:new) { fake_prompt }
     begin
-      out = ConfigurationPreparer.new.send(:find_recipient_address, "scrooge", book)
-      assert_equal book["scrooger_jr"], out
+      out = ConfigurationPreparer.new.send(:find_recipient_address, "taurus", @vcard_path)
+      assert_equal ["Anton Taurus"], out
     ensure
       TTY::Prompt.define_singleton_method(:new, &original_new)
     end
     assert_equal 2, captured.size
-    assert(captured.keys.any? { |k| k.start_with?("scrooge:") })
-    assert(captured.keys.any? { |k| k.start_with?("scrooger_jr:") })
+    assert(captured.keys.any? { |k| k.include?("Filippo Taurus") })
+    assert(captured.keys.any? { |k| k.include?("Anton Taurus") })
   end
 end
 
@@ -353,13 +351,6 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
     assert_equal 4,               img.fetch(:rows)
     assert_in_delta 96.5,         img.fetch(:cell_width_mm),  0.001
     assert_in_delta 67.7,         img.fetch(:cell_height_mm), 0.001
-  end
-
-  def test_loads_address_book_as_split_lines
-    cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
-    book = cfg.fetch(:address_book)
-    assert_equal ["Scrooge McDuck", "McDuck Manor", "Duckburg", "Calisota"], book["scrooge"]
-    assert_equal ["Homer Simpson", "742 Evergreen Terrace", "Springfield"],   book["homer"]
   end
 
   def test_merges_next_position_from_state_file
