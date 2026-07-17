@@ -140,6 +140,30 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
     assert_equal ["BGKW Hertzberg", "Markgrafenstraße\n 57", "Berlin 10117"], out
   end
 
+  def test_keeps_po_box_and_extended_address_from_vcard
+    Dir.mktmpdir do |directory|
+      vcard_path = File.join(directory, "address_book.vcf")
+      File.write(vcard_path, <<~VCARD)
+        BEGIN:VCARD
+        FN:Example Recipient
+        ADR:Postfach 42;c/o Reception\\nSuite 5;Example Street 7;Berlin;Berlin;10115;Germany
+        END:VCARD
+      VCARD
+
+      out = ConfigurationPreparer.new.send(:find_recipient_address, "Example Recipient", vcard_path)
+
+      assert_equal [
+        "Example Recipient",
+        "Postfach 42",
+        "c/o Reception\nSuite 5",
+        "Example Street 7",
+        "Berlin",
+        "Berlin 10115",
+        "Germany",
+      ], out
+    end
+  end
+
   def test_no_match_raises
     assert_raises(RuntimeError) do
       ConfigurationPreparer.new.send(:find_recipient_address, "nobody", @vcard_path)
