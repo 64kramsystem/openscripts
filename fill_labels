@@ -21,16 +21,8 @@ class ConfigurationPreparer
     When omitted, the active format's `next_position` from the state file is used; after a
     successful run, `next_position` is advanced past the labels just used.
 
-    The mode is auto-detected from the <recipient> argument:
-      - contains a newline -> multi-line address (used verbatim, 1-4 lines)
-      - contains a dot     -> image file path (PNG only)
-      - otherwise          -> address-book name/nickname pattern (case-insensitive
-                              substring search; single match returns directly,
-                              multiple matches prompt interactively)
-
-    A single-line recipient pattern MUST NOT contain dots, since input containing a
-    dot is interpreted as an image path. Multi-line addresses passed verbatim may
-    contain anything (the newline triggers address mode before the dot is examined).
+    With no <file>, select a recipient from the vCard address book. With <file>,
+    prepare image labels from that PNG file.
 
     The configuration is stored in the `$HOME/.fill_labels` file as a sectioned INI.
     [defaults] selects the active format names per mode and the sender address (colon-separated, up to 3 lines).
@@ -59,28 +51,24 @@ class ConfigurationPreparer
 
   HELP
 
-  def execute
+  def execute(arguments: ARGV, config_path: CONFIG_PATH, state_path: STATE_PATH, address_book_path: ADDRESS_BOOK_PATH)
     options = SimpleScripting::Argv.decode(
       ['-p', '--position POSITION', 'Label position (default: per-format next_position from config)'],
-      "recipient",
-      long_help: LONG_HELP
+      '[file]',
+      long_help: LONG_HELP,
+      arguments: arguments
     ) || exit
 
-    raw_input = options.fetch(:recipient)
-
-    cfg  = load_config
-    mode = FillLabels.new.send(:detect_mode, raw_input)
+    file = options[:file]
+    cfg  = load_config(config_path, state_path)
+    mode = file ? :image : :address
 
     format_name = cfg.fetch(:defaults).fetch(mode)
     format      = cfg.fetch(:formats).fetch(format_name)
 
     label_position = options[:position] || format.fetch(:next_position, 0).to_s
 
-    recipient_or_image =
-      case mode
-      when :address then find_recipient_address(raw_input, ADDRESS_BOOK_PATH)
-      when :image   then raw_input
-      end
+    recipient_or_image = file || select_recipient_address(address_book_path)
 
     [cfg.fetch(:sender), recipient_or_image, label_position, format, format_name]
   end
@@ -126,17 +114,38 @@ class ConfigurationPreparer
 
     pattern = raw_recipient.downcase
 
-    matches = parse_vcards(vcard_path).filter_map do |card|
-      name = card[:fn].to_s
-      nickname = card[:nickname].to_s
-      { name: name, address: address_lines(card) } if name.downcase.include?(pattern) || nickname.downcase.include?(pattern)
-    end
+    matches = recipient_matches(vcard_path, pattern)
 
     raise "Recipient (pattern) not found" if matches.empty?
-    return matches.first[:address]             if matches.size == 1
+    return matches.first[:address] if matches.size == 1
 
+    prompt_for_recipient(matches)
+  end
+
+  def select_recipient_address(vcard_path)
+    matches = recipient_matches(vcard_path)
+    raise "No recipients found" if matches.empty?
+
+    prompt_for_recipient(matches)
+  end
+
+  def recipient_matches(vcard_path, pattern = nil)
+    parse_vcards(vcard_path).filter_map do |card|
+      name = card[:fn].to_s
+      nickname = card[:nickname].to_s
+      next if pattern && !name.downcase.include?(pattern) && !nickname.downcase.include?(pattern)
+
+      { name: name, nickname: nickname, address: address_lines(card) }
+    end
+  end
+
+  def prompt_for_recipient(matches)
     require 'tty-prompt'
-    choices = matches.each_with_object({}) { |match, h| h["#{match[:name]}: #{match[:address].join(', ')}"] = match[:address] }
+    choices = matches.each_with_object({}) do |match, result|
+      nickname = match[:nickname]
+      display_name = nickname.empty? ? match[:name] : "#{match[:name]} (#{nickname})"
+      result[[display_name, *match[:address].drop(1)].join(', ')] = match[:address]
+    end
     TTY::Prompt.new.select("Pick recipient:", choices, filter: true)
   end
 
@@ -257,12 +266,6 @@ class FillLabels
   end
 
   private
-
-  def detect_mode(raw_input)
-    return :address if raw_input.include?("\n")
-    return :image   if raw_input.include?(".")
-    :address
-  end
 
   def fill_address(sender_address, recipient_address, raw_label_positions, format, debug:)
     template_dir  = File.join(TEMPLATES_ROOT, format.fetch(:template))

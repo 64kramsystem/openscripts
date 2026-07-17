@@ -344,6 +344,25 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
     assert(captured.keys.any? { |k| k.include?("Anton Taurus") })
   end
 
+  def test_vcf_picker_displays_nickname_without_putting_it_in_the_address
+    captured = nil
+    fake_prompt = Object.new
+    fake_prompt.define_singleton_method(:select) do |_message, choices, **|
+      captured = choices
+      choices.fetch("Giuseppe Di Lillo (Sov)")
+    end
+    original_new = TTY::Prompt.method(:new)
+    TTY::Prompt.define_singleton_method(:new) { fake_prompt }
+    begin
+      out = ConfigurationPreparer.new.send(:select_recipient_address, @vcard_path)
+      assert_equal ["Giuseppe Di Lillo"], out
+    ensure
+      TTY::Prompt.define_singleton_method(:new, &original_new)
+    end
+    assert captured.key?("Giuseppe Di Lillo (Sov)")
+    refute captured.keys.any? { |choice| choice.include?(':') }
+  end
+
   private
 
   def write_vcards(contents)
@@ -351,17 +370,79 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
   end
 end
 
-class FillLabelsModeDetectionTest < Minitest::Test
-  def test_newline_in_input_means_address_mode
-    assert_equal :address, FillLabels.new.send(:detect_mode, "Foo\nBar")
+
+class ConfigurationPreparerExecuteTest < Minitest::Test
+  def setup
+    @directory = Dir.mktmpdir('fill_labels_execute_test')
+    @config_path = File.join(@directory, 'fill_labels.ini')
+    @state_path = File.join(@directory, 'state.ini')
+    @vcard_path = File.join(@directory, 'address_book.vcf')
+    File.write(@config_path, <<~INI)
+      [defaults]
+      address = address_format
+      image   = image_format
+      sender  = Sender
+
+      [format.address_format]
+      type     = address
+      template = address_template
+
+      [format.image_format]
+      type           = image
+      template       = image_template
+      cols           = 2
+      rows           = 4
+      cell_width_mm  = 96.5
+      cell_height_mm = 67.7
+    INI
+    File.write(@vcard_path, <<~VCARD)
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Recipient
+      ADR:;;Street;Berlin;;12345;
+      END:VCARD
+    VCARD
   end
 
-  def test_dot_in_input_means_image_mode
-    assert_equal :image, FillLabels.new.send(:detect_mode, "/tmp/foo.png")
+  def teardown
+    FileUtils.rm_rf(@directory)
   end
 
-  def test_no_dot_no_newline_means_address_mode
-    assert_equal :address, FillLabels.new.send(:detect_mode, "scrooge")
+  def test_no_argument_uses_vcf_mode
+    with_prompt_selection do
+      _sender, recipient, _position, format, format_name = execute([])
+      assert_equal ["Recipient", "Street", "Berlin 12345"], recipient
+      assert_equal "address", format.fetch(:type)
+      assert_equal "address_format", format_name
+    end
+  end
+
+  def test_one_argument_uses_file_mode
+    _sender, image, _position, format, format_name = execute(["/tmp/label.png"])
+    assert_equal "/tmp/label.png", image
+    assert_equal "image", format.fetch(:type)
+    assert_equal "image_format", format_name
+  end
+
+  private
+
+  def execute(arguments)
+    ConfigurationPreparer.new.execute(
+      arguments: arguments,
+      config_path: @config_path,
+      state_path: @state_path,
+      address_book_path: @vcard_path
+    )
+  end
+
+  def with_prompt_selection
+    fake_prompt = Object.new
+    fake_prompt.define_singleton_method(:select) { |_message, choices, **| choices.values.first }
+    original_new = TTY::Prompt.method(:new)
+    TTY::Prompt.define_singleton_method(:new) { fake_prompt }
+    yield
+  ensure
+    TTY::Prompt.define_singleton_method(:new, &original_new)
   end
 end
 
