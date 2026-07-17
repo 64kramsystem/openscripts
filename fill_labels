@@ -149,16 +149,17 @@ class ConfigurationPreparer
     card = nil
     unfolded_lines.each do |line|
       case line
-      when 'BEGIN:VCARD' then card = {}
+      when 'BEGIN:VCARD' then card = { adrs: [] }
       when 'END:VCARD'   then cards << card if card
       else
         next unless card && line.include?(':')
 
         field, value = line.split(':', 2)
-        case field.split(';', 2).first.upcase
-        when 'FN'       then card[:fn] = value
-        when 'NICKNAME' then card[:nickname] = value
-        when 'ADR'      then card[:adr] = value
+        property, *parameters = field.split(';')
+        case property.upcase
+        when 'FN'       then card[:fn] = unescape_vcard_text(value)
+        when 'NICKNAME' then card[:nickname] = unescape_vcard_text(value)
+        when 'ADR'      then card[:adrs] << { parameters: parameters, value: value }
         end
       end
     end
@@ -166,9 +167,51 @@ class ConfigurationPreparer
   end
 
   def address_lines(card)
-    components = card[:adr].to_s.split(';').map { |component| component.gsub(/\\n/i, "\n") }
+    addresses = card.fetch(:adrs, [])
+    address = addresses.find { |candidate| home_address?(candidate) } || addresses.first
+    components = split_adr_components(address&.fetch(:value, '').to_s).map { |component| unescape_vcard_text(component) }
     po_box, extended_address, street, locality, region, postcode, country = components.values_at(0, 1, 2, 3, 4, 5, 6).map { |component| component || '' }
-    [card[:fn], po_box, extended_address, street, locality, [region, postcode].reject(&:empty?).join(' '), country].reject(&:empty?)
+
+    delivery_fragments = [po_box, extended_address, street].flat_map { |component| component.split("\n", -1) }.reject(&:empty?)
+    delivery_lines = if delivery_fragments.size <= 2
+                       delivery_fragments
+                     else
+                       [delivery_fragments.first, delivery_fragments.drop(1).join(', ')]
+                     end
+
+    final_line = [locality, region, postcode, country]
+      .flat_map { |component| component.split("\n", -1) }
+      .reject(&:empty?)
+      .join(' ')
+    name_line = card[:fn].to_s.split("\n", -1).reject(&:empty?).join(' ')
+
+    [name_line, *delivery_lines, final_line].reject(&:empty?)
+  end
+
+  def split_adr_components(value)
+    components = [String.new]
+    backslash_count = 0
+
+    value.each_char do |character|
+      character == ';' && backslash_count.even? ? components << String.new : components.last << character
+      backslash_count = character == '\\' ? backslash_count + 1 : 0
+    end
+
+    components
+  end
+
+  def unescape_vcard_text(value)
+    value.gsub(/\\([\\,;nN])/) do
+      escaped_character = Regexp.last_match(1)
+      escaped_character.match?(/[nN]/) ? "\n" : escaped_character
+    end
+  end
+
+  def home_address?(address)
+    address.fetch(:parameters).any? do |parameter|
+      name, value = parameter.split('=', 2)
+      name.casecmp?('TYPE') && value.to_s.split(',').any? { |type| type.casecmp?('HOME') }
+    end
   end
 
   # The auto-managed `next_position` page state lives in the XDG state file (same
