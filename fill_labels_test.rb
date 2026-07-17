@@ -117,7 +117,44 @@ end
 
 class ConfigurationPreparerFindRecipientTest < Minitest::Test
   def setup
-    @vcard_path = "/home/saverio/saver/address_book.saversolve.vcf"
+    @directory = Dir.mktmpdir('fill_labels_vcard_test')
+    @vcard_path = File.join(@directory, 'address_book.vcf')
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Benoit Bovy
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Giuseppe Di Lillo
+      NICKNAME:Sov
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Fabrizio Fantoni
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:BGKW Hertzberg
+      ADR:;;Markgrafenstraße\n 57;Berlin;;10117;
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Filippo Taurus
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Anton Taurus
+      END:VCARD
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Fixture Only
+      END:VCARD
+    VCARD
+  end
+
+  def teardown
+    FileUtils.rm_rf(@directory)
   end
 
   def test_pattern_matches_fn
@@ -137,31 +174,142 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
 
   def test_converts_adr_with_escaped_newline_and_empty_components
     out = ConfigurationPreparer.new.send(:find_recipient_address, "BGKW Hertzberg", @vcard_path)
-    assert_equal ["BGKW Hertzberg", "Markgrafenstraße\n 57", "Berlin 10117"], out
+    assert_equal ["BGKW Hertzberg", "Markgrafenstraße", " 57", "Berlin 10117"], out
   end
 
-  def test_keeps_po_box_and_extended_address_from_vcard
-    Dir.mktmpdir do |directory|
-      vcard_path = File.join(directory, "address_book.vcf")
-      File.write(vcard_path, <<~VCARD)
-        BEGIN:VCARD
-        FN:Example Recipient
-        ADR:Postfach 42;c/o Reception\\nSuite 5;Example Street 7;Berlin;Berlin;10115;Germany
-        END:VCARD
-      VCARD
+  def test_search_uses_controlled_temporary_fixture
+    assert_equal ["Fixture Only"], ConfigurationPreparer.new.send(:find_recipient_address, "Fixture Only", @vcard_path)
+    refute_equal ConfigurationPreparer::ADDRESS_BOOK_PATH, @vcard_path
+  end
 
-      out = ConfigurationPreparer.new.send(:find_recipient_address, "Example Recipient", vcard_path)
+  def test_default_address_book_path_is_unchanged
+    assert_equal File.expand_path('~/saver/address_book.saversolve.vcf'), ConfigurationPreparer::ADDRESS_BOOK_PATH
+  end
 
-      assert_equal [
-        "Example Recipient",
-        "Postfach 42",
-        "c/o Reception\nSuite 5",
-        "Example Street 7",
-        "Berlin",
-        "Berlin 10115",
-        "Germany",
-      ], out
-    end
+  def test_packs_full_address_into_four_lines_without_dropping_data
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Example Recipient
+      ADR:Postfach 42;c/o Reception\nSuite 5;Example Street 7;Berlin;Berlin;10115;Germany
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Example Recipient", @vcard_path)
+
+    assert_equal [
+      "Example Recipient",
+      "Postfach 42",
+      "c/o Reception, Suite 5, Example Street 7",
+      "Berlin Berlin 10115 Germany",
+    ], out
+  end
+
+  def test_unescapes_vcard_3_text_sequences
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Escaped\, Recipient
+      NICKNAME:escaped\;friend
+      ADR:;;12 Backslash\\ Alley\, Building\; A\nRear Door\NLoading Dock;;;;
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Escaped", @vcard_path)
+
+    assert_equal [
+      "Escaped, Recipient",
+      "12 Backslash\\ Alley, Building; A",
+      "Rear Door, Loading Dock",
+    ], out
+  end
+
+  def test_unescapes_nickname_text
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Nickname Recipient
+      NICKNAME:escaped\;friend
+      END:VCARD
+    VCARD
+
+    card = ConfigurationPreparer.new.send(:parse_vcards, @vcard_path).first
+
+    assert_equal "escaped;friend", card.fetch(:nickname)
+  end
+
+  def test_keeps_escaped_semicolon_in_single_adr_component
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Semicolon Recipient
+      ADR:;;Unit 2\; Rear;Dresden;Saxony;01067;Germany
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Semicolon Recipient", @vcard_path)
+
+    assert_equal ["Semicolon Recipient", "Unit 2; Rear", "Dresden Saxony 01067 Germany"], out
+  end
+
+  def test_prefers_home_adr_case_insensitively
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Home Recipient
+      ADR;TYPE=hOmE:;;1 Home Street;Home City;Home Region;11111;Home Country
+      ADR;TYPE=WORK:;;2 Work Street;Work City;Work Region;22222;Work Country
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Home Recipient", @vcard_path)
+
+    assert_equal ["Home Recipient", "1 Home Street", "Home City Home Region 11111 Home Country"], out
+  end
+
+  def test_falls_back_to_first_adr_when_home_absent
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Fallback Recipient
+      ADR;TYPE=WORK:;;1 First Street;First City;First Region;11111;First Country
+      ADR;TYPE=OTHER:;;2 Second Street;Second City;Second Region;22222;Second Country
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Fallback Recipient", @vcard_path)
+
+    assert_equal ["Fallback Recipient", "1 First Street", "First City First Region 11111 First Country"], out
+  end
+
+  def test_omits_empty_final_address_line
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Delivery Only
+      ADR:PO Box 9;Building A;Street 1;;;;
+      END:VCARD
+    VCARD
+
+    out = ConfigurationPreparer.new.send(:find_recipient_address, "Delivery Only", @vcard_path)
+
+    assert_equal ["Delivery Only", "PO Box 9", "Building A, Street 1"], out
+  end
+
+  def test_full_lookup_address_passes_renderer_line_limit
+    write_vcards(<<~'VCARD')
+      BEGIN:VCARD
+      VERSION:3.0
+      FN:Rendered Recipient
+      ADR:PO Box 5;North Wing\nThird Floor;5 Main Street;Leipzig;Saxony;04109;Germany
+      END:VCARD
+    VCARD
+
+    address = ConfigurationPreparer.new.send(:find_recipient_address, "Rendered Recipient", @vcard_path)
+
+    assert_operator address.length, :<=, 4
+    assert_equal address.length, address.join("\n").lines(chomp: true).length
+    FillLabels.new.send(:check_addresses!, ["Sender"], address)
   end
 
   def test_no_match_raises
@@ -194,6 +342,12 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
     assert_equal 2, captured.size
     assert(captured.keys.any? { |k| k.include?("Filippo Taurus") })
     assert(captured.keys.any? { |k| k.include?("Anton Taurus") })
+  end
+
+  private
+
+  def write_vcards(contents)
+    File.write(@vcard_path, contents)
   end
 end
 
@@ -339,6 +493,7 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
       [address_book]
       scrooge = Scrooge McDuck:McDuck Manor:Duckburg:Calisota
       homer   = Homer Simpson:742 Evergreen Terrace:Springfield
+
     INI
     File.write(@state_path, <<~INI)
       [format.labelwonderland_es0010]
@@ -386,6 +541,7 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
     cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
     refute cfg.fetch(:formats).fetch("topstick_8739").key?(:next_position)
   end
+
 end
 
 class ConfigurationPreparerStateFileTest < Minitest::Test
