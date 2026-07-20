@@ -26,6 +26,9 @@ Options:
 - [-b|--bisect]                    : bisect mode (see below); incompatible with '--kernel-version'
 - [-l|--local-version <name>]      : set the kernel local version (name suffix), defaults to \$BUILD_KERNEL_LOCAL_VERSION; the
                                      minus is automatically added
+- [--cpu-target <cpu>]             : GCC -march/-mtune target, defaults to \$BUILD_KERNEL_CPU_TARGET or znver5
+- [--gcc-package <package>]        : installed gcc-N package, defaults to \$BUILD_KERNEL_GCC_PACKAGE or the newest installed GCC
+- [--unattended]                   : fail instead of prompting, defaults to \$BUILD_KERNEL_UNATTENDED
 - [-e|--enable-unused-modules]     : enable unused modules (by default, they're disabled)
 - [-f|--faster-build]              : disable LTO and sanitizers for faster builds (automatically enabled in bisect mode)
 - [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
@@ -110,6 +113,9 @@ v_install=              # boolean; false=blank; true=anything else
 v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
+v_cpu_target=${BUILD_KERNEL_CPU_TARGET:-znver5}
+v_gcc_package=${BUILD_KERNEL_GCC_PACKAGE:-}
+v_unattended=${BUILD_KERNEL_UNATTENDED:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
 v_enable_unused_modules= # boolean; false=blank; true=anything else
@@ -119,7 +125,9 @@ v_cherry_pick_branch_created= # boolean; set when this run creates $c_cherry_pic
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:defc: --long help,kernel-version:,bisect,install,repo-path:,local-version:,display-config-diff,enable-unused-modules,faster-build,cherry-pick: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv:bir:l:defc: \
+    --long help,kernel-version:,bisect,install,repo-path:,local-version:,cpu-target:,gcc-package:,unattended,display-config-diff,enable-unused-modules,faster-build,cherry-pick: \
+    --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -143,6 +151,15 @@ function decode_cmdline_args {
       -l|--local-version)
         v_local_version=$2
         shift 2 ;;
+      --cpu-target)
+        v_cpu_target=$2
+        shift 2 ;;
+      --gcc-package)
+        v_gcc_package=$2
+        shift 2 ;;
+      --unattended)
+        v_unattended=1
+        shift ;;
       -d|--display-config-diff)
         v_display_config_diff=1
         shift ;;
@@ -184,11 +201,49 @@ function decode_cmdline_args {
     exit 1
   fi
 
+  validate_toolchain
+
   if [[ -n $v_bisect ]]; then
     v_local_version=$c_bisect_local_version
     v_install=1
     v_faster_build=1
   fi
+}
+
+function find_latest_installed_gcc_package {
+  dpkg-query -W -f='${binary:Package}\t${db:Status-Status}\n' 'gcc-[0-9]*' 2>/dev/null |
+    awk '$2 == "installed" && $1 ~ /^gcc-[0-9]+(:[[:alnum:]]+)?$/ { sub(/:.*/, "", $1); print $1 }' |
+    sort -Vu |
+    tail -n 1
+}
+
+function validate_toolchain {
+  if [[ -n $v_gcc_package ]]; then
+    if [[ ! $v_gcc_package =~ ^gcc-[0-9]+$ ]] ||
+      [[ $(dpkg-query -W -f='${db:Status-Status}' "$v_gcc_package" 2>/dev/null || true) != installed ]]; then
+      >&2 echo "Invalid GCC package: $v_gcc_package"
+      exit 1
+    fi
+  else
+    v_gcc_package=$(find_latest_installed_gcc_package)
+    if [[ -z $v_gcc_package ]]; then
+      >&2 echo 'No installed gcc-N package found.'
+      exit 1
+    fi
+  fi
+
+  if ! command -v "$v_gcc_package" >/dev/null; then
+    >&2 echo "Invalid GCC package: $v_gcc_package"
+    exit 1
+  fi
+
+  local cpu_flag
+  for cpu_flag in "-march=$v_cpu_target" "-mtune=$v_cpu_target"; do
+    if ! "$v_gcc_package" "$cpu_flag" -x c -fsyntax-only /dev/null >/dev/null 2>&1; then
+      >&2 echo "Unsupported CPU target for $v_gcc_package: $v_cpu_target"
+      exit 1
+    fi
+  done
 }
 
 function cache_sudo {
@@ -755,8 +810,9 @@ function make_build_faster {
   annotation_set CONFIG_GCOV_KERNEL n
 }
 
-function enable_native_cpu {
-  annotation_set CONFIG_X86_NATIVE_CPU y
+function configure_cpu_target {
+  annotation_set CONFIG_X86_NATIVE_CPU n
+  export KCFLAGS="-march=$v_cpu_target -mtune=$v_cpu_target"
 }
 
 # Extracted from kernel 6.11-rc3.
@@ -1226,6 +1282,10 @@ function verify_disabled_modules {
   if [[ -n $overridden ]]; then
     >&2 echo "WARNING: these disabled options were forced back on (selected by another option):"
     >&2 echo "$overridden"
+    if [[ -n $v_unattended ]]; then
+      >&2 echo 'Unattended build aborted because disabled options were forced on.'
+      exit 1
+    fi
     local reply
     read -rp "Continue with the build anyway? [y/N] " reply
     if [[ $reply != [yY] ]]; then
@@ -1493,12 +1553,9 @@ PYEOF
 
   echo "  Applying adjustments"
 
-  local latest_installed_gcc_package
-  latest_installed_gcc_package=$(dpkg -l 'gcc-*' | awk '$1 == "ii" && $2 ~ /^gcc-[[:digit:]]+$/ {print $2}' | sort -V | tail -n 1)
-
-  sed -i -rE "1s/^gcc:=.*/gcc:=$latest_installed_gcc_package/" debian/rules.d/0-common-vars.mk
-  sed -i -rE "s/export gcc\?=.*/export gcc?=$latest_installed_gcc_package/" debian/rules.d/0-common-vars.mk
-  sed -i -rE "s/gcc-[[:digit:]]+/$latest_installed_gcc_package/g" debian.master/control.stub.in
+  sed -i -rE "1s/^gcc:=.*/gcc:=$v_gcc_package/" debian/rules.d/0-common-vars.mk
+  sed -i -rE "s/export gcc\?=.*/export gcc?=$v_gcc_package/" debian/rules.d/0-common-vars.mk
+  sed -i -rE "s/gcc-[[:digit:]]+/$v_gcc_package/g" debian.master/control.stub.in
 
   # Note: We don't modify amd64.mk here. Instead, we pass do_mainline_build=true
   # and do_tools=0 on the command line when calling debian/rules, which overrides
@@ -1747,7 +1804,7 @@ function main {
   #
   fix_ubuntu_config
   disable_debug_info
-  enable_native_cpu
+  configure_cpu_target
 
   if [[ -n $v_faster_build ]]; then
     make_build_faster
