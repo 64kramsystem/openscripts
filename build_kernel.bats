@@ -7,6 +7,7 @@ setup_file() {
   export -f annotation_set annotation_undefine
   export -f find_running_kernel_version normalize_kernel_version
   export -f find_local_config_file_for_version
+  export -f fix_run_parts_two_directory_invocations
 }
 
 teardown_file() {
@@ -265,6 +266,27 @@ make_pkg() {
   first=$(printf '%s\n%s\n' "$ga_release" "$rc_release" \
           | LC_ALL=C /usr/lib/grub/grub-sort-version -r | head -n 1)
   [ "$first" = "$ga_release" ]
+}
+
+# ── run-parts templates ──────────────────────────────────────────────────────
+
+@test "fix_run_parts_two_directory_invocations fixes image preinst" {
+  local packaging_dir=$BATS_TEST_TMPDIR/packaging
+  mkdir -p "$packaging_dir/debian/templates"
+  printf '%s\n' \
+    'if [ -d /etc/kernel/preinst.d ] || [ -d /usr/share/kernel/preinst.d ]; then' \
+    '    DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version \' \
+    '        --arg=$image_path /etc/kernel/preinst.d /usr/share/kernel/preinst.d' \
+    'fi' > "$packaging_dir/debian/templates/image.preinst.in"
+
+  cd "$packaging_dir"
+  run fix_run_parts_two_directory_invocations
+
+  [ "$status" -eq 0 ]
+  run grep -F 'for _kd in /etc/kernel/preinst.d /usr/share/kernel/preinst.d; do' debian/templates/image.preinst.in
+  [ "$status" -eq 0 ]
+  run grep -F 'run-parts --report --exit-on-error --arg=$version --arg=$image_path "$_kd"' debian/templates/image.preinst.in
+  [ "$status" -eq 0 ]
 }
 
 # ── annotation_set / annotation_undefine staging ───────────────────────────────
