@@ -8,7 +8,7 @@ shopt -s inherit_errexit
 
 c_repo_address=https://github.com/bluez/bluez.git
 c_temporary_dir=$(mktemp -d --suffix=.bluez)
-c_help="Usage: $(basename "$0") [-h|--help] [-v|--version VERSION]
+c_help="Usage: $(basename "$0") [-h|--help] [-v|--version VERSION] [--uninstall-only]
 
 Upgrade Bluez from source.
 
@@ -19,10 +19,11 @@ Uninstalls the files corresponding to the previous, and puts the bluez package o
 If the current version is the latest (or the specified version), nothing is done."
 
 v_version=
+v_uninstall_only=
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv: --long help,version: --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hv: --long help,version:,uninstall-only --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -34,6 +35,9 @@ function decode_cmdline_args {
       -v|--version)
         v_version=$2
         shift 2 ;;
+      --uninstall-only)
+        v_uninstall_only=1
+        shift ;;
       --)
         shift
         break ;;
@@ -42,6 +46,10 @@ function decode_cmdline_args {
 
   if [[ $# -ne 0 ]]; then
     echo "$c_help"
+    exit 1
+  fi
+  if [[ -n $v_uninstall_only && -n $v_version ]]; then
+    >&2 echo '--uninstall-only cannot be combined with --version.'
     exit 1
   fi
 }
@@ -132,13 +140,28 @@ function main {
 
   check_user
 
+  local current_version
   current_version=$(find_current_version)
+
+  if [[ -n $v_uninstall_only ]]; then
+    clone_repository
+    switch_dir
+    change_to_version "$current_version"
+
+    local installed_libexecdir
+    installed_libexecdir=$(find_bluez_libexecdir)
+    clean_and_configure "$installed_libexecdir"
+    uninstall
+
+    echo "Removed unmanaged BlueZ v$current_version files."
+    return 0
+  fi
 
   local target_version
   target_version=${v_version:-$(find_latest_version)}
 
   if [[ $current_version != "$target_version" ]]; then
-    clone_repository "$current_version"
+    clone_repository
     switch_dir
 
     change_to_version "$current_version"
