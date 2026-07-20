@@ -1379,6 +1379,28 @@ function mainline_package_version {
   echo -n "${upstream}-${abinum}${local_version:+-$local_version}.${debversion}"
 }
 
+function fix_run_parts_two_directory_invocations {
+  python3 - <<'PYEOF'
+import pathlib
+
+p = pathlib.Path('debian/templates/image.preinst.in')
+if p.exists():
+    old = ('if [ -d /etc/kernel/preinst.d ] || [ -d /usr/share/kernel/preinst.d ]; then\n'
+           '    DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version \\\n'
+           '        --arg=$image_path /etc/kernel/preinst.d /usr/share/kernel/preinst.d\n'
+           'fi')
+    new = ('for _kd in /etc/kernel/preinst.d /usr/share/kernel/preinst.d; do\n'
+           '    if [ -d "$_kd" ]; then\n'
+           '        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version --arg=$image_path "$_kd"\n'
+           '    fi\n'
+           'done')
+    content = p.read_text()
+    if old in content:
+        p.write_text(content.replace(old, new))
+        print(f'  Patched run-parts two-directory invocation in {p}')
+PYEOF
+}
+
 function setup_ubuntu_packaging {
   echo "Setting up Ubuntu packaging for $building_kernel_version"
 
@@ -1463,6 +1485,8 @@ if p.exists():
            'done')
     patch(p, old, new)
 PYEOF
+
+  fix_run_parts_two_directory_invocations
 
   # Don't fail if we find no *.ko files in the build dir
   sed -i -re 's/zstd -19 --quiet --rm/zstd -19 --rm || true/g' debian/rules.d/2-binary-arch.mk || true
