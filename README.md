@@ -84,4 +84,15 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `xi`: copies stdin or file to clipboard, WSL-compatible
   - `xo`: open the file passed
 
+## Portable kernel builds
+
+`build_kernel` defaults to `--cpu-target znver5`, the GCC target for the Ryzen 9 9950X3D. Use
+`--cpu-target` for another machine; the script verifies both `-march` and `-mtune` with the selected
+compiler before changing the kernel tree. `--gcc-package gcc-N` pins an installed compiler package,
+while the default remains the newest installed GCC.
+
+Automated builders should pass `--unattended` so configuration conflicts fail with the forced-on
+options in the log instead of waiting for input. The equivalent environment variables are
+`BUILD_KERNEL_CPU_TARGET`, `BUILD_KERNEL_GCC_PACKAGE`, and `BUILD_KERNEL_UNATTENDED`.
+
 I keep adding new content/update old ones.
