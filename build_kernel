@@ -1516,9 +1516,11 @@ for fname, img in [('image.postinst.in', '$image_path'), ('extra.postinst.in', '
     if p.exists():
         old = (f'DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version \\\n'
                f'    --arg={img} /etc/kernel/postinst.d /usr/share/kernel/postinst.d')
+        # this run-parts call is inside an unquoted heredoc (the dpkg trigger script), so $_kd must
+        # be escaped to survive until the trigger runs
         new = ('for _kd in /etc/kernel/postinst.d /usr/share/kernel/postinst.d; do\n'
-               '    if [ -d "$_kd" ]; then\n'
-               '        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version --arg=$image_path "$_kd"\n'
+               '    if [ -d "\\$_kd" ]; then\n'
+               '        DEB_MAINT_PARAMS="$*" run-parts --report --exit-on-error --arg=$version --arg=$image_path "\\$_kd"\n'
                '    fi\n'
                'done')
         patch(p, old, new)
