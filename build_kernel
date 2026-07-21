@@ -839,6 +839,8 @@ function disable_unused_modules {
   annotation_set      CONFIG_CPU_SUP_HYGON n                   # exotic hw architectures...
   annotation_set      CONFIG_CPU_SUP_CENTAUR n
   annotation_set      CONFIG_CPU_SUP_ZHAOXIN n
+  annotation_set      CONFIG_INTEL_TDX_HOST n                  # Intel-only confidential-VM host support
+  annotation_undefine CONFIG_KVM_INTEL_TDX
   annotation_set      CONFIG_DRM_RADEON n                      # radeon...
   annotation_undefine CONFIG_DRM_RADEON_USERPTR
   annotation_set      CONFIG_DRM_AMDGPU_SI n                   # GCN 1.0 (2012)
