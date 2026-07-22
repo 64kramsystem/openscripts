@@ -33,6 +33,7 @@ Options:
 - [-f|--faster-build]              : disable LTO and sanitizers for faster builds (automatically enabled in bisect mode)
 - [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
 - [-i|--install]
+- [-F|--force]                     : rebuild even if packages for the target version already exist
 - [-r|--repo-path <path>]          : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
 - [-d|--display-config-diff]       : display config diff in meld after applying modifications
 
@@ -110,6 +111,7 @@ Package output:
 v_kernel_version=
 v_bisect=               # boolean; false=blank; true=anything else
 v_install=              # boolean; false=blank; true=anything else
+v_force=                # boolean; false=blank; true=anything else
 v_packages_destination=${BUILD_KERNEL_PACKAGES_DESTINATION:-}
 v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
 v_local_version=${BUILD_KERNEL_LOCAL_VERSION:-}
@@ -125,8 +127,8 @@ v_cherry_pick_branch_created= # boolean; set when this run creates $c_cherry_pic
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hv:bir:l:defc: \
-    --long help,kernel-version:,bisect,install,repo-path:,local-version:,cpu-target:,gcc-package:,unattended,display-config-diff,enable-unused-modules,faster-build,cherry-pick: \
+  params=$(getopt --options hv:biFr:l:defc: \
+    --long help,kernel-version:,bisect,install,force,repo-path:,local-version:,cpu-target:,gcc-package:,unattended,display-config-diff,enable-unused-modules,faster-build,cherry-pick: \
     --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
@@ -144,6 +146,9 @@ function decode_cmdline_args {
         shift ;;
       -i|--install)
         v_install=1
+        shift ;;
+      -F|--force)
+        v_force=1
         shift ;;
       -r|--repo-path)
         v_repo_path=$2
@@ -625,6 +630,10 @@ function extract_debian_from_crack_bundle {
 
 function check_if_version_already_packaged {
   local building_kernel_version=$1
+
+  if [[ -n $v_force ]]; then
+    return
+  fi
 
   # Format: `M.m.p` or or `M.m-rcN`.
   #
