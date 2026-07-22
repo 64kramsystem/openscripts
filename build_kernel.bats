@@ -8,6 +8,7 @@ setup_file() {
   export -f find_running_kernel_version normalize_kernel_version
   export -f find_local_config_file_for_version
   export -f fix_run_parts_two_directory_invocations
+  export -f decode_cmdline_args check_if_version_already_packaged
 }
 
 teardown_file() {
@@ -27,6 +28,61 @@ teardown() {
 
 make_pkg() {
   touch "$v_packages_destination/$1"
+}
+
+decode_and_report_force_flags() {
+  validate_toolchain() { :; }
+  v_force=
+  v_install=
+
+  decode_cmdline_args "$@"
+
+  printf 'force=%s install=%s' "$v_force" "$v_install"
+}
+
+check_packaged_version_and_report_continuation() {
+  check_if_version_already_packaged "$1"
+  echo continued
+}
+
+# ── Command-line options ─────────────────────────────────────────────────────
+
+@test "-F enables force without enabling install" {
+  run decode_and_report_force_flags -F "$v_packages_destination"
+  [ "$status" -eq 0 ]
+  [ "$output" = "force=1 install=" ]
+}
+
+@test "--force enables force" {
+  run decode_and_report_force_flags --force "$v_packages_destination"
+  [ "$status" -eq 0 ]
+  [ "$output" = "force=1 install=" ]
+}
+
+@test "--force and --install can be enabled together" {
+  run decode_and_report_force_flags --force --install "$v_packages_destination"
+  [ "$status" -eq 0 ]
+  [ "$output" = "force=1 install=1" ]
+}
+
+@test "force continues when the version is already packaged" {
+  make_pkg "linux-image-unsigned-7.0.0-070000-sav-generic_7.0.0-070000-sav.202604141930_amd64.deb"
+  v_force=1
+
+  run check_packaged_version_and_report_continuation "7.0.0"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "continued" ]
+}
+
+@test "without force an already-packaged version still exits early" {
+  make_pkg "linux-image-unsigned-7.0.0-070000-sav-generic_7.0.0-070000-sav.202604141930_amd64.deb"
+  v_force=
+
+  run check_packaged_version_and_report_continuation "7.0.0"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "No new version! Latest packaged/available: 7.0.0" ]
 }
 
 # Real-world filename formats:
