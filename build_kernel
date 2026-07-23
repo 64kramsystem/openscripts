@@ -32,6 +32,7 @@ Options:
 - [-e|--enable-unused-modules]     : enable unused modules (by default, they're disabled)
 - [-f|--faster-build]              : disable LTO and sanitizers for faster builds (automatically enabled in bisect mode)
 - [-c|--cherry-pick <c1,c2,...>]   : cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS; see help below for the format
+- [--sav-remote <remote>]          : replay the remote's per-major sav branch onto the target version, defaults to \$BUILD_KERNEL_SAV_REMOTE; see help below
 - [-i|--install]
 - [-F|--force]                     : rebuild even if packages for the target version already exist
 - [-r|--repo-path <path>]          : defaults to (current path or \$BUILD_KERNEL_REPO_PATH env variable)
@@ -73,6 +74,17 @@ Cherry picking:
 - incompatible with bisect workflow
 - format: '[shortver:]ca{,cb…}/…'
 - each commit can be prefixed with 'R', which will revert the given commit
+
+Sav branch:
+
+- incompatible with bisect and cherry picking
+- takes a remote name (e.g. 'fork'); the branch is composed from the target version as
+  '<remote>/v<M.m>-sav' (e.g. building 7.1.4 -> 'fork/v7.1-sav'), so it follows the version
+  automatically and holds one commit set per major version
+- the commits unique to that branch (merge-base..branch) are replayed onto the target version's tag
+  with 'git rebase --onto', which 3-way merges them, drops commits already present upstream, and
+  aborts on a genuine conflict
+- the replay lands on the '$c_cherry_pick_branch' branch, cleaned up like a cherry-pick run
 
 Mainline-like build details:
 
@@ -120,6 +132,7 @@ v_gcc_package=${BUILD_KERNEL_GCC_PACKAGE:-}
 v_unattended=${BUILD_KERNEL_UNATTENDED:-}
 v_display_config_diff=  # boolean; false=blank; true=anything else
 v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
+v_sav_remote=${BUILD_KERNEL_SAV_REMOTE:-} # remote holding the per-major sav branch to replay; see help
 v_enable_unused_modules= # boolean; false=blank; true=anything else
 v_faster_build=         # boolean; false=blank; true=anything else
 v_cherry_pick_branch_created= # boolean; set when this run creates $c_cherry_pick_branch, so the
@@ -128,7 +141,7 @@ v_cherry_pick_branch_created= # boolean; set when this run creates $c_cherry_pic
 function decode_cmdline_args {
   local params
   params=$(getopt --options hv:biFr:l:defc: \
-    --long help,kernel-version:,bisect,install,force,repo-path:,local-version:,cpu-target:,gcc-package:,unattended,display-config-diff,enable-unused-modules,faster-build,cherry-pick: \
+    --long help,kernel-version:,bisect,install,force,repo-path:,local-version:,cpu-target:,gcc-package:,unattended,display-config-diff,enable-unused-modules,faster-build,cherry-pick:,sav-remote: \
     --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
@@ -177,6 +190,9 @@ function decode_cmdline_args {
       -c|--cherry-pick)
         v_raw_cherry_picks=$2
         shift 2 ;;
+      --sav-remote)
+        v_sav_remote=$2
+        shift 2 ;;
       --)
         shift
         break ;;
@@ -191,6 +207,12 @@ function decode_cmdline_args {
     exit 1
   elif [[ -n $v_bisect && -n $v_raw_cherry_picks ]]; then
     echo "Bisection and cherry picking are incompatible!"
+    exit 1
+  elif [[ -n $v_bisect && -n $v_sav_remote ]]; then
+    echo "Bisection and sav branch are incompatible!"
+    exit 1
+  elif [[ -n $v_raw_cherry_picks && -n $v_sav_remote ]]; then
+    echo "Cherry picking and sav branch are incompatible!"
     exit 1
   elif [[ $# -eq 1 ]]; then
     v_packages_destination=$1
@@ -1372,6 +1394,40 @@ function cherry_pick_commits {
   fi
 }
 
+# $v_sav_remote can be empty, in which case no replay is performed. The sav branch name is composed
+# from the target version as '<remote>/v<M.m>-sav', so it follows the version automatically. Replays
+# the commits unique to that branch (merge-base..branch) onto the target version's tag with
+# `git rebase --onto`, landing them on $c_cherry_pick_branch so the exit hook cleans them up. rebase
+# performs the 3-way merge, drops commits already present upstream, and aborts loudly on a genuine
+# conflict.
+#
+function apply_sav_branch {
+  if [[ -n $v_sav_remote ]]; then
+    local version_tag series sav_branch merge_base
+    version_tag=v$(short_kernel_version "$1" with_rc)
+    series=$(short_kernel_version "$1" no_rc)
+    sav_branch="$v_sav_remote/v$series-sav"
+    merge_base=$(git merge-base "$version_tag" "$sav_branch")
+
+    # Refuse to adopt (and later delete) a branch this run didn't create.
+    if git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
+      >&2 echo "Branch '$c_cherry_pick_branch' already exists; remove it manually if it's stale."
+      exit 1
+    fi
+
+    echo "# REPLAY sav branch $sav_branch onto $version_tag ##########"
+    git checkout -b "$c_cherry_pick_branch" "$sav_branch"
+    v_cherry_pick_branch_created=1
+
+    # Pin an identity and disable signing so the replay does not depend on the caller's git config.
+    git \
+      -c user.name='64kramsystem' \
+      -c user.email='64kramsystem@users.noreply.github.com' \
+      -c commit.gpgsign=false \
+      rebase --onto "$version_tag" "$merge_base"
+  fi
+}
+
 function verify_or_setup_ubuntu_packaging {
   local running_kernel_version=$1
 
@@ -1793,6 +1849,7 @@ function main {
     fi
 
     cherry_pick_commits "$building_kernel_version"
+    apply_sav_branch "$building_kernel_version"
   else
     building_kernel_version=$(find_branch_kernel_version)
   fi
