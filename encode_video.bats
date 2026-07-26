@@ -292,6 +292,72 @@ FAKE
   [[ -f "$WORK_DIR/pizza.mp4" ]]
 }
 
+@test "encodes in place when the output extension matches the input one" {
+  make_input pizza.mp4
+  run "$SCRIPT" -b -e mp4 "$WORK_DIR/pizza.mp4"
+  [[ $status -eq 0 ]]
+  [[ -f "$WORK_DIR/pizza.mp4" ]]
+  [[ ! -f "$WORK_DIR/pizza.orig.mp4" ]]
+  grep -q "ffmpeg .*pizza.orig.mp4.*$WORK_DIR/pizza.mp4" "$CMD_LOG"
+  grep -q "trash $WORK_DIR/pizza.orig.mp4" "$CMD_LOG"
+}
+
+@test "encodes in place when --output-dir points to the input directory" {
+  make_input pizza.mp4
+  cd "$WORK_DIR"
+  run "$SCRIPT" -b -e mp4 -o . pizza.mp4
+  [[ $status -eq 0 ]]
+  [[ -f "$WORK_DIR/pizza.mp4" ]]
+  grep -q "ffmpeg .*pizza.orig.mp4.*\./pizza.mp4" "$CMD_LOG"
+}
+
+@test "in-place encoding is not broken by an exported CDPATH" {
+  mkdir "$WORK_DIR/videos"
+  echo data > "$WORK_DIR/videos/pizza.mp4"
+  cd "$WORK_DIR"
+  CDPATH=. run "$SCRIPT" -b -e mp4 -o ./videos videos/pizza.mp4
+  [[ $status -eq 0 ]]
+  [[ -f "$WORK_DIR/videos/pizza.mp4" ]]
+}
+
+@test "on an in-place encoding failure, restores the input rather than deleting it" {
+  make_input pizza.mp4
+  FFMPEG_FAIL=1 run "$SCRIPT" -b -e mp4 "$WORK_DIR/pizza.mp4"
+  [[ $status -ne 0 ]]
+  [[ $output == *">>> Original files restored."* ]]
+  [[ -f "$WORK_DIR/pizza.mp4" ]]
+  [[ ! -f "$WORK_DIR/pizza.orig.mp4" ]]
+}
+
+@test "on a partial rename, the error hook doesn't delete the inputs still at their original path" {
+  make_input pizza.mp4 pasta.mp4
+  run_sourced "
+    v_orig_input_files=('$WORK_DIR/pizza.mp4' '$WORK_DIR/pasta.mp4')
+    v_temp_input_files=('$WORK_DIR/pizza.orig.mp4' '$WORK_DIR/pasta.orig.mp4')
+    v_output_files=('$WORK_DIR/pizza.mp4' '$WORK_DIR/pasta.mp4')
+    compute_input_entries
+    register_exit_hooks
+    trap - EXIT
+    mv '$WORK_DIR/pizza.mp4' '$WORK_DIR/pizza.orig.mp4' # only the first input got renamed
+    _error_exit_hook
+  "
+  [[ $status -eq 0 ]]
+  [[ -f "$WORK_DIR/pizza.mp4" ]]
+  [[ -f "$WORK_DIR/pasta.mp4" ]]
+  [[ ! -f "$WORK_DIR/pizza.orig.mp4" ]]
+}
+
+@test "aborts if the output file is a hard link to an input, leaving both untouched" {
+  mkdir "$WORK_DIR/out"
+  make_input pizza.mp4
+  ln "$WORK_DIR/pizza.mp4" "$WORK_DIR/out/pizza.mp4"
+  run "$SCRIPT" -b -e mp4 -o "$WORK_DIR/out" "$WORK_DIR/pizza.mp4"
+  [[ $status -eq 1 ]]
+  [[ $output == *"exists!"* ]]
+  [[ -f "$WORK_DIR/pizza.mp4" ]]
+  [[ -f "$WORK_DIR/out/pizza.mp4" ]]
+}
+
 @test "aborts if the temp input file already exists, leaving both files untouched" {
   make_input pizza.mp4 pizza.orig.mp4
   run "$SCRIPT" -b "$WORK_DIR/pizza.mp4"
