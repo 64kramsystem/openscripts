@@ -66,6 +66,9 @@ v_temp_input_files=()
 v_output_files=()
 v_file_segments=()
 
+declare -A v_input_entries=()  # directory entry keys of the orig input files (see entry_key())
+declare -A v_dir_keys=()       # cache: directory path -> physical directory path
+
 v_parallel_procs=         # numeric
 v_video_codec=av1         # "h265" or "av1"
 v_batch_mode=             # boolean; false=blank, true=anything else
@@ -273,7 +276,9 @@ function perform_checks {
 
   local -A seen_output_files=()
   for file in "${v_output_files[@]}"; do
-    if [[ -f $file ]]; then
+    # An output legitimately lands on an input path when the extension is unchanged; the inputs are
+    # renamed to their temp name before the encoding starts, so the path is free by then.
+    if [[ -f $file ]] && ! is_input_file "$file"; then
       >&2 echo "File '$file' exists!"
       exit 1
     fi
@@ -285,17 +290,64 @@ function perform_checks {
   done
 }
 
+# Identifies a directory entry, rather than a file: only the very entry that gets renamed away is free
+# by encoding time, while a hard link to an input keeps its own entry (and would make ffmpeg refuse to
+# write, without failing). The parent dir is resolved to its physical path, since paths pointing to the
+# same directory can differ textually (e.g. '--output-dir .'); the resolutions are cached, as the files
+# of a batch typically share a handful of directories. The key is returned via the given variable,
+# rather than printed, so that the caching survives the call (a command substitution would cache in a
+# subshell).
+#
+function entry_key {
+  local file=$1
+  local -n key_out=$2
+  local dir=${file%/*}
+
+  if [[ $dir == "$file" ]]; then
+    dir=.
+  elif [[ -z $dir ]]; then
+    dir=/
+  fi
+
+  if [[ ! -v v_dir_keys[$dir] ]]; then
+    # CDPATH is unset, since it makes cd both resolve relative paths elsewhere and print the result.
+    v_dir_keys[$dir]=$(CDPATH= cd -- "$dir" && pwd -P)
+  fi
+
+  # shellcheck disable=2034 # unused var
+  key_out="${v_dir_keys[$dir]}/${file##*/}"
+}
+
+function compute_input_entries {
+  local file key
+  for file in "${v_orig_input_files[@]}"; do
+    entry_key "$file" key
+    v_input_entries[$key]=1
+  done
+}
+
+function is_input_file {
+  local key
+  entry_key "$1" key
+  [[ -v v_input_entries[$key] ]]
+}
+
 # Delete output files in case of interruption/error.
 #
 function register_exit_hooks {
   function _error_exit_hook {
-    for file in "${v_output_files[@]}"; do
-      rm -f "$file"
-    done
-
+    # Restore before deleting: an in-place output shares its entry with the input, so the restore
+    # overwrites the partial output, and the deletion must then skip the input paths - the renames
+    # may have been interrupted halfway, leaving later inputs still at their original path.
     for (( i = 0; i < "${#v_orig_input_files[@]}"; i++ )); do
       if [[ -f "${v_temp_input_files[$i]}" ]]; then
         mv "${v_temp_input_files[$i]}" "${v_orig_input_files[$i]}"
+      fi
+    done
+
+    for file in "${v_output_files[@]}"; do
+      if ! is_input_file "$file"; then
+        rm -f "$file"
       fi
     done
 
@@ -642,6 +694,8 @@ function main {
   # may leave the files half moved.
   # In order to avoid this, we check the files first.
   check_input_files
+  # Runs after the input files have been verified to exist, since it resolves their directories.
+  compute_input_entries
   perform_checks
 
   # The hook is registered before renaming, so that an interruption/error halfway through the renames
