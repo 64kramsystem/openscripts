@@ -24,6 +24,9 @@ setup() {
 
   v_repo_path=$(mktemp -d)
   git -c init.defaultBranch=main init --quiet "$v_repo_path"
+  # One commit, so HEAD is born and branches can be created, checked out and deleted.
+  git -C "$v_repo_path" -c user.email=t@example.com -c user.name=t \
+    commit -q --allow-empty -m 'fixture'
   v_packages_destination=$(mktemp -d)
 }
 
@@ -42,7 +45,9 @@ complete_args() {
 stub_build_steps() {
   v_ran=()
   local name
-  for name in validate_toolchain register_exit_hook fetch_remotes \
+  # register_exit_hook is deliberately NOT stubbed: its cleanup is under test, and its body is
+  # harmless when v_cherry_pick_branch_created is empty.
+  for name in validate_toolchain fetch_remotes \
     create_if_required_and_switch_branch apply_sav_branch verify_or_setup_ubuntu_packaging \
     import_config_file setup_ubuntu_packaging finalize_ubuntu_config prepare_ubuntu_build \
     fix_ubuntu_config disable_debug_info configure_cpu_target disable_unused_modules \
@@ -147,6 +152,28 @@ stub_build_steps() {
   [[ $output == *"produced no packages"* ]]
 }
 
+# The exit hook only fires when the process exits, so this runs the wrapper in a subshell. Without the
+# cleanup the branch outlives the run, and the next build of a new version aborts on
+# apply_sav_branch's "already exists" guard — daily, in both suites, until it is deleted by hand.
+@test "the temporary replay branch never outlives the run" {
+  run bash -c "
+    source '$BATS_TEST_DIRNAME/build_kernel_arcade'
+    $(declare -f stub_build_steps)
+    stub_build_steps
+    apply_sav_branch() {
+      git checkout -q -b \"\$c_cherry_pick_branch\"
+      v_cherry_pick_branch_created=1
+    }
+    send_built_packages_to_fd3() { :; }
+    main --series 7.1 --destination '$v_packages_destination' --repo '$v_repo_path' \
+      --local-version sav --cpu-target znver5 --gcc-package gcc-14 --sav-remote fork
+  "
+  [ "$status" -eq 0 ]
+
+  run git -C "$v_repo_path" rev-parse -q --verify temporary_cherry_picks
+  [ "$status" -ne 0 ]
+}
+
 # ── Contract with the library ─────────────────────────────────────────────────
 
 @test "the prompt can never trigger: v_unattended is set at load time" {
@@ -161,4 +188,29 @@ stub_build_steps() {
 
 @test "root is refused, so artifacts cannot end up root-owned" {
   grep -q 'EUID -eq 0' "$BATS_TEST_DIRNAME/build_kernel_arcade"
+}
+
+# The template patch is an exact-string replacement that silently does nothing once upstream
+# restructures the text, so the deliverable is checked rather than the patch trusted. A package built
+# with the two-directory form fails at install time on Noble's debianutils 5.17.
+@test "a two-directory run-parts invocation in the packaging fails the build" {
+  local tree
+  tree=$(mktemp -d)
+  mkdir -p "$tree/debian/templates"
+  printf 'if [ -d /etc/kernel/preinst.d ]; then\n    DEB_MAINT_PARAMS="$*" run-parts --report --arg=$version \\\n        --arg=$image_path /etc/kernel/preinst.d /usr/share/kernel/preinst.d\nfi\n' \
+    > "$tree/debian/templates/image.preinst.in"
+
+  run bash -c "cd '$tree' && source '$BATS_TEST_DIRNAME/lib/kernel_build.sh' &&
+    verify_single_directory_run_parts"
+  [ "$status" -eq 1 ]
+  [[ $output == *"more than one directory"* ]]
+
+  # The patched loop form, which is valid on both suites, must pass.
+  printf 'for _kd in /etc/kernel/preinst.d /usr/share/kernel/preinst.d; do\n    if [ -d "$_kd" ]; then\n        run-parts --report --arg=$version "$_kd"\n    fi\ndone\n' \
+    > "$tree/debian/templates/image.preinst.in"
+
+  run bash -c "cd '$tree' && source '$BATS_TEST_DIRNAME/lib/kernel_build.sh' &&
+    verify_single_directory_run_parts"
+  rm -rf "$tree"
+  [ "$status" -eq 0 ]
 }

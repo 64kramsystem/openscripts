@@ -574,6 +574,7 @@ function main {
   import_config_file "$source_config_file"
 
   setup_ubuntu_packaging
+  verify_single_directory_run_parts
 
   # Move the base config to Ubuntu location (will be used as template)
   finalize_ubuntu_config

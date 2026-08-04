@@ -48,6 +48,8 @@ v_gcc_package=
 v_sav_remote=
 v_unattended=1
 v_bisect=
+# Set by apply_sav_branch when it creates the temporary replay branch, and read by the exit hook.
+v_cherry_pick_branch_created=
 # Local to this script.
 v_series=
 v_repo_path=
@@ -153,7 +155,24 @@ function validate_cmdline_args {
 function register_exit_hook {
   function _exit_hook {
     set +o errexit
+
     rm -f "$c_crack_bundle_temp_file"
+
+    # apply_sav_branch replays the fork onto a temporary branch and leaves the build standing on it.
+    # Without this cleanup the branch survives the run, and the next build of a new version aborts on
+    # its "already exists; remove it manually" guard — every day, in both suites, until someone
+    # deletes it by hand. Only a branch this run created is touched.
+    if [[ -n $v_cherry_pick_branch_created ]] &&
+      git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
+      local current_branch
+      current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+      if [[ $current_branch == "$c_cherry_pick_branch" ]]; then
+        git checkout -q -
+      fi
+
+      git branch -D -q "$c_cherry_pick_branch"
+    fi
   }
 
   trap _exit_hook EXIT
@@ -208,6 +227,7 @@ function main {
   import_config_file "$source_config_file"
 
   setup_ubuntu_packaging
+  verify_single_directory_run_parts
   finalize_ubuntu_config
   prepare_ubuntu_build
 
