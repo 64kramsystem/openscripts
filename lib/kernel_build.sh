@@ -1236,6 +1236,38 @@ PYEOF
 
 # Run Ubuntu's config preparation
 #
+# The kernel packaging calls run-parts with two directories, which debianutils supports only from
+# 5.23 (Resolute). Noble ships 5.17, where that form fails at install time on the client, so the
+# templates are patched to call run-parts once per directory. That patch is an exact-string
+# replacement which silently does nothing once upstream restructures the text, so check the
+# deliverable instead of trusting the patch. This is deliberately not fatal on a merely unfamiliar
+# template: it fails only on the form that is known to break.
+function verify_single_directory_run_parts {
+  [[ -d debian/templates ]] || return 0
+
+  local offending
+  # The $-expressions in the perl program are perl's, not the shell's.
+  # shellcheck disable=SC2016
+  offending=$(
+    find debian/templates -maxdepth 1 -name "*.in" -print0 |
+      xargs -0 -r perl -0777 -ne '
+        # Join backslash-continued lines first: the two directories usually sit on the continuation.
+        s/\\\n\s*/ /g;
+        for my $line (split /\n/, $_) {
+          next unless $line =~ /\brun-parts\b/;
+          my @directories = $line =~ m{\s(/\S+)}g;
+          print "$ARGV: $line\n" if @directories > 1;
+        }
+      '
+  )
+
+  if [[ -n $offending ]]; then
+    >&2 echo "Packaging calls run-parts with more than one directory; that fails on debianutils 5.17:"
+    >&2 printf "%s\n" "$offending"
+    return 1
+  fi
+}
+
 function prepare_ubuntu_build {
   echo "Preparing Ubuntu kernel build environment"
 
