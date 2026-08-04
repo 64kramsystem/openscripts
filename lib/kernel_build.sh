@@ -8,19 +8,19 @@
 # in build_kernel. It deliberately has no side effects at source time, so both entry points can
 # source it before deciding anything.
 #
-# The functions read these globals, which the sourcing script must set before calling them:
+# The functions read exactly these globals, which the sourcing entry point must set before calling
+# them (nounset makes an unset one fatal):
 #
 #   v_packages_destination  where built .debs are collected
-#   v_repo_path             the kernel git checkout
 #   v_local_version         the kernel localversion (e.g. sav)
-#   v_cpu_target            -march target passed to the kernel config
-#   v_gcc_package           the gcc package to build with (e.g. gcc-14)
-#   v_unattended            non-empty to suppress every prompt
-#   v_sav_remote            remote holding the per-major sav branch to replay
-#   v_bisect                non-empty in bisect mode (build_kernel only)
-#   v_force                 non-empty to rebuild an already-packaged version
-#   v_kernel_version        an explicitly requested version, when not the newest of a series
-#   c_crack_bundle_temp_file  a writable temporary path for the packaging bundle
+#   v_cpu_target            -march/-mtune target validated and configured into the kernel
+#   v_gcc_package           the gcc package to build with; resolved here when empty
+#   v_sav_remote            remote holding the per-major sav branch to replay, or empty to skip
+#   v_unattended            non-empty to suppress the only prompt (verify_disabled_modules)
+#   v_bisect                non-empty in bisect mode; build_kernel only
+#   c_crack_bundle_temp_file  a writable temporary path for the downloaded packaging bundle
+#
+# v_cherry_pick_branch_created is assigned here and read by build_kernel exit hook.
 
 
 # Pure constants, so the library can define them at source time.

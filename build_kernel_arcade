@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+
+# Unattended kernel builder for the arcade APT repository.
+#
+# build_kernel is a general-purpose tool: bisect and install modes, cherry-picks, config diffs, a
+# prompt, sudo caching. None of that belongs in a repository recipe, and its `exit 0` when the version
+# is already packaged is indistinguishable from a build that produced nothing — which is how a Noble
+# run once adopted Resolute's packages. This entry point does the one job, never prompts, and reports
+# "already packaged" as a distinct status.
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+# Resolves in both layouts: openscripts/lib/ in the checkout, helpers/lib/ once installed on arcade.
+c_script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib/kernel_build.sh
+source "$c_script_directory/lib/kernel_build.sh"
+
+c_already_packaged_status=3
+c_help="Usage: $(basename "$0") --series M.m --destination DIR --repo PATH --local-version NAME
+                          --cpu-target NAME --gcc-package NAME [--sav-remote REMOTE] [--force]
+
+Builds one kernel unattended, into DIR, and reports the built packages on FD 3 (newline-separated).
+
+--series accepts a series (7.1, whose newest stable tag is built), an exact version (7.1.6), or a
+release candidate (7.2-rc3).
+
+Exit statuses:
+  0  built, and the packages reported on FD 3
+  $c_already_packaged_status  the target version is already packaged in DIR; nothing was built
+  1  anything else
+
+It never prompts, never uses sudo, and never installs. DEB_BUILD_OPTIONS and CCACHE_BASEDIR are left
+exactly as the caller set them.
+"
+
+# mktemp at load time mirrors build_kernel, whose exit hook removes this file.
+c_crack_bundle_temp_file=$(mktemp --suffix=-crack.bundle)
+
+# The library's global contract. The interactive and bisect features are hard-off here, not optional.
+v_packages_destination=
+v_local_version=
+v_cpu_target=
+v_gcc_package=
+v_sav_remote=
+v_unattended=1
+v_bisect=
+# Local to this script.
+v_series=
+v_repo_path=
+v_force=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options h \
+    --long help,series:,destination:,repo:,local-version:,cpu-target:,gcc-package:,sav-remote:,force \
+    --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0
+        ;;
+      --series)
+        v_series=$2
+        shift 2
+        ;;
+      --destination)
+        v_packages_destination=$2
+        shift 2
+        ;;
+      --repo)
+        v_repo_path=$2
+        shift 2
+        ;;
+      --local-version)
+        v_local_version=$2
+        shift 2
+        ;;
+      --cpu-target)
+        v_cpu_target=$2
+        shift 2
+        ;;
+      --gcc-package)
+        v_gcc_package=$2
+        shift 2
+        ;;
+      --sav-remote)
+        v_sav_remote=$2
+        shift 2
+        ;;
+      --force)
+        v_force=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    >&2 echo "$c_help"
+    exit 1
+  fi
+}
+
+# Fail before a multi-hour build rather than during it, and fail loudly: a recipe cannot recover from
+# a half-specified build.
+function validate_cmdline_args {
+  # Ordered pairs, so the report is deterministic and lists every missing option at once.
+  local required=(
+    v_series:series
+    v_packages_destination:destination
+    v_repo_path:repo
+    v_local_version:local-version
+    v_cpu_target:cpu-target
+    v_gcc_package:gcc-package
+  )
+  local pair name missing=()
+  for pair in "${required[@]}"; do
+    name=${pair%%:*}
+    [[ -z ${!name} ]] && missing+=("--${pair#*:}")
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    >&2 printf 'Missing required options: %s\n' "${missing[*]}"
+    exit 1
+  fi
+
+  if [[ ! $v_series =~ ^[0-9]+\.[0-9]+(\.[0-9]+|-rc[0-9]+)?$ ]]; then
+    >&2 printf 'Invalid --series: %s (expected M.m, M.m.p or M.m-rcN)\n' "$v_series"
+    exit 1
+  fi
+
+  if [[ ! -d $v_repo_path/.git ]]; then
+    >&2 printf 'Not a git checkout: %s\n' "$v_repo_path"
+    exit 1
+  fi
+
+  if [[ ! -d $v_packages_destination || ! -w $v_packages_destination ]]; then
+    >&2 printf 'Destination is not a writable directory: %s\n' "$v_packages_destination"
+    exit 1
+  fi
+}
+
+function register_exit_hook {
+  function _exit_hook {
+    set +o errexit
+    rm -f "$c_crack_bundle_temp_file"
+  }
+
+  trap _exit_hook EXIT
+}
+
+function main {
+  decode_cmdline_args "$@"
+  validate_cmdline_args
+
+  # The build runs as the unprivileged builder; root would leave root-owned artifacts behind.
+  if [[ $EUID -eq 0 ]]; then
+    >&2 echo 'This script must not be run with sudo permissions.'
+    exit 1
+  fi
+
+  validate_toolchain
+  register_exit_hook
+  cd "$v_repo_path"
+
+  fetch_remotes
+
+  local building_kernel_version
+  if [[ $v_series =~ ^[0-9]+\.[0-9]+$ ]]; then
+    building_kernel_version=$(find_latest_kernel_version "$v_series")
+  else
+    building_kernel_version=$(normalize_kernel_version "$v_series")
+  fi
+  printf 'Building %s\n' "$building_kernel_version"
+
+  # An explicit status, so the caller never has to infer "nothing to do" from an empty FD 3 and a
+  # directory listing.
+  if [[ -z $v_force ]]; then
+    local packaged_version
+    packaged_version=$(find_latest_packaged_version "$building_kernel_version")
+    if [[ $building_kernel_version == "$packaged_version" ]]; then
+      printf '%s is already packaged in %s\n' "$building_kernel_version" "$v_packages_destination"
+      exit "$c_already_packaged_status"
+    fi
+  fi
+
+  create_if_required_and_switch_branch "$building_kernel_version"
+  apply_sav_branch "$building_kernel_version"
+  verify_or_setup_ubuntu_packaging "$building_kernel_version"
+
+  # Configs are stored in short form, so the lookup uses the short version, not the full M.m.0 form.
+  local source_config_file
+  source_config_file=$(find_local_config_file_for_version \
+    "$(short_kernel_version "$building_kernel_version" with_rc)")
+  if [[ -z $source_config_file ]]; then
+    source_config_file=$(find_most_recent_config_version_available "$building_kernel_version")
+  fi
+  import_config_file "$source_config_file"
+
+  setup_ubuntu_packaging
+  finalize_ubuntu_config
+  prepare_ubuntu_build
+
+  # The build system regenerates .config from the annotations, so these edit the annotations.
+  fix_ubuntu_config
+  disable_debug_info
+  configure_cpu_target
+  disable_unused_modules "$building_kernel_version"
+  flush_annotations
+  verify_disabled_modules
+
+  time compile_kernel
+
+  remove_destination_old_version_files "$building_kernel_version" "$source_config_file"
+  move_packages_and_cleanup "$building_kernel_version"
+
+  local built_packages
+  built_packages=$(find_built_packages "$building_kernel_version")
+  if [[ -z $built_packages ]]; then
+    >&2 printf 'The build produced no packages for %s\n' "$building_kernel_version"
+    exit 1
+  fi
+  send_built_packages_to_fd3 "$built_packages"
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi
