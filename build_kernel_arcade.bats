@@ -214,3 +214,17 @@ stub_build_steps() {
   rm -rf "$tree"
   [ "$status" -eq 0 ]
 }
+
+# extra.postrm.in ships the whole postinst trigger commented out, two-directory form included.
+@test "a commented-out two-directory run-parts invocation does not fail the build" {
+  local tree
+  tree=$(mktemp -d)
+  mkdir -p "$tree/debian/templates"
+  printf '#    cat - >/usr/lib/linux/triggers/$version <<EOF\n#DEB_MAINT_PARAMS="configure" run-parts --report --exit-on-error --arg=$version \\\n#    --arg="$image_path" /etc/kernel/postinst.d /usr/share/kernel/postinst.d\n#EOF\n' \
+    > "$tree/debian/templates/extra.postrm.in"
+
+  run bash -c "cd '$tree' && source '$BATS_TEST_DIRNAME/lib/kernel_build.sh' &&
+    verify_single_directory_run_parts"
+  rm -rf "$tree"
+  [ "$status" -eq 0 ]
+}

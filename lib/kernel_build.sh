@@ -1254,6 +1254,9 @@ function verify_single_directory_run_parts {
         # Join backslash-continued lines first: the two directories usually sit on the continuation.
         s/\\\n\s*/ /g;
         for my $line (split /\n/, $_) {
+          # extra.postrm.in keeps a commented-out copy of the postinst trigger, two directories and
+          # all; it never runs, so it must not fail the build.
+          next if $line =~ /^\s*#/;
           next unless $line =~ /\brun-parts\b/;
           my @directories = $line =~ m{\s(/\S+)}g;
           print "$ARGV: $line\n" if @directories > 1;
