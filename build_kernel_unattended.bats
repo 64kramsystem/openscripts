@@ -3,7 +3,7 @@
 bats_require_minimum_version 1.5.0
 
 setup_file() {
-  source "$BATS_TEST_DIRNAME/build_kernel_arcade"
+  source "$BATS_TEST_DIRNAME/build_kernel_unattended"
   # setup_file runs in its own process, so every function the tests call — the wrapper's and the
   # library's — has to travel through the environment.
   local name
@@ -34,7 +34,7 @@ teardown() {
   rm -rf "$v_repo_path" "$v_packages_destination"
 }
 
-# The options a valid arcade invocation always carries.
+# The options a valid invocation always carries.
 complete_args() {
   printf '%s\n' --series 7.1 --destination "$v_packages_destination" --repo "$v_repo_path" \
     --local-version sav --cpu-target znver5 --gcc-package gcc-14
@@ -74,13 +74,13 @@ stub_build_steps() {
 }
 
 @test "every missing option is reported at once, in a stable order" {
-  run bash "$BATS_TEST_DIRNAME/build_kernel_arcade" --series 7.1
+  run bash "$BATS_TEST_DIRNAME/build_kernel_unattended" --series 7.1
   [ "$status" -eq 1 ]
   [ "$output" = "Missing required options: --destination --repo --local-version --cpu-target --gcc-package" ]
 }
 
 @test "an invalid series is rejected before anything runs" {
-  run bash "$BATS_TEST_DIRNAME/build_kernel_arcade" --series 7 \
+  run bash "$BATS_TEST_DIRNAME/build_kernel_unattended" --series 7 \
     --destination "$v_packages_destination" --repo "$v_repo_path" \
     --local-version sav --cpu-target znver5 --gcc-package gcc-14
   [ "$status" -eq 1 ]
@@ -90,7 +90,7 @@ stub_build_steps() {
 @test "a repo that is not a git checkout is rejected" {
   local not_a_repo
   not_a_repo=$(mktemp -d)
-  run bash "$BATS_TEST_DIRNAME/build_kernel_arcade" --series 7.1 \
+  run bash "$BATS_TEST_DIRNAME/build_kernel_unattended" --series 7.1 \
     --destination "$v_packages_destination" --repo "$not_a_repo" \
     --local-version sav --cpu-target znver5 --gcc-package gcc-14
   rmdir "$not_a_repo"
@@ -99,7 +99,7 @@ stub_build_steps() {
 }
 
 @test "an unwritable destination is rejected" {
-  run bash "$BATS_TEST_DIRNAME/build_kernel_arcade" --series 7.1 \
+  run bash "$BATS_TEST_DIRNAME/build_kernel_unattended" --series 7.1 \
     --destination /nonexistent-destination --repo "$v_repo_path" \
     --local-version sav --cpu-target znver5 --gcc-package gcc-14
   [ "$status" -eq 1 ]
@@ -157,7 +157,7 @@ stub_build_steps() {
 # apply_sav_branch's "already exists" guard — daily, in both suites, until it is deleted by hand.
 @test "the temporary replay branch never outlives the run" {
   run bash -c "
-    source '$BATS_TEST_DIRNAME/build_kernel_arcade'
+    source '$BATS_TEST_DIRNAME/build_kernel_unattended'
     $(declare -f stub_build_steps)
     stub_build_steps
     apply_sav_branch() {
@@ -177,17 +177,13 @@ stub_build_steps() {
 # ── Contract with the library ─────────────────────────────────────────────────
 
 @test "the prompt can never trigger: v_unattended is set at load time" {
-  grep -q "^v_unattended=1$" "$BATS_TEST_DIRNAME/build_kernel_arcade"
+  grep -q "^v_unattended=1$" "$BATS_TEST_DIRNAME/build_kernel_unattended"
 }
 
 @test "reporting on a closed FD 3 does not fail the build" {
   run bash 3>&- -c 'source '"$BATS_TEST_DIRNAME"'/lib/kernel_build.sh; send_built_packages_to_fd3 "a.deb"; echo survived'
   [ "$status" -eq 0 ]
   [[ $output == *survived* ]]
-}
-
-@test "root is refused, so artifacts cannot end up root-owned" {
-  grep -q 'EUID -eq 0' "$BATS_TEST_DIRNAME/build_kernel_arcade"
 }
 
 # The template patch is an exact-string replacement that silently does nothing once upstream

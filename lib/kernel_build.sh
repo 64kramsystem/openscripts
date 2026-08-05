@@ -2,7 +2,7 @@
 # The v_* globals below are set by whichever entry point sources this file, so shellcheck cannot see
 # their assignment, and v_cherry_pick_branch_created is set here but read by the entry point.
 # shellcheck disable=SC2154,SC2034
-# Shared kernel build mechanics, sourced by build_kernel and build_kernel_arcade.
+# Shared kernel build mechanics, sourced by build_kernel and build_kernel_unattended.
 #
 # This library is a pure extraction: every function below is byte-identical to the one it replaced
 # in build_kernel. It deliberately has no side effects at source time, so both entry points can
