@@ -21,9 +21,19 @@ class CleanKernelPackages
     options = {simulate: simulate, keep_previous: keep_previous, delete_current: delete_current}
 
     current_version = KernelVersion.find_current
-    latest_version = KernelVersion.find_latest_available
+    # The latest version is only displayed, never used to decide what to remove, so a failed lookup
+    # (an unreachable kernel.org aborted a whole update run, after the new kernel was installed and
+    # with the stale packages left in place) must not take the cleanup down with it.
+    latest_version = begin
+      KernelVersion.find_latest_available
+    rescue StandardError => e
+      $stderr.puts "Couldn't find the latest available kernel version (#{e.message}); continuing..."
+      nil
+    end
 
-    if current_version.eql_heterogeneous?(latest_version)
+    if latest_version.nil?
+      puts "Current kernel version: #{current_version.to_s(raw: false)} (latest unknown)", ""
+    elsif current_version.eql_heterogeneous?(latest_version)
       puts "Current kernel is up to date (#{current_version.to_s(raw: false)})", ""
     else
       puts "Current/latest kernel version: #{current_version.to_s(raw: false)}/#{latest_version.to_s(raw: false)}", ""
