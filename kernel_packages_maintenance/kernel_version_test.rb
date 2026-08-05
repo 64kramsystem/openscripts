@@ -416,4 +416,76 @@ class KernelVersionTest < Minitest::Test
     assert_equal '5.11.0-rc1-generic', sorted[3].raw
     assert_equal '6.0.0-generic', sorted[4].raw
   end
+
+  # Test the latest available version lookup
+  #
+  # The repositories are queried over the network, so `git ls-remote` is stubbed. An unreachable
+  # kernel.org used to abort the query, and with it the caller (the update run's kernel packages
+  # cleanup), even when the other repository was up.
+
+  STABLE_REPOSITORY = 'git.kernel.org'
+
+  def test_find_latest_available_unions_the_repositories_tags
+    version = stub_ls_remote(
+      STABLE_REPOSITORY => "aaa\trefs/tags/v7.1.6\n",
+      'github.com' => "bbb\trefs/tags/v7.1\nccc\trefs/tags/v7.2\n"
+    )
+
+    assert_equal 'v7.1.6', version.to_s
+  end
+
+  def test_find_latest_available_skips_an_unreachable_repository
+    _out, err = capture_io do
+      version = stub_ls_remote(
+        STABLE_REPOSITORY => :failure,
+        'github.com' => "bbb\trefs/tags/v7.1\n"
+      )
+
+      assert_equal 'v7.1', version.to_s
+    end
+
+    assert_includes err, STABLE_REPOSITORY
+    assert_includes err, 'may be incomplete'
+  end
+
+  def test_find_latest_available_raises_when_no_repository_answers
+    capture_io do
+      error = assert_raises(RuntimeError) do
+        stub_ls_remote(STABLE_REPOSITORY => :failure, 'github.com' => :failure)
+      end
+
+      assert_includes error.message, 'any repository'
+    end
+  end
+
+  private
+
+  ExitStatus = Struct.new(:success) do
+    def success? = success
+  end
+
+  # responses: repository address fragment => `git ls-remote` output, or :failure
+  #
+  # minitest 6 no longer ships Object#stub and the suite runs without a bundle, so the two calls that
+  # reach outside (the network query, and `uname -r`, which would make the expectations depend on the
+  # running kernel) are swapped out by hand.
+  #
+  def stub_ls_remote(responses)
+    original_find_current = KernelVersion.method(:find_current)
+    original_capture2 = Open3.method(:capture2)
+
+    KernelVersion.define_singleton_method(:find_current) do
+      parse_uname_version('7.1.4-070104-sav-generic')
+    end
+
+    Open3.define_singleton_method(:capture2) do |command|
+      _, output = responses.find { |fragment, _| command.include?(fragment) }
+      output == :failure ? ['', ExitStatus.new(false)] : [output, ExitStatus.new(true)]
+    end
+
+    KernelVersion.find_latest_available
+  ensure
+    KernelVersion.define_singleton_method(:find_current, original_find_current)
+    Open3.define_singleton_method(:capture2, original_capture2)
+  end
 end

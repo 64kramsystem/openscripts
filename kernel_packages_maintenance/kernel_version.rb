@@ -143,18 +143,31 @@ class KernelVersion
 
   # Returns a KernelVersion instance.
   #
+  # The repositories are queried independently, and their tags unioned: linux-stable carries the
+  # stable tags, torvalds/linux the mainline ones. The two commands used to be joined with `&&`, so a
+  # single unreachable host (kernel.org's HTTPS endpoint intermittently fails the TLS handshake)
+  # aborted the query, and with it the caller. A host that doesn't answer is now reported and
+  # skipped - the result can then be lower than the actual latest, hence the warning - and only a
+  # total outage is an error. git's own message goes to the inherited stderr.
+  #
   def self.find_latest_available
     current_version = find_current.to_s[/^\d+\.\d+/]
 
-    kernel_branches, child_status = KERNEL_REPOSITORY_ADDRESSES
-      .map { |address| "git ls-remote --tags --refs #{address.shellescape}" }
-      .join(" && ")
-      .then { |command| Open3.capture2(command) }
+    repositories_tags = KERNEL_REPOSITORY_ADDRESSES.filter_map do |address|
+      tags, child_status = Open3.capture2("git ls-remote --tags --refs #{address.shellescape}")
 
-    exit child_status.exitstatus if !child_status.success?
+      if child_status.success?
+        tags
+      else
+        $stderr.puts "Couldn't fetch the tags from #{address}; skipping it, so the latest version found may be incomplete..."
+        nil
+      end
+    end
 
-    kernel_branches
-      .lines
+    raise "Couldn't fetch the kernel tags from any repository!" if repositories_tags.empty?
+
+    repositories_tags
+      .flat_map(&:lines)
       .filter_map { |tag| parse_tag_version(Regexp.last_match[1]) if tag =~ %r{\trefs/tags/(v#{Regexp.escape(current_version)}($|\.|-).*)} }
       .uniq
       .max
