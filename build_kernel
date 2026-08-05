@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-# Resolves in both layouts: openscripts/lib/ in the checkout, helpers/lib/ once installed on arcade.
+# Resolves in both layouts: openscripts/lib/ in the checkout, helpers/lib/ once installed.
 c_script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/kernel_build.sh
 source "$c_script_directory/lib/kernel_build.sh"

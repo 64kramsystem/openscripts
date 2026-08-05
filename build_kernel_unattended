@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Unattended kernel builder for the arcade APT repository.
+# Unattended kernel builder for an APT repository.
 #
 # build_kernel is a general-purpose tool: bisect and install modes, cherry-picks, config diffs, a
 # prompt, sudo caching. None of that belongs in a repository recipe, and its `exit 0` when the version
@@ -14,7 +14,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-# Resolves in both layouts: openscripts/lib/ in the checkout, helpers/lib/ once installed on arcade.
+# Resolves in both layouts: openscripts/lib/ in the checkout, helpers/lib/ once installed.
 c_script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/kernel_build.sh
 source "$c_script_directory/lib/kernel_build.sh"
@@ -181,12 +181,6 @@ function register_exit_hook {
 function main {
   decode_cmdline_args "$@"
   validate_cmdline_args
-
-  # The build runs as the unprivileged builder; root would leave root-owned artifacts behind.
-  if [[ $EUID -eq 0 ]]; then
-    >&2 echo 'This script must not be run with sudo permissions.'
-    exit 1
-  fi
 
   validate_toolchain
   register_exit_hook
