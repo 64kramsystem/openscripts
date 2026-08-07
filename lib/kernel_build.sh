@@ -1093,19 +1093,6 @@ function mainline_package_version {
   echo -n "${upstream}-${abinum}${local_version:+-$local_version}.${debversion}"
 }
 
-# The kernel packaging templates invoke run-parts with two directories, which debianutils supports
-# from 5.23 (Ubuntu 26.04); older releases (e.g. Noble's 5.17) accept a single directory only, so
-# there the maintainer script invocations must be patched.
-#
-function run_parts_accepts_multiple_directories {
-  local dir_1 dir_2 exit_status=0
-  dir_1=$(mktemp -d)
-  dir_2=$(mktemp -d)
-  run-parts --list "$dir_1" "$dir_2" > /dev/null 2>&1 || exit_status=$?
-  rmdir "$dir_1" "$dir_2"
-  return "$exit_status"
-}
-
 function fix_run_parts_two_directory_invocations {
   python3 - <<'PYEOF'
 import pathlib
@@ -1152,10 +1139,12 @@ function setup_ubuntu_packaging {
   # Remove ZFS modules dependency - not built in mainline builds (introduced in 7.0-rc7)
   sed -i -re 's/, linux-main-modules-zfs-\S+ \[[^]]+\]//' debian.master/control.d/flavour-control.stub
 
-  # Fix run-parts two-directory invocation (introduced in 7.0-rc7) where the system run-parts only
-  # accepts one directory
-  if ! run_parts_accepts_multiple_directories; then
-    python3 - <<'PYEOF'
+  # Fix the run-parts two-directory invocation (introduced in 7.0-rc7). debianutils accepts that form
+  # only from 5.23, so a package built unpatched fails at install time on Noble's 5.17. The patched
+  # loop form is valid on every suite, so it is applied unconditionally: gating it on the build
+  # host's own run-parts left Resolute unpatched, where verify_single_directory_run_parts - which
+  # cannot know the packaging was left alone deliberately - then failed the build.
+  python3 - <<'PYEOF'
 import pathlib
 
 def patch(path, old, new):
@@ -1217,8 +1206,7 @@ if p.exists():
     patch(p, old, new)
 PYEOF
 
-    fix_run_parts_two_directory_invocations
-  fi
+  fix_run_parts_two_directory_invocations
 
   # Don't fail if we find no *.ko files in the build dir
   sed -i -re 's/zstd -19 --quiet --rm/zstd -19 --rm || true/g' debian/rules.d/2-binary-arch.mk || true
