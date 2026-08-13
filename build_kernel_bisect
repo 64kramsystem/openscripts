@@ -1,0 +1,310 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+# Resolves in both layouts: openscripts/lib/ in the checkout, helpers/lib/ once installed.
+c_script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib/kernel_build.sh
+source "$c_script_directory/lib/kernel_build.sh"
+
+c_logfile=$(dirname "$(mktemp --dry-run)")/$(basename "$0").log
+c_help="Usage: $(basename "$0") [-h|--help] [-r|--repo-path PATH] [-e|--enable-unused-modules]
+                                [-c|--cherry-pick COMMITS]
+
+Builds and installs the kernel at the current checkout for bisection.
+
+The build always:
+- targets the current CPU with the newest installed GCC
+- uses the local version 'bisect'
+- disables LTO and sanitizers for faster compilation
+- builds packages in a private temporary directory and removes them after successful installation
+- caches downloaded kernel configurations and packaging bundles in ~/.cache/build_kernel_bisect
+
+Options:
+- [-r|--repo-path <path>]       : defaults to the current path or \$BUILD_KERNEL_REPO_PATH
+- [-e|--enable-unused-modules]  : enable unused modules (by default, they're disabled)
+- [-c|--cherry-pick <c1,c2,...>]: cherry pick commits, defaults to \$BUILD_KERNEL_CHERRY_PICKS
+
+Cherry picking:
+- format: '[shortver:]ca{,cb…}/…'
+- each commit can be prefixed with 'R' to revert it
+- shortver is the M.m of the nearest tag reachable from the bisected commit
+- requires a clean tracked working tree, which is restored at the end of every run
+
+Exit statuses:
+- 0   : the kernel was built and installed
+- 1   : any other failure (setup, build, or installation)
+- 128 : cherry picking or tree restoration failed; aborts git bisect run
+"
+
+v_repo_path=${BUILD_KERNEL_REPO_PATH:-}
+v_local_version=bisect
+v_cpu_target=native
+v_gcc_package=
+v_packages_destination=
+v_config_directory=~/.cache/build_kernel_bisect
+v_crack_bundle_cache_directory=~/.cache/build_kernel_bisect
+v_enable_unused_modules=
+v_raw_cherry_picks=${BUILD_KERNEL_CHERRY_PICKS:-} # see help for the format
+v_cherry_pick_branch_created= # set only when this run creates the temporary branch
+v_original_head= # bisected commit restored by the exit hook
+v_clean_worktree_on_exit= # set after verifying that tracked files started clean
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options hec:r: --long help,enable-unused-modules,cherry-pick:,repo-path: \
+    --name "$(basename "$0")" -- "$@")
+
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -e|--enable-unused-modules)
+        v_enable_unused_modules=1
+        shift ;;
+      -c|--cherry-pick)
+        v_raw_cherry_picks=$2
+        shift 2 ;;
+      -r|--repo-path)
+        v_repo_path=$2
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 0 ]]; then
+    >&2 echo "$c_help"
+    exit 1
+  fi
+}
+
+function cache_sudo {
+  sudo -v
+
+  while true; do
+    sleep 60
+    kill -0 "$$" || exit
+    sudo -nv
+  done 2>/dev/null &
+}
+
+# Return format: normalized version.
+function find_branch_kernel_version {
+  git describe --tags --abbrev=0 \
+    | perl -pe 's/^v\d+\.\d+\K$/.0/' \
+    | perl -pe 's/^v//'
+}
+
+function register_exit_hook {
+  function _exit_hook {
+    local status=$?
+    set +o errexit
+
+    "${SCRIPTING_ALARM_PROGRAM:-true}"
+
+    local cleanup_failed=
+
+    # Only clean up a branch this run created.
+    if [[ -n $v_cherry_pick_branch_created ]] &&
+      git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
+      # A conflicting operation leaves a sequencer active, which blocks checkout and branch deletion.
+      git cherry-pick --abort 2>/dev/null || true
+      git revert --abort 2>/dev/null || true
+
+      if [[ $(git rev-parse --abbrev-ref HEAD) == "$c_cherry_pick_branch" ]]; then
+        # The tree was verified clean before the temporary branch was created, so all tracked
+        # changes since then were made by this build and must not leak into the next bisect step.
+        # Restore to the temporary tip first so detaching to the original commit is a clean switch.
+        git restore --staged --worktree --source=HEAD :/ || cleanup_failed=1
+        git checkout -q --detach "$v_original_head" || cleanup_failed=1
+      fi
+
+      git branch -D -q "$c_cherry_pick_branch" || cleanup_failed=1
+    elif [[ -n $v_clean_worktree_on_exit ]]; then
+      # A version-qualified entry may not apply at this bisect step, but the packaging changes still
+      # need to be discarded so a later matching step starts clean.
+      [[ $(git rev-parse HEAD) == "$v_original_head" ]] || cleanup_failed=1
+      git restore --staged --worktree --source="$v_original_head" :/ || cleanup_failed=1
+    fi
+
+    if [[ $status -eq 0 ]]; then
+      rm -rf -- "$v_packages_destination"
+    else
+      >&2 printf 'Build failed; temporary files retained in %s\n' "$v_packages_destination"
+    fi
+
+    if [[ -n $cleanup_failed ]]; then
+      >&2 echo 'Could not restore the kernel tree; repair it before continuing the bisect.'
+      exit 128
+    fi
+  }
+
+  trap _exit_hook EXIT
+}
+
+function setup_logging {
+  exec 5> "$c_logfile"
+  BASH_XTRACEFD=5
+  exec > >(tee -ai "$c_logfile") 2>&1
+  set -x
+}
+
+function make_build_faster {
+  annotation_set CONFIG_LTO_NONE y
+  annotation_set CONFIG_LTO_CLANG_FULL n
+  annotation_set CONFIG_LTO_CLANG_THIN n
+  annotation_set CONFIG_KASAN n
+  annotation_set CONFIG_KCSAN n
+  annotation_set CONFIG_UBSAN n
+  annotation_set CONFIG_GCOV_KERNEL n
+}
+
+# $1: building kernel version
+# $v_raw_cherry_picks can be empty, in which case no commits are applied.
+function cherry_pick_commits {
+  if [[ -z $v_raw_cherry_picks ]]; then
+    return
+  fi
+
+  local building_kernel_version=$1
+  local short_building_kernel_version
+  short_building_kernel_version=$(short_kernel_version "$building_kernel_version" no_rc)
+
+  local raw_cherry_pick_entries
+  mapfile -td/ raw_cherry_pick_entries < <(echo -n "$v_raw_cherry_picks")
+
+  # Every build modifies tracked packaging files. Cherry-pick/revert requires a clean tree, and a
+  # failure status of 1 could be interpreted as a bad commit by git bisect run. Abort the bisect
+  # instead of discarding edits that this invocation did not create.
+  if [[ -n $(git status --porcelain --untracked-files=no) ]]; then
+    >&2 echo 'Cherry picking requires a clean tracked working tree.'
+    >&2 echo 'Commit, stash, or restore its changes before retrying.'
+    exit 128
+  fi
+
+  v_original_head=$(git rev-parse HEAD)
+  v_clean_worktree_on_exit=1
+
+  local cherry_picks_entry
+  for cherry_picks_entry in "${raw_cherry_pick_entries[@]}"; do
+    local entry_kernel_version=${cherry_picks_entry%:*}
+
+    # The second expression has no version prefix.
+    if [[ $entry_kernel_version == "$short_building_kernel_version" ||
+      $entry_kernel_version == "$cherry_picks_entry" ]]; then
+      local current_branch
+      current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+      if [[ $current_branch != "$c_cherry_pick_branch" ]]; then
+        # Switch only when this entry applies to the bisected version.
+        if git rev-parse --verify "$c_cherry_pick_branch" >/dev/null 2>&1; then
+          >&2 echo "Branch '$c_cherry_pick_branch' already exists; remove it manually if it's stale."
+          exit 128
+        fi
+
+        if ! git checkout -b "$c_cherry_pick_branch"; then
+          exit 128
+        fi
+        v_cherry_pick_branch_created=1
+      fi
+
+      local entry_raw_commits=${cherry_picks_entry#*:}
+      local entry_commits
+      mapfile -td, entry_commits < <(echo -n "$entry_raw_commits")
+
+      local commit
+      for commit in "${entry_commits[@]}"; do
+        if [[ $commit == R* ]]; then
+          echo "# REVERT ${commit#R} #######################################################"
+          if ! git revert --no-edit "${commit#R}"; then
+            exit 128
+          fi
+        else
+          echo "# CHERRY PICK $commit ##################################################"
+          if ! git cherry-pick "$commit"; then
+            exit 128
+          fi
+        fi
+      done
+    elif [[ ! $entry_kernel_version =~ ^[[:digit:]]+\.[[:digit:]]+ ]]; then
+      >&2 echo "Wrong cherry pick format: $cherry_picks_entry"
+      exit 128
+    fi
+  done
+}
+
+function main {
+  decode_cmdline_args "$@"
+
+  if [[ $EUID -eq 0 ]]; then
+    >&2 echo "This script must not be run with sudo permissions."
+    exit 1
+  fi
+
+  validate_toolchain
+  cache_sudo
+
+  if [[ -n $v_repo_path ]]; then
+    cd "$v_repo_path"
+  fi
+
+  v_packages_destination=$(mktemp --directory --tmpdir build_kernel_bisect.XXXXXX)
+  c_crack_bundle_temp_file=$v_packages_destination/crack.bundle
+  register_exit_hook
+  setup_logging
+  mkdir -p "$v_config_directory" "$v_crack_bundle_cache_directory"
+
+  local building_kernel_version
+  building_kernel_version=$(find_branch_kernel_version)
+  cherry_pick_commits "$building_kernel_version"
+
+  verify_or_setup_ubuntu_packaging "$building_kernel_version"
+
+  local source_config_file
+  source_config_file=$(find_config_file_for_version "$building_kernel_version")
+  import_config_file "$source_config_file"
+
+  setup_ubuntu_packaging
+  verify_single_directory_run_parts
+  finalize_ubuntu_config
+  prepare_ubuntu_build
+
+  fix_ubuntu_config
+  disable_debug_info
+  configure_cpu_target
+  make_build_faster
+
+  if [[ -z $v_enable_unused_modules ]]; then
+    disable_unused_modules "$building_kernel_version"
+  fi
+
+  flush_annotations
+  time compile_kernel
+  move_packages_and_cleanup "$building_kernel_version"
+
+  local built_packages_output
+  built_packages_output=$(find_built_packages "$building_kernel_version")
+  if [[ -z $built_packages_output ]]; then
+    >&2 printf 'The build produced no packages for %s\n' "$building_kernel_version"
+    exit 1
+  fi
+
+  local built_packages
+  mapfile -t built_packages <<< "$built_packages_output"
+
+  sudo aptitude purge -y ~i"linux-.*-$v_local_version"
+  sudo dpkg -i "${built_packages[@]}"
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi

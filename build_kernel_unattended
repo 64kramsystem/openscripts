@@ -2,11 +2,8 @@
 
 # Unattended kernel builder for an APT repository.
 #
-# build_kernel is a general-purpose tool: bisect and install modes, cherry-picks, config diffs, a
-# prompt, sudo caching. None of that belongs in a repository recipe, and its `exit 0` when the version
-# is already packaged is indistinguishable from a build that produced nothing — which is how a Noble
-# run once adopted Resolute's packages. This entry point does the one job, never prompts, and reports
-# "already packaged" as a distinct status.
+# Unlike build_kernel_bisect, this entry point builds a selected release into a persistent APT
+# repository without installing it. It reports "already packaged" as a distinct status.
 
 set -o pipefail
 set -o errexit
@@ -37,17 +34,16 @@ It never prompts, never uses sudo, and never installs. DEB_BUILD_OPTIONS and CCA
 exactly as the caller set them.
 "
 
-# mktemp at load time mirrors build_kernel, whose exit hook removes this file.
 c_crack_bundle_temp_file=$(mktemp --suffix=-crack.bundle)
 
-# The library's global contract. The interactive and bisect features are hard-off here, not optional.
+# The library's global contract.
 v_packages_destination=
+v_config_directory=
+v_crack_bundle_cache_directory=
 v_local_version=
 v_cpu_target=
 v_gcc_package=
 v_sav_remote=
-v_unattended=1
-v_bisect=
 # Set by apply_sav_branch when it creates the temporary replay branch, and read by the exit hook.
 v_cherry_pick_branch_created=
 # Local to this script.
@@ -150,6 +146,8 @@ function validate_cmdline_args {
     >&2 printf 'Destination is not a writable directory: %s\n' "$v_packages_destination"
     exit 1
   fi
+
+  v_config_directory=$v_packages_destination
 }
 
 function register_exit_hook {
@@ -211,13 +209,8 @@ function main {
   apply_sav_branch "$building_kernel_version"
   verify_or_setup_ubuntu_packaging "$building_kernel_version"
 
-  # Configs are stored in short form, so the lookup uses the short version, not the full M.m.0 form.
   local source_config_file
-  source_config_file=$(find_local_config_file_for_version \
-    "$(short_kernel_version "$building_kernel_version" with_rc)")
-  if [[ -z $source_config_file ]]; then
-    source_config_file=$(find_most_recent_config_version_available "$building_kernel_version")
-  fi
+  source_config_file=$(find_config_file_for_version "$building_kernel_version")
   import_config_file "$source_config_file"
 
   setup_ubuntu_packaging

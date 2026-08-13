@@ -1,37 +1,35 @@
 # shellcheck shell=bash
 # The v_* globals below are set by whichever entry point sources this file, so shellcheck cannot see
-# their assignment, and v_cherry_pick_branch_created is set here but read by the entry point.
+# their assignment, and v_cherry_pick_branch_created is shared with the entry points.
 # shellcheck disable=SC2154,SC2034
-# Shared kernel build mechanics, sourced by build_kernel and build_kernel_unattended.
-#
-# This library is a pure extraction: every function below is byte-identical to the one it replaced
-# in build_kernel. It deliberately has no side effects at source time, so both entry points can
-# source it before deciding anything.
+# Shared kernel build mechanics, sourced by build_kernel_bisect and build_kernel_unattended.
 #
 # The functions read exactly these globals, which the sourcing entry point must set before calling
 # them (nounset makes an unset one fatal):
 #
 #   v_packages_destination  where built .debs are collected
+#   v_config_directory      where downloaded kernel configurations are cached
 #   v_local_version         the kernel localversion (e.g. sav)
 #   v_cpu_target            -march/-mtune target validated and configured into the kernel
 #   v_gcc_package           the gcc package to build with; resolved here when empty
 #   v_sav_remote            remote holding the per-major sav branch to replay, or empty to skip
-#   v_unattended            non-empty to suppress the only prompt (verify_disabled_modules)
-#   v_bisect                non-empty in bisect mode; build_kernel only
-#   c_crack_bundle_temp_file  a writable temporary path for the downloaded packaging bundle
+#   v_crack_bundle_cache_directory  persistent bundle cache, or empty to use the scratch path
+#   c_crack_bundle_temp_file        scratch path used when bundle caching is disabled
 #
-# v_cherry_pick_branch_created is assigned here and read by build_kernel exit hook.
+# v_cherry_pick_branch_created is assigned by cherry-pick/replay code and read by exit hooks.
 
 
 # Pure constants, so the library can define them at source time.
 #
-# The cherry-pick branch name lives here because apply_sav_branch lands the replayed sav commits on
-# it, so both entry points need it, not only the cherry-pick feature.
+# Cherry picking and apply_sav_branch land their commits on this temporary branch.
 c_cherry_pick_branch=temporary_cherry_picks
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
 c_mainline_ppa_url=https://kernel.ubuntu.com/mainline/
 # Example: https://kernel.ubuntu.com/mainline/v6.8-rc1/amd64/linux-modules-6.8.0-060800rc1-generic_6.8.0-060800rc1.202401212233_amd64.deb
 c_package_name_pattern="amd64/linux-modules-[[:alnum:]_.-]+_amd64+\.deb"
+
+_annotation_ops=()
+_disabled_configs=()
 
 function find_latest_installed_gcc_package {
   dpkg-query -W -f='${binary:Package}\t${db:Status-Status}\n' 'gcc-[0-9]*' 2>/dev/null |
@@ -144,7 +142,21 @@ function find_latest_kernel_version {
 function find_local_config_file_for_version {
   local kernel_version=$1
 
-  find "$v_packages_destination" -name "config-$kernel_version" -printf "%p"
+  find "$v_config_directory" -name "config-$kernel_version" -printf "%p"
+}
+
+# Configs use the short version (config-7.0 for 7.0.0), unlike package versions.
+function find_config_file_for_version {
+  local building_kernel_version=$1
+  local source_config_file
+  source_config_file=$(find_local_config_file_for_version \
+    "$(short_kernel_version "$building_kernel_version" with_rc)")
+
+  if [[ -z $source_config_file ]]; then
+    source_config_file=$(find_most_recent_config_version_available "$building_kernel_version")
+  fi
+
+  echo -n "$source_config_file"
 }
 
 # Search the most recent patch version config for the given kernel, both in the PPA and the local
@@ -266,7 +278,7 @@ function download_and_extract_config_file_from_modules_package {
   local raw_config_file
   raw_config_file=$(
     dpkg-deb --fsys-tarfile "$local_package_name" \
-      | tar xv -C "$v_packages_destination" --wildcards --transform="s|^\./boot/||" "./boot/config-*" \
+      | tar xv -C "$v_config_directory" --wildcards --transform="s|^\./boot/||" "./boot/config-*" \
       | perl -pe 's|^\./boot/||'
   )
 
@@ -289,9 +301,9 @@ function download_and_extract_config_file_from_modules_package {
     exit 1
   fi
 
-  mv "$v_packages_destination/$raw_config_file" "$v_packages_destination/$config_file"
+  mv "$v_config_directory/$raw_config_file" "$v_config_directory/$config_file"
 
-  echo -n "$v_packages_destination/$config_file"
+  echo -n "$v_config_directory/$config_file"
 }
 
 # Download crack.bundle for the specified kernel version.
@@ -306,13 +318,32 @@ function download_crack_bundle {
   short_version=$(short_kernel_version "$kernel_version" with_rc)
 
   local crack_bundle_url="${c_mainline_ppa_url}v${short_version}/crack.bundle"
+  local bundle_path=$c_crack_bundle_temp_file
+  local download_path=$bundle_path
+
+  if [[ -n $v_crack_bundle_cache_directory ]]; then
+    bundle_path=$v_crack_bundle_cache_directory/crack-$short_version.bundle
+    download_path=$bundle_path.part
+
+    if git bundle list-heads "$bundle_path" >/dev/null 2>&1; then
+      >&2 echo "Using cached crack.bundle for v${short_version}"
+      echo -n "$bundle_path"
+      return
+    fi
+
+    rm -f "$bundle_path"
+  fi
 
   >&2 echo "Downloading crack.bundle from ${crack_bundle_url}..."
 
-  if wget --quiet "$crack_bundle_url" -O "$c_crack_bundle_temp_file"; then
+  if wget --quiet "$crack_bundle_url" -O "$download_path"; then
+    if [[ $download_path != "$bundle_path" ]]; then
+      mv "$download_path" "$bundle_path"
+    fi
     >&2 echo "Downloaded crack.bundle for v${short_version}"
-    echo -n "$c_crack_bundle_temp_file"
+    echo -n "$bundle_path"
   else
+    rm -f "$download_path"
     >&2 echo "Failed to download crack.bundle from ${crack_bundle_url}"
     exit 1
   fi
@@ -421,18 +452,9 @@ function create_if_required_and_switch_branch {
   fi
 }
 
-function same_major_minor_version {
-  local short_version_1 short_version_2
-
-  short_version_1=$(short_kernel_version "$1" no_rc)
-  short_version_2=$(short_kernel_version "$2" no_rc)
-
-  [[ $short_version_1 == "$short_version_2" ]]
-}
-
 function import_config_file {
-  # Always copy to .config first for modifications
-  cp "$source_config_file" .config
+  # Stage the source as .config for modification before finalize_ubuntu_config moves it into place.
+  cp "$1" .config
 }
 
 # Move modified config to Ubuntu location
@@ -495,6 +517,8 @@ function disable_debug_info {
 }
 
 function configure_cpu_target {
+  # Keep both entry points on the same KCFLAGS path: the unattended builder also accepts explicit
+  # targets, which CONFIG_X86_NATIVE_CPU cannot represent.
   annotation_set CONFIG_X86_NATIVE_CPU n
   export KCFLAGS="-march=$v_cpu_target -mtune=$v_cpu_target"
 }
@@ -968,16 +992,8 @@ function verify_disabled_modules {
   if [[ -n $overridden ]]; then
     >&2 echo "WARNING: these disabled options were forced back on (selected by another option):"
     >&2 echo "$overridden"
-    if [[ -n $v_unattended ]]; then
-      >&2 echo 'Unattended build aborted because disabled options were forced on.'
-      exit 1
-    fi
-    local reply
-    read -rp "Continue with the build anyway? [y/N] " reply
-    if [[ $reply != [yY] ]]; then
-      >&2 echo "Build aborted."
-      exit 1
-    fi
+    >&2 echo 'Build aborted because disabled options were forced on.'
+    exit 1
   fi
 }
 
@@ -1327,24 +1343,19 @@ function remove_destination_old_version_files {
   local short_version
   short_version=$(short_kernel_version "$raw_version" no_rc)
 
-  # Note that at least one configuration is necessarily present, but not the packages.
+  # This is actually redundant, although by using the basename, we make this logic more robust.
+  local config_basename
+  config_basename=$(basename "$source_config_file")
 
-  if [[ -z $v_bisect ]]; then
-    # This is actually redundant, although by using the basename, we make this logic more robust.
-    #
-    local config_basename
-    config_basename=$(basename "$source_config_file")
-
-    # Sample filenames (GA configs are stored in short form, without the .0 patch):
-    #
-    # - config-6.9
-    # - config-6.10-rc2
-    #
-    # Ignore configurations that don't follow the convention, so that they can be used for other purposes,
-    # e.g. reference/backup.
-    #
-    find "$v_packages_destination" -regextype egrep -not -name "$config_basename" -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
-  fi
+  # Sample filenames (GA configs are stored in short form, without the .0 patch):
+  #
+  # - config-6.9
+  # - config-6.10-rc2
+  #
+  # Ignore configurations that don't follow the convention, so that they can be used for other
+  # purposes, e.g. reference/backup.
+  find "$v_config_directory" -regextype egrep -not -name "$config_basename" \
+    -regex ".*/config-$short_version(\.|-rc)[[:digit:]]+" -exec rm {} \;
 
   # Sample filenames (mainline-style packages):
   #
