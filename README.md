@@ -37,7 +37,8 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `git_rename_commits`: rename git commits, using the old git (`filter-branch`) method
   - `rebase_from_first_commit`: start an interactive rebase from the first commit of a given file
 - programming
-  - `build_kernel`: builds the Linux kernel, with some automations
+  - `build_kernel_bisect`: builds and installs the current Linux kernel checkout for bisection
+  - `build_kernel_unattended`: builds a selected Linux kernel release for an APT repository
   - `git_full_delete_branch`: checked deletion of branch (local and remote)
   - `git_merge_file_commits`: Merge the commits including a given file, in a Git repository
   - `meld`: wrapper around meld, that opens two blank panels, if no files are passed
@@ -84,15 +85,10 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `xi`: copies stdin or file to clipboard, WSL-compatible
   - `xo`: open the file passed
 
-## Portable kernel builds
+## Kernel builds
 
-`build_kernel` defaults to `--cpu-target znver5`, the GCC target for the Ryzen 9 9950X3D. Use
-`--cpu-target` for another machine; the script verifies both `-march` and `-mtune` with the selected
-compiler before changing the kernel tree. `--gcc-package gcc-N` pins an installed compiler package,
-while the default remains the newest installed GCC.
+`build_kernel_bisect` builds the current checkout with the newest installed GCC and `-march=native -mtune=native`. It uses the `bisect` local version, optionally applies `--cherry-pick` commits, applies the faster-build configuration, installs the result, and removes its temporary packages after a successful installation. Cherry picking requires a clean tracked tree, which is restored after every run. Failed runs retain their temporary directory and print its path. Downloaded kernel configurations and packaging bundles are cached in `~/.cache/build_kernel_bisect` across bisect steps.
 
-Automated builders should pass `--unattended` so configuration conflicts fail with the forced-on
-options in the log instead of waiting for input. The equivalent environment variables are
-`BUILD_KERNEL_CPU_TARGET`, `BUILD_KERNEL_GCC_PACKAGE`, and `BUILD_KERNEL_UNATTENDED`.
+`build_kernel_unattended` builds a selected release into a persistent destination without installing it. Configuration conflicts always abort instead of prompting.
 
 I keep adding new content/update old ones.
