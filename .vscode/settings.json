@@ -1,0 +1,7 @@
+{
+  "search.exclude": {
+    "tag_mp3s_bpm": true, // annoying
+    "desnapped": true,
+  },
+  "files.exclude": {},
+}
