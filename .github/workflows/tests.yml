@@ -46,3 +46,23 @@ jobs:
           ruby-version: '4.0'
           bundler-cache: true
       - run: bundle exec ruby fill_labels_test.rb
+
+  create_jp2_pdf:
+    name: create_jp2_pdf (unittest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install imagecodecs numpy pillow pypdf
+      - run: python tests/create_jp2_pdf_test.py
+
+  scrape_terminal_screen_atspi:
+    name: scrape_terminal_screen_atspi (unittest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: sudo apt-get update
+      - run: sudo apt-get install --yes gir1.2-atspi-2.0 python3-gi
+      - run: /usr/bin/python3 scrape_terminal_screen_atspi_test.py
