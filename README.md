@@ -11,6 +11,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `update_markdown_chapter_references`: generates/updates a Table Of Contents, and navigation links, in a collection of Markdown documents
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
 - generic
+  - `asm_listing_pdf`: renders highlighted x86 assembly listings as PDF
   - `bedtime`: sets two (systemd) timers, one to suspend the computer, and the other to shut it down
   - `compress_dvd`: compresses an unencrypted DVD iso to h265/aac
   - `convert_cb_archive_to_pdf`: convert CBR/CBZ files to PDF
