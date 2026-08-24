@@ -11,10 +11,11 @@ c_help="Usage: $(basename "$0") [-h|--help] [-o|--output PDF] [--font-size BP] [
 Generates a highlighted x86 assembly listing PDF.
 
 Defaults: --font-size 14.1070416 --line-spacing 19.5 --margin 25.984251968504 (horizontal)
-Chars/line = floor((820 - 2 * margin) / (0.5248718262 * font-size)); defaults: 103.
+Chars/line = floor((1366 - 2 * margin) / (0.5248718262 * font-size)); defaults: 177.
 Requires: pdflatex and TeX Live packages ec, geometry, listings, and xcolor."
 
-# Defaults and fixed page geometry reproduce White_Papers_Keen_code_sample.pdf.
+# Defaults preserve White_Papers_Keen_code_sample.pdf typography on an iPad Air 13-inch
+# landscape canvas; the page retains the display's portrait aspect ratio.
 v_font_size=14.1070416
 v_line_spacing=19.5
 v_margin=25.984251968504
@@ -97,7 +98,7 @@ function prepare_files {
 \documentclass{article}
 \usepackage[T1]{fontenc}
 \usepackage{xcolor,listings}
-\usepackage[paperwidth=820bp,paperheight=1180bp,left=${v_margin}bp,right=${v_margin}bp,top=52bp,bottom=52bp]{geometry}
+\usepackage[paperwidth=1366bp,paperheight=1822.22265625bp,left=${v_margin}bp,right=${v_margin}bp,top=52bp,bottom=52bp]{geometry}
 \font\listingfont=ectt1000 at ${v_font_size}bp
 \definecolor{codeblack}{RGB}{18,18,18}
 \definecolor{codegreen}{RGB}{0,158,0}
