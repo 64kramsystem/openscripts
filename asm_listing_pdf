@@ -8,11 +8,12 @@ shopt -s inherit_errexit
 
 c_help="Usage: $(basename "$0") [-h|--help] [-o|--output PDF] [--font-size BP] [--line-spacing BP] [--margin BP] INPUT.asm
 
-Generates a highlighted x86 assembly listing PDF.
+Generates a highlighted x86 assembly listing PDF with clickable references.
+Symbol links recognize Ghidra rows containing an address, contiguous bytes, mnemonic, and operands; label definitions begin in column 1.
 
 Defaults: --font-size 14.1070416 --line-spacing 19.5 --margin 25.984251968504 (horizontal)
 Chars/line = floor((1366 - 2 * margin) / (0.5248718262 * font-size)); defaults: 177.
-Requires: pdflatex and TeX Live packages ec, geometry, listings, and xcolor."
+Requires: Ruby, pdflatex, and TeX Live packages ec, geometry, hyperref, listings, and xcolor."
 
 # Defaults preserve White_Papers_Keen_code_sample.pdf typography on an iPad Air 13-inch
 # landscape canvas; the page retains the display's portrait aspect ratio.
@@ -81,24 +82,112 @@ function validate_parameters {
     fi
   done
 
-  if ! command -v pdflatex >/dev/null; then
-    >&2 echo "pdflatex is required"
-    exit 1
-  fi
+  local command
+  for command in ruby pdflatex; do
+    if ! command -v "$command" >/dev/null; then
+      >&2 echo "$command is required"
+      exit 1
+    fi
+  done
 }
 
 function prepare_files {
   v_temp_dir=$(mktemp -d /tmp/asm-listing-pdf.XXXXXX)
   trap 'rm -rf "$v_temp_dir"' EXIT
-  cp "$v_input" "$v_temp_dir/listing.asm"
-  sed -i.bak -e 's/^[[:space:]]*$/ /' "$v_temp_dir/listing.asm"
-  rm "$v_temp_dir/listing.asm.bak"
+
+  ruby - "$v_input" "$v_temp_dir/listing.asm" <<'RUBY'
+input, output = ARGV
+source = File.binread(input)
+abort "Input contains reserved PDF-link delimiter" if source.include?("(*@") || source.include?("@*)")
+lines = source.lines(chomp: true)
+
+symbol = /[A-Za-z_.$?@][A-Za-z0-9_.$?@]*/
+namespace = /[A-Za-z_.$?@][^\s:]*/
+qualified_address = /#{namespace}::(?:[0-9A-Fa-f]+:)?[0-9A-Fa-f]+/
+address = /(?:#{namespace}::)?(?:[0-9A-Fa-f]+:)?[0-9A-Fa-f]+/
+address_destinations = {}
+symbol_destinations = {}
+anchors_at = Hash.new { |hash, index| hash[index] = [] }
+address_definition_at = {}
+instruction_address_at = {}
+destination_number = 0
+lines.each_with_index do |line, index|
+  leading_address = line.match(/\A[ \t]*(?<address>#{address})(?=\s)/)
+  match = leading_address || line.match(/(?:\[offcut |; offcut at )(?<address>#{address})(?:\]|(?=\s|$))/)
+  if match
+    address_definition_at[index] = match.offset(:address)
+    instruction_address_at[index] = match.offset(:address) if leading_address
+    unless address_destinations.key?(match[:address])
+      destination_number += 1
+      address_destinations[match[:address]] = "xref-#{destination_number}"
+      anchors_at[index] << address_destinations[match[:address]]
+    end
+  end
+
+  match = line.match(/\A(?<symbol>#{symbol}):(?=\s*(?:;|$))/)
+  next unless match
+
+  abort "Duplicate label definition: #{match[:symbol]}" if symbol_destinations.key?(match[:symbol])
+  destination_number += 1
+  symbol_destinations[match[:symbol]] = "xref-#{destination_number}"
+  anchors_at[index] << symbol_destinations[match[:symbol]]
+end
+
+xref_reference = /(?<![A-Za-z0-9_.$?@:])#{address}(?=\([A-Za-z*]{1,2}\))/
+qualified_reference = /(?<![A-Za-z0-9_.$?@:])#{qualified_address}(?![A-Za-z0-9_.$?@:])/
+rendered = lines.each_with_index.map do |line, index|
+  candidates = []
+  # Labels link only from instruction operands; exact address references may appear anywhere.
+  [xref_reference, qualified_reference].each do |reference|
+    line.to_enum(:scan, reference).each do
+      match = Regexp.last_match
+      id = address_destinations[match[0]]
+      candidates << [*match.offset(0), id] if id && match.offset(0) != address_definition_at[index]
+    end
+  end
+
+  if (address_range = instruction_address_at[index])
+    code_end = line.index(';') || line.length
+    tail = line[address_range[1]...code_end]
+    if tail && (match = tail.match(/\A\s+\S+\s+\S+\s+(?<operands>.+?)\s*\z/))
+      operand_start = address_range[1] + match.begin(:operands)
+      operands = match[:operands]
+      operands.to_enum(:scan, symbol).each do
+        symbol_match = Regexp.last_match
+        next if operands[symbol_match.end(0)] == ':'
+        next if symbol_match.begin(0) >= 2 && operands[symbol_match.begin(0) - 2, 2] == '::'
+
+        id = symbol_destinations[symbol_match[0]]
+        candidates << [operand_start + symbol_match.begin(0), operand_start + symbol_match.end(0), id] if id
+      end
+    end
+  end
+
+  linked = String.new(encoding: line.encoding)
+  cursor = 0
+  candidates.uniq.sort_by { |from, to, _id| [from, from - to] }.each do |from, to, id|
+    next if from < cursor
+
+    target = line[from...to]
+    linked << line[cursor...from]
+    linked << "(*@\\hyperlink{#{id}}{\\listingfont\\detokenize{#{target}}}@*)"
+    cursor = to
+  end
+  linked << line[cursor..]
+
+  anchors = anchors_at[index].map { |id| "(*@\\hypertarget{#{id}}{}@*)" }.join
+  line = anchors + linked
+  line.strip.empty? ? " " : line
+end
+File.binwrite(output, rendered.join("\n") + "\n")
+RUBY
 
   cat > "$v_temp_dir/listing.tex" <<EOF
 \documentclass{article}
 \usepackage[T1]{fontenc}
 \usepackage{xcolor,listings}
 \usepackage[paperwidth=1366bp,paperheight=1822.22265625bp,left=${v_margin}bp,right=${v_margin}bp,top=52bp,bottom=52bp]{geometry}
+\usepackage[hidelinks]{hyperref}
 \font\listingfont=ectt1000 at ${v_font_size}bp
 \definecolor{codeblack}{RGB}{18,18,18}
 \definecolor{codegreen}{RGB}{0,158,0}
@@ -119,6 +208,7 @@ function prepare_files {
   columns=fullflexible,
   keepspaces=true,
   showstringspaces=false,
+  escapeinside={(*@}{@*)},
   breaklines=false,
   tabsize=8
 }
