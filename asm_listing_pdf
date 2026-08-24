@@ -8,11 +8,11 @@ shopt -s inherit_errexit
 
 c_help="Usage: $(basename "$0") [-h|--help] [-o|--output PDF] [--font-size BP] [--line-spacing BP] [--margin BP] INPUT.asm
 
-Generates a highlighted x86 assembly listing PDF with clickable references.
+Generates a highlighted x86 assembly listing PDF with clickable references. Lines wrap at words to the calculated chars/line limit; comment continuations retain their prefix, and over-limit words are errors.
 Symbol links recognize Ghidra rows containing an address, contiguous bytes, mnemonic, and operands; label definitions begin in column 1.
 
 Defaults: --font-size 14.1070416 --line-spacing 19.5 --margin 25.984251968504 (horizontal)
-Chars/line = floor((1366 - 2 * margin) / (0.5248718262 * font-size)); defaults: 177.
+Chars/line = floor((1366 - 2 * margin) / (0.5248718262 * font-size)) - 2; defaults: 175.
 Requires: Ruby, pdflatex, and TeX Live packages ec, geometry, hyperref, listings, and xcolor."
 
 # Defaults preserve White_Papers_Keen_code_sample.pdf typography on an iPad Air 13-inch
@@ -23,6 +23,7 @@ v_margin=25.984251968504
 v_input=
 v_output=
 v_temp_dir=
+v_columns=
 
 function decode_cmdline_args {
   local params
@@ -89,17 +90,87 @@ function validate_parameters {
       exit 1
     fi
   done
+
+  # Reserve two columns because exact-fit listings and PDF links overflowed in rendered fixtures.
+  v_columns=$(ruby -e 'puts(((1366 - 2 * ARGV[1].to_f) / (0.5248718262 * ARGV[0].to_f)).floor - 2)' "$v_font_size" "$v_margin")
+  if (( v_columns < 1 )); then
+    >&2 echo "Font size and margin leave no usable columns"
+    exit 1
+  fi
 }
 
 function prepare_files {
   v_temp_dir=$(mktemp -d /tmp/asm-listing-pdf.XXXXXX)
   trap 'rm -rf "$v_temp_dir"' EXIT
 
-  ruby - "$v_input" "$v_temp_dir/listing.asm" <<'RUBY'
-input, output = ARGV
+  ruby - "$v_input" "$v_temp_dir/listing.asm" "$v_columns" <<'RUBY'
+input, output, columns = ARGV
+columns = Integer(columns)
 source = File.binread(input)
 abort "Input contains reserved PDF-link delimiter" if source.include?("(*@") || source.include?("@*)")
-lines = source.lines(chomp: true)
+
+COMMENT_COLUMN = 16
+
+def comment_index(line)
+  quote = nil
+  escaped = false
+  line.each_byte.with_index do |byte, index|
+    if escaped
+      escaped = false
+    elsif quote && byte == 92
+      escaped = true
+    elsif quote
+      quote = nil if byte == quote
+    elsif byte == 34 || byte == 39
+      quote = byte
+    elsif byte == 59
+      return index
+    end
+  end
+  nil
+end
+
+def wrap_at_words(text, first_prefix, continuation_prefix, columns, line_number)
+  if text.empty?
+    abort "Line #{line_number} cannot be wrapped within #{columns} columns" if first_prefix.bytesize > columns
+    return [first_prefix]
+  end
+
+  lines = []
+  prefix = first_prefix
+  until text.empty?
+    capacity = columns - prefix.bytesize
+    abort "Line #{line_number} has no room for wrapped text within #{columns} columns" if capacity < 1
+    if text.bytesize <= capacity
+      lines << prefix + text
+      break
+    end
+
+    break_at = text.byteslice(0, capacity + 1).rindex(/[ \t]/)
+    abort "Line #{line_number} contains a word longer than the #{columns}-column limit" unless break_at&.positive?
+
+    lines << prefix + text.byteslice(0, break_at).rstrip
+    text = text.byteslice(break_at..).sub(/\A[ \t]+/, '')
+    prefix = continuation_prefix
+  end
+  lines
+end
+
+lines = source.lines(chomp: true).flat_map.with_index(1) do |line, line_number|
+  next [line] if line.bytesize <= columns
+
+  if (comment_at = comment_index(line))
+    body = line.byteslice((comment_at + 1)..)
+    spacing = body[/\A[ \t]*/]
+    first_prefix = line.byteslice(0, comment_at + 1) + spacing
+    # Keep continuations in the standard listing comment column instead of a far-right inline column.
+    continuation_prefix = (' ' * [comment_at, COMMENT_COLUMN].min) + ';' + spacing
+    wrap_at_words(body.byteslice(spacing.bytesize..), first_prefix, continuation_prefix, columns, line_number)
+  else
+    indentation = line[/\A[ \t]*/]
+    wrap_at_words(line.byteslice(indentation.bytesize..), indentation, indentation, columns, line_number)
+  end
+end
 
 symbol = /[A-Za-z_.$?@][A-Za-z0-9_.$?@]*/
 namespace = /[A-Za-z_.$?@][^\s:]*/
@@ -210,7 +281,6 @@ RUBY
   showstringspaces=false,
   escapeinside={(*@}{@*)},
   literate={×}{{$\times$}}1,
-  breaklines=false,
   tabsize=8
 }
 \begin{document}

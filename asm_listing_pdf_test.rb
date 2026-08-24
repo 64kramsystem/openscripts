@@ -72,6 +72,37 @@ class AsmListingPdfTest < Minitest::Test
     refute status.success?
     assert_includes stderr, 'Duplicate label definition: duplicate'
   end
+
+  def test_wraps_long_comments_at_words_within_the_default_limit
+    source = [
+      "0000:0100       90                        NOP",
+      "                ; DOS AH=4Ah shrinks the PSP-owned block to 1000h paragraphs. If it fails, common recovery copies 512 bytes over PSP:0000-01FF, executes there, restores host bytes at PSP:0100-02FF, but leaves PSP:0000-00FF corrupted.",
+      "                ; Restore host entry bytes, derive the body base, reserve PSP:0100h as the eventual return, hook INT 24h, and search current/PATH directories. BP-relative DTA/path scratch extends into uninitialized COM allocation beyond the file image; those runtime bytes are not source data.",
+      "                ; #{'word ' * 26}linked reference 0000:0100(j).",
+    ].join("\n") + "\n"
+
+    wrapped = strip_link_markup(render(source))
+    assert wrapped.lines.all? { |line| line.chomp.length <= 175 }
+    assert_match(/restores host\n {16}; bytes at PSP:0100/, wrapped)
+    assert_match(/BP-relative\n {16}; DTA\/path scratch/, wrapped)
+  end
+
+  def test_does_not_treat_a_quoted_semicolon_as_a_comment
+    source = %(db "#{'word ' * 30}; #{'tail ' * 10}"\n)
+    wrapped = strip_link_markup(render(source))
+
+    assert wrapped.lines.all? { |line| line.chomp.length <= 175 }
+    assert_equal 1, wrapped.count(';')
+    assert_equal source.gsub(/\s/, ''), wrapped.gsub(/\s/, '')
+  end
+
+  def test_rejects_a_word_longer_than_the_limit
+    _stdout, stderr, status = run_renderer("x" * 176 + "\n")
+
+    refute status.success?
+    assert_includes stderr, 'word longer than the 175-column limit'
+  end
+
   private
 
   def render(source)

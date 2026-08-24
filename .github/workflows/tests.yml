@@ -36,6 +36,16 @@ jobs:
           ruby-version: '4.0'
       - run: ruby set_song_bpms_test.rb
 
+  asm_listing_pdf:
+    name: asm_listing_pdf (minitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+      - run: ruby asm_listing_pdf_test.rb
+
   fill_labels:
     name: fill_labels (minitest)
     runs-on: ubuntu-latest
