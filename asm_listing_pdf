@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: $(basename "$0") [-h|--help] [-o|--output PDF] [--font-size BP] [--line-spacing BP] [--margin BP] INPUT.asm
+
+Generates a highlighted x86 assembly listing PDF.
+
+Defaults: --font-size 14.1070416 --line-spacing 19.5 --margin 25.984251968504 (horizontal)
+Chars/line = floor((820 - 2 * margin) / (0.5248718262 * font-size)); defaults: 103.
+Requires: pdflatex and TeX Live packages ec, geometry, listings, and xcolor."
+
+# Defaults and fixed page geometry reproduce White_Papers_Keen_code_sample.pdf.
+v_font_size=14.1070416
+v_line_spacing=19.5
+v_margin=25.984251968504
+v_input=
+v_output=
+v_temp_dir=
+
+function decode_cmdline_args {
+  local params
+  params=$(getopt --options ho: --long help,output:,font-size:,line-spacing:,margin: --name "$(basename "$0")" -- "$@")
+  eval set -- "$params"
+
+  while true; do
+    case $1 in
+      -h|--help)
+        echo "$c_help"
+        exit 0 ;;
+      -o|--output)
+        v_output=$2
+        shift 2 ;;
+      --font-size)
+        v_font_size=$2
+        shift 2 ;;
+      --line-spacing)
+        v_line_spacing=$2
+        shift 2 ;;
+      --margin)
+        v_margin=$2
+        shift 2 ;;
+      --)
+        shift
+        break ;;
+    esac
+  done
+
+  if [[ $# -ne 1 ]]; then
+    echo "$c_help"
+    exit 1
+  fi
+
+  v_input=$1
+  if [[ -z $v_output ]]; then
+    if [[ ${v_input##*/} == *.* ]]; then
+      v_output=${v_input%.*}.pdf
+    else
+      v_output=$v_input.pdf
+    fi
+  fi
+  [[ $v_output == /* ]] || v_output="$PWD/$v_output"
+}
+
+function validate_parameters {
+  if [[ ! -f $v_input || ! -r $v_input ]]; then
+    >&2 echo "Unreadable input file: $v_input"
+    exit 1
+  fi
+
+  local value
+  for value in "$v_font_size" "$v_line_spacing" "$v_margin"; do
+    if [[ ! $value =~ ^([0-9]+([.][0-9]+)?|[.][0-9]+)$ ]] || [[ ! $value =~ [1-9] ]]; then
+      >&2 echo "Invalid positive number: $value"
+      exit 1
+    fi
+  done
+
+  if ! command -v pdflatex >/dev/null; then
+    >&2 echo "pdflatex is required"
+    exit 1
+  fi
+}
+
+function prepare_files {
+  v_temp_dir=$(mktemp -d /tmp/asm-listing-pdf.XXXXXX)
+  trap 'rm -rf "$v_temp_dir"' EXIT
+  cp "$v_input" "$v_temp_dir/listing.asm"
+  sed -i.bak -e 's/^[[:space:]]*$/ /' "$v_temp_dir/listing.asm"
+  rm "$v_temp_dir/listing.asm.bak"
+
+  cat > "$v_temp_dir/listing.tex" <<EOF
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{xcolor,listings}
+\usepackage[paperwidth=820bp,paperheight=1180bp,left=${v_margin}bp,right=${v_margin}bp,top=52bp,bottom=52bp]{geometry}
+\font\listingfont=ectt1000 at ${v_font_size}bp
+\definecolor{codeblack}{RGB}{18,18,18}
+\definecolor{codegreen}{RGB}{0,158,0}
+\definecolor{codemagenta}{RGB}{255,0,158}
+\definecolor{codebackground}{RGB}{229,229,229}
+\definecolor{coderule}{RGB}{85,85,85}
+\lstset{
+  language={[x86masm]Assembler},
+  basicstyle={\fontsize{${v_font_size}bp}{${v_line_spacing}bp}\selectfont\listingfont\color{codeblack}},
+  keywordstyle=\color{codemagenta},
+  commentstyle=\color{codegreen},
+  stringstyle=\color{codeblack},
+  backgroundcolor=\color{codebackground},
+  frame=tb,
+  framerule=.65bp,
+  rulecolor=\color{coderule},
+  framesep=14bp,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  breaklines=false,
+  tabsize=8
+}
+\begin{document}
+\lstinputlisting{listing.asm}
+\end{document}
+EOF
+}
+
+function generate_pdf {
+  (cd "$v_temp_dir" && pdflatex -interaction=nonstopmode -halt-on-error listing.tex)
+  cp "$v_temp_dir/listing.pdf" "$v_output"
+  echo "$v_output"
+}
+
+decode_cmdline_args "$@"
+validate_parameters
+prepare_files
+generate_pdf
