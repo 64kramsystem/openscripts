@@ -209,6 +209,7 @@ RUBY
   keepspaces=true,
   showstringspaces=false,
   escapeinside={(*@}{@*)},
+  literate={×}{{$\times$}}1,
   breaklines=false,
   tabsize=8
 }
