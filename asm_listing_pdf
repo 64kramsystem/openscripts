@@ -6,17 +6,17 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
+c_default_columns=129
 c_help="Usage: $(basename "$0") [-h|--help] [-o|--output PDF] [--font-size BP] [--line-spacing BP] [--margin BP] INPUT.asm
 
 Generates a highlighted x86 assembly listing PDF with clickable references. Lines wrap at words to the calculated chars/line limit; comment continuations retain their prefix, and over-limit words are errors.
 Symbol links recognize Ghidra rows containing an address, contiguous bytes, mnemonic, and operands; label definitions begin in column 1.
 
 Defaults: --font-size 14.1070416 --line-spacing 19.5 --margin 25.984251968504 (horizontal)
-Chars/line = floor((1366 - 2 * margin) / (0.5248718262 * font-size)) - 2; defaults: 175.
+Chars/line = floor((1024 - 2 * margin) / (0.5248718262 * font-size)) - 2; defaults: ${c_default_columns}.
 Requires: Ruby, pdflatex, and TeX Live packages ec, geometry, hyperref, listings, and xcolor."
 
-# Defaults preserve White_Papers_Keen_code_sample.pdf typography on an iPad Air 13-inch
-# landscape canvas; the page retains the display's portrait aspect ratio.
+# Defaults preserve White_Papers_Keen_code_sample.pdf typography on an iPad Air 13-inch portrait canvas.
 v_font_size=14.1070416
 v_line_spacing=19.5
 v_margin=25.984251968504
@@ -92,7 +92,7 @@ function validate_parameters {
   done
 
   # Reserve two columns because exact-fit listings and PDF links overflowed in rendered fixtures.
-  v_columns=$(ruby -e 'puts(((1366 - 2 * ARGV[1].to_f) / (0.5248718262 * ARGV[0].to_f)).floor - 2)' "$v_font_size" "$v_margin")
+  v_columns=$(ruby -e 'puts(((1024 - 2 * ARGV[1].to_f) / (0.5248718262 * ARGV[0].to_f)).floor - 2)' "$v_font_size" "$v_margin")
   if (( v_columns < 1 )); then
     >&2 echo "Font size and margin leave no usable columns"
     exit 1
@@ -147,7 +147,14 @@ def wrap_at_words(text, first_prefix, continuation_prefix, columns, line_number)
     end
 
     break_at = text.byteslice(0, capacity + 1).rindex(/[ \t]/)
-    abort "Line #{line_number} contains a word longer than the #{columns}-column limit" unless break_at&.positive?
+    unless break_at&.positive?
+      if prefix != continuation_prefix
+        lines << prefix.rstrip
+        prefix = continuation_prefix
+        next
+      end
+      abort "Line #{line_number} contains a word longer than the #{columns}-column limit"
+    end
 
     lines << prefix + text.byteslice(0, break_at).rstrip
     text = text.byteslice(break_at..).sub(/\A[ \t]+/, '')
@@ -257,7 +264,7 @@ RUBY
 \documentclass{article}
 \usepackage[T1]{fontenc}
 \usepackage{xcolor,listings}
-\usepackage[paperwidth=1366bp,paperheight=1822.22265625bp,left=${v_margin}bp,right=${v_margin}bp,top=52bp,bottom=52bp]{geometry}
+\usepackage[paperwidth=1024bp,paperheight=1366bp,left=${v_margin}bp,right=${v_margin}bp,top=52bp,bottom=52bp]{geometry}
 \usepackage[hidelinks]{hyperref}
 \font\listingfont=ectt1000 at ${v_font_size}bp
 \definecolor{codeblack}{RGB}{18,18,18}

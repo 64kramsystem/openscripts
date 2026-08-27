@@ -6,6 +6,8 @@ require 'open3'
 require 'tmpdir'
 
 class AsmListingPdfTest < Minitest::Test
+  DEFAULT_COLUMNS = 129
+
   def setup
     @directory = Dir.mktmpdir('asm_listing_pdf_test')
     @bin = File.join(@directory, 'bin')
@@ -79,28 +81,30 @@ class AsmListingPdfTest < Minitest::Test
       "                ; DOS AH=4Ah shrinks the PSP-owned block to 1000h paragraphs. If it fails, common recovery copies 512 bytes over PSP:0000-01FF, executes there, restores host bytes at PSP:0100-02FF, but leaves PSP:0000-00FF corrupted.",
       "                ; Restore host entry bytes, derive the body base, reserve PSP:0100h as the eventual return, hook INT 24h, and search current/PATH directories. BP-relative DTA/path scratch extends into uninitialized COM allocation beyond the file image; those runtime bytes are not source data.",
       "                ; #{'word ' * 26}linked reference 0000:0100(j).",
+      "hidden_buffer_resident::000000-hidden_buffer_resident::000079 eb78a0010900000020000000ffffda00000200000001f0ff0000, 00 × 96 ; resident header template",
     ].join("\n") + "\n"
 
     wrapped = strip_link_markup(render(source))
-    assert wrapped.lines.all? { |line| line.chomp.length <= 175 }
-    assert_match(/restores host\n {16}; bytes at PSP:0100/, wrapped)
-    assert_match(/BP-relative\n {16}; DTA\/path scratch/, wrapped)
+    assert wrapped.lines.all? { |line| line.chomp.length <= DEFAULT_COLUMNS }
+    assert_match(/^ {16}; .*bytes at PSP:0100/, wrapped)
+    assert_match(/^ {16}; .*DTA\/path scratch/, wrapped)
+    assert_match(/^ {16}; resident header template/, wrapped)
   end
 
   def test_does_not_treat_a_quoted_semicolon_as_a_comment
     source = %(db "#{'word ' * 30}; #{'tail ' * 10}"\n)
     wrapped = strip_link_markup(render(source))
 
-    assert wrapped.lines.all? { |line| line.chomp.length <= 175 }
+    assert wrapped.lines.all? { |line| line.chomp.length <= DEFAULT_COLUMNS }
     assert_equal 1, wrapped.count(';')
     assert_equal source.gsub(/\s/, ''), wrapped.gsub(/\s/, '')
   end
 
   def test_rejects_a_word_longer_than_the_limit
-    _stdout, stderr, status = run_renderer("x" * 176 + "\n")
+    _stdout, stderr, status = run_renderer("x" * (DEFAULT_COLUMNS + 1) + "\n")
 
     refute status.success?
-    assert_includes stderr, 'word longer than the 175-column limit'
+    assert_includes stderr, "word longer than the #{DEFAULT_COLUMNS}-column limit"
   end
 
   private
