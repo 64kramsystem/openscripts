@@ -1233,9 +1233,8 @@ PYEOF
   sed -i -rE "s/export gcc\?=.*/export gcc?=$v_gcc_package/" debian/rules.d/0-common-vars.mk
   sed -i -rE "s/gcc-[[:digit:]]+/$v_gcc_package/g" debian.master/control.stub.in
 
-  # Note: We don't modify amd64.mk here. Instead, we pass do_mainline_build=true
-  # and do_tools=0 on the command line when calling debian/rules, which overrides
-  # any settings in .mk files. This matches how the mainline PPA builds kernels.
+  # Note: We don't modify amd64.mk here. Instead, we pass the mainline and tools settings on the
+  # command line when calling debian/rules, which overrides any settings in .mk files.
 }
 
 # Run Ubuntu's config preparation
@@ -1295,8 +1294,22 @@ function compile_kernel {
   export PATH="/usr/lib/ccache:$PATH"
   export KBUILD_BUILD_TIMESTAMP=''
 
-  # Mainline PPA flags: disable tools, extras, rust-lib; enable mainline mode
-  local build_flags=(do_mainline_build=true do_extras_package=false do_tools=0 do_lib_rust=false no_dumpfile=1)
+  # Keep the mainline kernel package set, adding the local tools and perf packages. Cloud, host and
+  # BPF tools are separate products and are not part of the workstation kernel package set.
+  local build_flags=(
+    do_mainline_build=true
+    do_extras_package=false
+    do_tools=true
+    do_tools_perf=true
+    do_tools_perf_jvmti=true
+    do_tools_perf_python=true
+    do_cloud_tools=false
+    do_tools_host=false
+    do_tools_bpftool=false
+    do_source_package=false
+    do_lib_rust=false
+    no_dumpfile=1
+  )
 
   # Work around fakeroot+lchown incompatibility on newer kernels (6.19+) where
   # lchown fails with EINVAL under fakeroot's LD_PRELOAD. This causes cpio
@@ -1319,21 +1332,25 @@ function compile_kernel {
 
   # Package into .deb files
   fakeroot debian/rules "${build_flags[@]}" binary-debs
+  fakeroot debian/rules "${build_flags[@]}" binary-indep
 
-  # Remove extra packages that mainline PPA doesn't publish.
+  # Remove extra packages that this builder doesn't publish.
   #
   # The Ubuntu debian/rules (extracted from crack.bundle) creates these additional packages:
   # - linux-buildinfo-*: Build metadata (config, ABI, modules list, compiler info).
   # - linux-lib-rust-*: Rust kernel library support (even with do_lib_rust=false).
   #
-  # The mainline PPA build DOES create these packages (visible in build logs), but the
-  # mainline-build infrastructure filters them out and only publishes 4 packages:
+  # The workstation package set contains:
   #   1. linux-headers-*_all.deb
   #   2. linux-headers-*-generic_amd64.deb
   #   3. linux-image-unsigned-*-generic_amd64.deb
   #   4. linux-modules-*-generic_amd64.deb
+  #   5. linux-tools-common_*_all.deb
+  #   6. linux-tools-*_amd64.deb
+  #   7. linux-tools-*-generic_amd64.deb
+  #   8. linux-perf_*_amd64.deb
   #
-  # We delete the extras to match the published mainline PPA package set.
+  # These are unrelated to the workstation package set.
   rm -f ../linux-buildinfo-*.deb ../linux-lib-rust-*.deb
 }
 
