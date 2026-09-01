@@ -14,6 +14,7 @@ class CleanKernelPackages
   #
   IMAGE_PACKAGE_PREFIX_REGEX = "^linux-(image-unsigned|image)-"
   HEADER_PACKAGE_PREFIX_REGEX = "^linux-headers-"
+  TOOLS_PACKAGE_PREFIX_REGEX = "^linux-tools-"
 
   NOTHING_TO_REMOVE_MESSAGE = "Nothing to remove!"
 
@@ -58,13 +59,22 @@ class CleanKernelPackages
     #
     kept_image_versions = (installed_image_versions - image_versions_to_remove).to_set
 
-    orphan_header_packages = find_orphan_header_packages(kept_image_versions)
+    orphan_header_packages = find_orphan_packages(HEADER_PACKAGE_PREFIX_REGEX, kept_image_versions)
 
     if orphan_header_packages.size > 0
       puts "Removing orphan header packages..."
       remove_packages(orphan_header_packages, simulate: simulate)
     else
       puts "No orphan headers to remove!"
+    end
+
+    orphan_tools_packages = find_orphan_packages(TOOLS_PACKAGE_PREFIX_REGEX, kept_image_versions)
+
+    if orphan_tools_packages.size > 0
+      puts "Removing orphan tools..."
+      remove_packages(orphan_tools_packages, simulate: simulate)
+    else
+      puts "No orphan tools to remove!"
     end
 
     module_directories_to_remove = find_module_directories_to_remove(kept_image_versions)
@@ -76,7 +86,13 @@ class CleanKernelPackages
       puts "No module directories to remove!"
     end
 
-    if simulate && (image_versions_to_remove + orphan_header_packages + module_directories_to_remove).empty?
+    removed_items = [
+      image_versions_to_remove,
+      orphan_header_packages,
+      orphan_tools_packages,
+      module_directories_to_remove,
+    ].flatten
+    if simulate && removed_items.empty?
       $stderr.puts NOTHING_TO_REMOVE_MESSAGE
     end
   end
@@ -152,19 +168,18 @@ class CleanKernelPackages
     `aptitude search -w 120 #{package_matchers} | cut -c 5- | awk '{print $1}'`.split("\n")
   end
 
-  def find_orphan_header_packages(kept_image_versions)
-    # A bit tricky, because headers of multiple type have one parent header without the type.
-    # Parent headers are uninstalled automatically when the children are uninstalled, so we don't
-    # need to (directly) take care of them.
+  def find_orphan_packages(package_prefix_regex, kept_image_versions)
+    # Headers and tools have unflavoured parent packages. Parsed kernel-version equality matches the
+    # parent and flavour packages while ignoring unversioned common packages.
     #
-    all_header_packages = find_installed_packages(HEADER_PACKAGE_PREFIX_REGEX)
+    installed_packages = find_installed_packages(package_prefix_regex)
 
-    all_header_packages.each_with_object([]) do |package_name, orphan_header_packages|
-      if package_name =~ /#{HEADER_PACKAGE_PREFIX_REGEX}(.+)$/
-        header_version = KernelVersion.parse_uname_version($LAST_MATCH_INFO[1], raise_error: false)
+    installed_packages.each_with_object([]) do |package_name, orphan_packages|
+      if package_name =~ /#{package_prefix_regex}(.+)$/
+        package_version = KernelVersion.parse_uname_version($LAST_MATCH_INFO[1], raise_error: false)
 
-        if header_version && !kept_image_versions.include?(header_version)
-          orphan_header_packages << package_name
+        if package_version && !kept_image_versions.include?(package_version)
+          orphan_packages << package_name
         end
       end
     end
