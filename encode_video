@@ -29,7 +29,7 @@ declare -A c_rotation_to_filter=(
   [cw]="transpose=clock"
   [ccw]="transpose=cclock"
 )
-c_help="Usage: $(basename "$0") [-h|--help] [--encoder h265|av1] [-b|--batch] [-c|--concat] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-p|--preset <preset>] [-e|--extension <ext>] [-o|--output-dir <path>] [-k|--keep-input-files] <input> {<input>, ...}
+c_help="Usage: $(basename "$0") [-h|--help] [--encoder h265|av1] [-b|--batch] [-c|--concat] [-d|--deinterlace] [-s|--square <dar_ratio>] [-r|--resize height_px] [-R|--rotate cw|ccw] [-p|--preset <preset>] [-K|--keyframe-secs <float>] [-e|--extension <ext>] [-o|--output-dir <path>] [-k|--keep-input-files] <input> {<input>, ...}
 
 Encodes video files to h265 or AV1 (default), in parallel; copies the audio. Multiple cut ranges re-encode audio to libfdk_aac VBR q5 mono. The number of parallel procs is based on an internal table.
 Encoder selection: --encoder av1 (default) uses libsvtav1; --encoder h265 uses libx265.
@@ -79,6 +79,7 @@ v_resize=                 # numeric; vertical size
 v_rotate=                 # "cw"/"ccw"
 v_preset=                 # blank means "use codec default"
 v_crf=                    # blank means "use codec default"
+v_keyframe_secs=          # optional; passed to ffmpeg
 v_extension=$c_default_extension
 v_output_dir=             # optional; when set, has never a trailing slash
 v_delete_input_files=1    # boolean; false=blank, true=anything else
@@ -89,7 +90,7 @@ v_video_codec_options=
 
 function decode_cmdline_args {
   local params
-  if ! params=$(getopt --options hbcds:r:R:p:e:o:k --long help,encoder:,batch,concat,deinterlace,square:,resize:,rotate:,preset:,extension:,output-dir:,keep-input-files --name "$(basename "$0")" -- "$@"); then
+  if ! params=$(getopt --options hbcds:r:R:p:K:e:o:k --long help,encoder:,batch,concat,deinterlace,square:,resize:,rotate:,preset:,keyframe-secs:,extension:,output-dir:,keep-input-files --name "$(basename "$0")" -- "$@"); then
     exit 1
   fi
 
@@ -131,6 +132,9 @@ function decode_cmdline_args {
         shift 2 ;;
       -p|--preset)
         v_preset=$2
+        shift 2 ;;
+      -K|--keyframe-secs)
+        v_keyframe_secs=$2
         shift 2 ;;
       -e|--extension)
         v_extension=$2
@@ -408,6 +412,10 @@ function video_codec_options {
     video_codec_options="-c:v libx265 -crf $v_crf -preset $v_preset -pix_fmt yuv420p10le"
   else
     video_codec_options="-c:v libsvtav1 -crf $v_crf -preset $v_preset -pix_fmt yuv420p10le -svtav1-params tune=0"
+  fi
+
+  if [[ -n $v_keyframe_secs ]]; then
+    video_codec_options+=" -force_key_frames $(shell_quote "expr:gte(t,n_forced*$v_keyframe_secs)")"
   fi
   echo "$video_codec_options"
 }
