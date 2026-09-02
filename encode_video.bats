@@ -428,6 +428,13 @@ FAKE
   grep -q "ffmpeg .*-c:v libsvtav1 -crf 29 -preset 4" "$CMD_LOG"
 }
 
+@test "keyframe interval is passed to ffmpeg" {
+  make_input pizza.mp4
+  run "$SCRIPT" -b -K 1.5 "$WORK_DIR/pizza.mp4"
+  [[ $status -eq 0 ]]
+  grep -Fq -- "-force_key_frames expr:gte(t,n_forced*1.5)" "$CMD_LOG"
+}
+
 @test "rotation disables autorotation and resets the rotate metadata" {
   make_input pizza.mp4
   run "$SCRIPT" -b -R ccw "$WORK_DIR/pizza.mp4"
