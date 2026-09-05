@@ -3,7 +3,7 @@
 set -o errexit
 set -o nounset
 
-c_default_quality=4
+c_default_quality=91
 # shellcheck disable=SC2016
 c_help="Usage: $(basename "$0") [-d|--destination <dir>] [-q|--quality <quality>] [-t|--trash-input] <input1> {<inputN>, ...}
 
@@ -19,16 +19,21 @@ The 'input' values can be either files or directories:
 
 Compressed input audio files which are not flac are copied, without being reencoded.
 
-The codec used is libfdk_aac, in VBR, with a default quality of $c_default_quality; bitrate tested on 4 albums of different genre:
+The codec used is Apple's AAC encoder (afconvert), in TVBR, with a default quality of $c_default_quality.
 
-- 5: 225        # not necessarily so high on all albums
-- 4: 149        # balanced
-- 3: 115
-- 2:  99
+TVBR quality ranges from 0 to 127, but only 15 values are functional; others are rounded to the nearest one. Approximate stereo bitrates:
 
-Requires rsgain, trash, a recompiled FFmpeg, and GNU Parallel.
+- 127: 285
+- 118: 270
+- 109: 250        # iTunes Plus/Apple Digital Masters
+- 100: 215
+-  91: 195        # balanced
+-  82: 165
+-  73: 150
+-  63: 130
+-  54: 115
 
-Please note that not all the input/quality combinations work (see https://hydrogenaud.io/index.php/topic,95989.msg817833.html#msg817833).
+Requires rsgain, trash, and GNU Parallel. macOS only, since afconvert wraps CoreAudio.
 "
 
 input_files=
@@ -136,7 +141,9 @@ function encode_file {
     destination_file="$destination/$(basename "${source_file%.*}.m4a")"
     intermediate_file="$(create_intermediate_file_name "$destination_file")"
 
-    ffmpeg -y -hide_banner -loglevel error -i "$source_file" -vn -c:a libfdk_aac -vbr "$quality" "$intermediate_file"
+    # afconvert doesn't carry over the source tags.
+    #
+    afconvert -f m4af -d aac -s 3 -ue vbrq "$quality" "$source_file" "$intermediate_file"
     ;;
   audio/x-m4a | video/mp4 | audio/mpeg )
     echo "Copying $source_file..."
@@ -192,7 +199,9 @@ function encode_directory {
 
       destination_subfile="$intermediate_subdir/$(basename "${source_subfile%.*}.m4a")"
 
-      echo "ffmpeg -y -hide_banner -loglevel error -i $(printf "%q" "$source_subfile") -vn -c:a libfdk_aac -vbr $quality $(printf "%q" "$destination_subfile")" >> "$parallel_commands_list_file"
+      # afconvert doesn't carry over the source tags.
+      #
+      echo "afconvert -f m4af -d aac -s 3 -ue vbrq $quality $(printf "%q" "$source_subfile") $(printf "%q" "$destination_subfile")" >> "$parallel_commands_list_file"
 
       destination_subfiles+=("$destination_subfile")
       ;;
