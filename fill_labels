@@ -430,7 +430,7 @@ class FillLabels
   end
 
   def compress_directory(directory, zipfile_name, ignore: [], rename: {}, debug: false)
-    Zip::File.open(zipfile_name, Zip::File::CREATE) do |zipfile|
+    Zip::File.open(zipfile_name, create: true) do |zipfile|
       raw_input_filenames = find_all_directory_files(directory)
 
       raw_input_filenames.each do |raw_filename|

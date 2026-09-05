@@ -549,6 +549,28 @@ class FillLabelsEnsureCleanupTest < Minitest::Test
   end
 end
 
+class FillLabelsCompressDirectoryTest < Minitest::Test
+  def setup
+    @directory = Dir.mktmpdir('fill_labels_zip_test')
+    @source = File.join(@directory, 'source')
+    @output = File.join(@directory, 'labels.odt')
+    FileUtils.mkdir_p(@source)
+    File.write(File.join(@source, 'content.xml'), '<document/>')
+  end
+
+  def teardown
+    FileUtils.rm_rf(@directory)
+  end
+
+  def test_creates_archive_with_directory_contents
+    FillLabels.new.send(:compress_directory, @source, @output)
+
+    Zip::File.open(@output) do |archive|
+      assert_equal '<document/>', archive.read('content.xml')
+    end
+  end
+end
+
 class ConfigurationPreparerLoadConfigTest < Minitest::Test
   def setup
     @config_path = "/tmp/fill_labels_test_#{Process.pid}.ini"
