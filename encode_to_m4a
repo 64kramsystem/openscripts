@@ -178,7 +178,9 @@ function encode_directory {
   # directory.
   local parallel_commands_list_file=
 
-  destination_subdir="$destination/$(basename "$1")"
+  # Resolve the source, so that relative references (eg. `.`) yield the actual directory name.
+  #
+  destination_subdir="$destination/$(basename "$(readlink -f "$1")")"
   intermediate_subdir="$(mktemp -d)"
   parallel_commands_list_file=$(mktemp)
 
