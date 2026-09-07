@@ -13,7 +13,8 @@ Generates a highlighted x86 assembly listing PDF with clickable references. Line
 Symbol links recognize Ghidra rows containing an address, contiguous bytes, mnemonic, and operands; label definitions begin in column 1.
 
 Defaults: --font-size 14.1070416 --line-spacing 19.5 --margin 25.984251968504 (horizontal)
-Chars/line = floor((1024 - 2 * margin) / (0.5248718262 * font-size)) - 2; defaults: ${c_default_columns}.
+Default columns: ${c_default_columns}
+Chars/line = floor((1024 - 2 * margin) / (0.5248718262 * font-size)) - 2.
 Requires: Ruby, pdflatex, and TeX Live packages ec, geometry, hyperref, listings, and xcolor."
 
 # Defaults preserve White_Papers_Keen_code_sample.pdf typography on an iPad Air 13-inch portrait canvas.
