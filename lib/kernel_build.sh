@@ -21,6 +21,7 @@
 
 # Pure constants, so the library can define them at source time.
 #
+c_replay_git_username=64kramsystem
 # Cherry picking and apply_sav_branch land their commits on this temporary branch.
 c_cherry_pick_branch=temporary_cherry_picks
 # Example: https://kernel.ubuntu.com/mainline/v6.7/
@@ -1024,8 +1025,8 @@ function apply_sav_branch {
 
     # Pin an identity and disable signing so the replay does not depend on the caller's git config.
     git \
-      -c user.name='64kramsystem' \
-      -c user.email='64kramsystem@users.noreply.github.com' \
+      -c user.name="$c_replay_git_username" \
+      -c user.email="$c_replay_git_username@users.noreply.github.com" \
       -c commit.gpgsign=false \
       rebase --onto "$version_tag" "$merge_base"
   fi
