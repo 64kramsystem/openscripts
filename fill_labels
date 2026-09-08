@@ -12,7 +12,6 @@ require_relative 'helpers/system_helper'
 class ConfigurationPreparer
   CONFIG_PATH = File.expand_path('~/.fill_labels')
   STATE_PATH  = File.join(ENV['XDG_STATE_HOME'] || File.expand_path('~/.local/state'), 'fill_labels')
-  ADDRESS_BOOK_PATH = File.expand_path('~/saver/address_book.saversolve.vcf')
 
   LONG_HELP = <<~HELP
     Prepare an OpenDocument with addresses or images on a standard A4 sticker sheet.
@@ -26,6 +25,7 @@ class ConfigurationPreparer
 
     The configuration is stored in the `$HOME/.fill_labels` file as a sectioned INI.
     [defaults] selects the active format names per mode and the sender address (colon-separated, up to 3 lines).
+    Its `address_book` sets the vCard file path (required for address labels; `~` is expanded).
     [format.<name>] sections declare each format: `type` is `address` or `image`; image formats add cols/rows and cell_width_mm/cell_height_mm.
     The auto-managed `next_position` page state is kept out of the config, in the
     `$XDG_STATE_HOME/fill_labels` file (sharing the `[format.<name>]` INI layout).
@@ -36,6 +36,7 @@ class ConfigurationPreparer
       address = labelwonderland_es0010
       image   = topstick_8739
       sender  = Donald Duck:1313 Webfoot Walk:Duckburg
+      address_book = ~/contacts.vcf
 
       [format.labelwonderland_es0010]
       type          = address
@@ -51,7 +52,7 @@ class ConfigurationPreparer
 
   HELP
 
-  def execute(arguments: ARGV, config_path: CONFIG_PATH, state_path: STATE_PATH, address_book_path: ADDRESS_BOOK_PATH)
+  def execute(arguments: ARGV, config_path: CONFIG_PATH, state_path: STATE_PATH)
     options = SimpleScripting::Argv.decode(
       ['-p', '--position POSITION', 'Label position (default: per-format next_position from config)'],
       '[file]',
@@ -68,7 +69,12 @@ class ConfigurationPreparer
 
     label_position = options[:position] || format.fetch(:next_position, 0).to_s
 
-    recipient_or_image = file || select_recipient_address(address_book_path)
+    recipient_or_image = file || begin
+      address_book = cfg.fetch(:address_book)
+      raise "Set address_book in [defaults] in #{config_path}" if address_book.to_s.strip.empty?
+
+      select_recipient_address(File.expand_path(address_book))
+    end
 
     [cfg.fetch(:sender), recipient_or_image, label_position, format, format_name]
   end
@@ -104,6 +110,7 @@ class ConfigurationPreparer
     {
       defaults:     { address: defaults_raw['address'], image: defaults_raw['image'] },
       sender:       defaults_raw['sender'].split(':'),
+      address_book: defaults_raw['address_book'],
       formats:      formats,
     }
   end

@@ -179,11 +179,6 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
 
   def test_search_uses_controlled_temporary_fixture
     assert_equal ["Fixture Only"], ConfigurationPreparer.new.send(:find_recipient_address, "Fixture Only", @vcard_path)
-    refute_equal ConfigurationPreparer::ADDRESS_BOOK_PATH, @vcard_path
-  end
-
-  def test_default_address_book_path_is_unchanged
-    assert_equal File.expand_path('~/saver/address_book.saversolve.vcf'), ConfigurationPreparer::ADDRESS_BOOK_PATH
   end
 
   def test_packs_full_address_into_four_lines_without_dropping_data
@@ -382,6 +377,7 @@ class ConfigurationPreparerExecuteTest < Minitest::Test
       address = address_format
       image   = image_format
       sender  = Sender
+      address_book = #{@vcard_path}
 
       [format.address_format]
       type     = address
@@ -418,10 +414,18 @@ class ConfigurationPreparerExecuteTest < Minitest::Test
   end
 
   def test_one_argument_uses_file_mode
+    File.write(@config_path, File.read(@config_path).sub(/.*address_book = .*\n/, ''))
     _sender, image, _position, format, format_name = execute(["/tmp/label.png"])
     assert_equal "/tmp/label.png", image
     assert_equal "image", format.fetch(:type)
     assert_equal "image_format", format_name
+  end
+
+  def test_address_mode_requires_configured_address_book
+    File.write(@config_path, File.read(@config_path).sub(/.*address_book = .*\n/, ''))
+
+    error = assert_raises(RuntimeError) { execute([]) }
+    assert_includes error.message, "Set address_book in [defaults] in #{@config_path}"
   end
 
   private
@@ -430,8 +434,7 @@ class ConfigurationPreparerExecuteTest < Minitest::Test
     ConfigurationPreparer.new.execute(
       arguments: arguments,
       config_path: @config_path,
-      state_path: @state_path,
-      address_book_path: @vcard_path
+      state_path: @state_path
     )
   end
 
@@ -580,6 +583,7 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
       address = labelwonderland_es0010
       image   = topstick_8739
       sender  = Donald Duck:1313 Webfoot Walk:Duckburg
+      address_book = ~/contacts.vcf
 
       [format.labelwonderland_es0010]
       type          = address
@@ -641,9 +645,9 @@ class ConfigurationPreparerLoadConfigTest < Minitest::Test
     refute cfg.fetch(:formats).fetch("topstick_8739").key?(:next_position)
   end
 
-  def test_does_not_expose_address_book
+  def test_loads_address_book_from_defaults
     cfg = ConfigurationPreparer.new.send(:load_config, @config_path, @state_path)
-    refute cfg.key?(:address_book)
+    assert_equal "~/contacts.vcf", cfg.fetch(:address_book)
   end
 end
 
