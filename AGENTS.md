@@ -1,0 +1,1 @@
+- Do not introduce PII in the repository; double check before pushing.
