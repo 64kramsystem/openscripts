@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_image_extensions_regex='.+\.(jpe?g|png)'
+c_image_extensions_regex='.+\.(jpe?g|png|avif)'
 
 c_unnecessary_files=(
   *.mp3
@@ -25,6 +25,7 @@ v_delete_source_file=1 # boolean; false=blank, true=anything else
 v_input_file=
 v_output_file=
 v_temp_dir=
+v_temp_output_file=
 
 function decode_cmdline_args {
   local params
@@ -77,7 +78,12 @@ function create_temp_dir {
 }
 
 function register_exit_hook {
-  function _exit_hook { rm -rf "$v_temp_dir"; }
+  function _exit_hook {
+    rm -rf "$v_temp_dir"
+    if [[ -n $v_temp_output_file ]]; then
+      rm -f "$v_temp_output_file"
+    fi
+  }
   trap _exit_hook EXIT
 }
 
@@ -133,7 +139,7 @@ function delete_unnecessary_files {
 
 function check_filenames {
   local unexpected_filenames
-  unexpected_filenames=$(find . -type f -not -regextype egrep -regex "$c_image_extensions_regex")
+  unexpected_filenames=$(find . -regextype egrep -type f -not -iregex "$c_image_extensions_regex")
 
   if [[ -n $unexpected_filenames ]]; then
     >&2 echo "Files with unexpected name found: $unexpected_filenames"
@@ -144,9 +150,22 @@ function check_filenames {
 function create_pdf {
   # WATCH OUT!! Don't use Imagemagick, which is lossy.
   #
-  find . -regextype egrep -regex "$c_image_extensions_regex" -print0 \
-    | sort -z \
-    | xargs -0 img2pdf -o "$v_output_file"
+  local image_list
+  image_list=$(mktemp "$v_temp_dir/image-list.XXXXXX")
+  find . -regextype egrep -type f -iregex "$c_image_extensions_regex" -print0 \
+    | sort -z > "$image_list"
+
+  if [[ ! -s $image_list ]]; then
+    >&2 echo "No supported images found in: $v_input_file"
+    exit 1
+  fi
+
+  # Publish only a complete PDF. A file list avoids xargs splitting a large
+  # archive across invocations that each overwrite the same output.
+  v_temp_output_file=$(mktemp "$v_output_file.XXXXXX")
+  img2pdf --from-file "$image_list" -o "$v_temp_output_file"
+  mv -f "$v_temp_output_file" "$v_output_file"
+  v_temp_output_file=
 }
 
 function delete_source_file {
@@ -174,4 +193,7 @@ for v_input_file in "${v_input_files[@]}"; do
   if [[ -n $v_delete_source_file ]]; then
     delete_source_file
   fi
+  cd /
+  rm -rf "$v_temp_dir"
+  v_temp_dir=
 done
