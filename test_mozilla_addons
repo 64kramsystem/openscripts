@@ -1,0 +1,59 @@
+#!/usr/bin/env ruby
+
+python = ENV.fetch('PYTHON', 'python3')
+ENV['PYTHONDONTWRITEBYTECODE'] = '1'
+abort 'Usage: test_mozilla_addons [checkout-directory]' if ARGV.length > 1
+root = File.expand_path(ARGV.fetch(0, File.join(__dir__, '..')))
+
+checks = {
+  'firefox-nyt' => [
+    ['npm', 'test'],
+    [python, '-B', '-m', 'unittest', 'discover', '-s', 'tests', '-v']
+  ],
+  'firefox-site-reminders' => [['npm', 'test'], ['npm', 'run', 'test:browser']],
+  'firefox-sver_vid-resume' => [['npm', 'test'], ['npm', 'run', 'test:browser']],
+  'firefox-tly' => [['npm', 'test'], ['npm', 'run', 'test:browser']],
+  'firefox-vdhc' => [
+    ['node', '--test', 'tests/*.test.mjs'],
+    [python, '-B', '-m', 'unittest', 'discover', '-s', 'tests', '-v']
+  ],
+  'thunderbird-focus-panes' => [
+    ['npm', 'run', 'check'], ['npm', 'run', 'package'],
+    [python, '-B', 'test/marionette/test_wraparound.py']
+  ],
+  'thunderbird-ungerman' => [
+    ['node', '--test', '*.test.js'],
+    [python, '-B', 'test/marionette/test_compose.py']
+  ],
+  'thunderbird-write-to-current' => [
+    ['npm', 'run', 'check'],
+    [python, '-B', 'test/marionette/test_compose.py']
+  ]
+}
+
+failures = []
+checks.each do |name, commands|
+  directory = File.join(root, name)
+  unless File.directory?(directory)
+    failures << "#{name}: checkout missing"
+    next
+  end
+
+  Dir.chdir(directory) do
+    commands.each do |command|
+      puts "\n#{name}: #{command.join(' ')}"
+      $stdout.flush
+      arguments = command.flat_map do |argument|
+        matches = argument.include?('*') ? Dir.glob(argument) : []
+        matches.empty? ? [argument] : matches
+      end
+      unless system(*arguments)
+        failures << "#{name}: #{command.join(' ')}"
+        break
+      end
+    end
+  end
+end
+
+abort "\nFailed:\n#{failures.join("\n")}" unless failures.empty?
+puts "\nAll eight add-on suites passed."
