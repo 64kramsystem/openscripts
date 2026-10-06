@@ -7,6 +7,7 @@ set -o errtrace
 shopt -s inherit_errexit
 
 c_image_extensions_regex='.+\.(jpe?g|png|avif)'
+c_script_dir=$(dirname "$(readlink -f "$0")")
 
 c_unnecessary_files=(
   *.mp3
@@ -17,6 +18,8 @@ c_unnecessary_files=(
 )
 c_help="Usage: $(basename "$0") [-h|--help] [-k|--keep-source-file] <input1.cbr input2.cbz...>
 
+AVIF pages use lossy JPEG 2000 compression at quality 35 when image information permits.
+Requires numpy, imagecodecs and Pillow for AVIF conversion.
 Source files are deleted by default. If 'trash' is in the path, it will be used; otherwise, 'rm' will be."
 
 v_input_files=()
@@ -148,8 +151,6 @@ function check_filenames {
 }
 
 function create_pdf {
-  # WATCH OUT!! Don't use Imagemagick, which is lossy.
-  #
   local image_list
   image_list=$(mktemp "$v_temp_dir/image-list.XXXXXX")
   find . -regextype egrep -type f -iregex "$c_image_extensions_regex" -print0 \
@@ -159,6 +160,9 @@ function create_pdf {
     >&2 echo "No supported images found in: $v_input_file"
     exit 1
   fi
+
+  # AVIF cannot be embedded directly; use compact JP2 instead of lossless PNG encoding.
+  python3 "$c_script_dir/helpers/prepare_avif_for_pdf.py" "$image_list" "$v_temp_dir"
 
   # Publish only a complete PDF. A file list avoids xargs splitting a large
   # archive across invocations that each overwrite the same output.
