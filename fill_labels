@@ -195,7 +195,7 @@ class ConfigurationPreparer
                        [delivery_fragments.first, delivery_fragments.drop(1).join(', ')]
                      end
 
-    final_line = [locality, region, postcode, country]
+    final_line = [postcode, locality, region, country]
       .flat_map { |component| component.split("\n", -1) }
       .reject(&:empty?)
       .join(' ')

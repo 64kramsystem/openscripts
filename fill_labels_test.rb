@@ -175,7 +175,7 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
 
   def test_converts_adr_with_escaped_newline_and_empty_components
     out = ConfigurationPreparer.new.send(:find_recipient_address, "Example Parcel Office", @vcard_path)
-    assert_equal ["Example Parcel Office", "Beispielstraße", " 42", "Duckburg 00000"], out
+    assert_equal ["Example Parcel Office", "Beispielstraße", " 42", "00000 Duckburg"], out
   end
 
   def test_search_uses_controlled_temporary_fixture
@@ -197,7 +197,7 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
       "Example Recipient",
       "Postfach 42",
       "c/o Reception, Suite 5, Example Street 7",
-      "Berlin Berlin 10115 Germany",
+      "10115 Berlin Berlin Germany",
     ], out
   end
 
@@ -245,7 +245,7 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
 
     out = ConfigurationPreparer.new.send(:find_recipient_address, "Semicolon Recipient", @vcard_path)
 
-    assert_equal ["Semicolon Recipient", "Unit 2; Rear", "Dresden Saxony 01067 Germany"], out
+    assert_equal ["Semicolon Recipient", "Unit 2; Rear", "01067 Dresden Saxony Germany"], out
   end
 
   def test_prefers_home_adr_case_insensitively
@@ -260,7 +260,7 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
 
     out = ConfigurationPreparer.new.send(:find_recipient_address, "Home Recipient", @vcard_path)
 
-    assert_equal ["Home Recipient", "1 Home Street", "Home City Home Region 11111 Home Country"], out
+    assert_equal ["Home Recipient", "1 Home Street", "11111 Home City Home Region Home Country"], out
   end
 
   def test_falls_back_to_first_adr_when_home_absent
@@ -275,7 +275,7 @@ class ConfigurationPreparerFindRecipientTest < Minitest::Test
 
     out = ConfigurationPreparer.new.send(:find_recipient_address, "Fallback Recipient", @vcard_path)
 
-    assert_equal ["Fallback Recipient", "1 First Street", "First City First Region 11111 First Country"], out
+    assert_equal ["Fallback Recipient", "1 First Street", "11111 First City First Region First Country"], out
   end
 
   def test_omits_empty_final_address_line
@@ -408,7 +408,7 @@ class ConfigurationPreparerExecuteTest < Minitest::Test
   def test_no_argument_uses_vcf_mode
     with_prompt_selection do
       _sender, recipient, _position, format, format_name = execute([])
-      assert_equal ["Recipient", "Street", "Berlin 12345"], recipient
+      assert_equal ["Recipient", "Street", "12345 Berlin"], recipient
       assert_equal "address", format.fetch(:type)
       assert_equal "address_format", format_name
     end
