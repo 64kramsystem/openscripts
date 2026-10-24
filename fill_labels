@@ -23,12 +23,12 @@ class ConfigurationPreparer
     When omitted, the active format's `next_position` from the state file is used; after a
     successful run, `next_position` is advanced past the labels just used.
 
-    With no <file>, select a recipient from the vCard address book. With <file>,
+    With no <file>, select a recipient from CardBook. With <file>,
     prepare image labels from that PNG file.
 
     The configuration is stored in the `$HOME/.fill_labels` file as a sectioned INI.
     [defaults] selects the active format names per mode and the sender address (colon-separated, up to 3 lines).
-    Its `address_book` sets the vCard file path (required for address labels; `~` is expanded).
+    Its `address_book` selects the CardBook address book by name (required for address labels).
     [format.<name>] sections declare each format: `type` is `address` or `image`; image formats add cols/rows and cell_width_mm/cell_height_mm.
     The auto-managed `next_position` page state is kept out of the config, in the
     `$XDG_STATE_HOME/fill_labels` file (sharing the `[format.<name>]` INI layout).
@@ -39,7 +39,7 @@ class ConfigurationPreparer
       address = labelwonderland_es0010
       image   = topstick_8739
       sender  = Donald Duck:1313 Webfoot Walk:Duckburg
-      address_book = ~/contacts.vcf
+      address_book = Personal
 
       [format.labelwonderland_es0010]
       type          = address
@@ -76,7 +76,7 @@ class ConfigurationPreparer
       address_book = cfg.fetch(:address_book)
       raise "Set address_book in [defaults] in #{config_path}" if address_book.to_s.strip.empty?
 
-      select_recipient_address(File.expand_path(address_book))
+      select_recipient_address(address_book)
     end
 
     [cfg.fetch(:sender), recipient_or_image, label_position, format, format_name]
