@@ -86,7 +86,7 @@ module RecipientAddress
   def home_address?(address)
     address.fetch(:parameters).any? do |parameter|
       name, value = parameter.split('=', 2)
-      name.casecmp?('TYPE') && value.to_s.split(',').any? { |type| type.casecmp?('HOME') }
+      name&.casecmp?('TYPE') && value.to_s.split(',').any? { |type| type.casecmp?('HOME') }
     end
   end
 end
