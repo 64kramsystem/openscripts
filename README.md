@@ -7,6 +7,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
 - concurrency
   - `interruptible_job_scheduler.rb`: a scheduler for interruptible process-based job(s)
 - documents
+  - `render_md_to_pdf`: renders Markdown as a Green Book essay, C64 Blue Book, or Ultraviolet Book, with linked contents, math, tables, images, and assembly highlighting
   - `generate_wiki_home_toc`: generates the `Home.md` file of a (GitHub) wiki repository, with a table of contents
   - `update_markdown_chapter_references`: generates/updates a Table Of Contents, and navigation links, in a collection of Markdown documents
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
@@ -93,3 +94,25 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
 `build_kernel_unattended` builds a selected release into a persistent destination without installing it. Configuration conflicts always abort instead of prompting.
 
 I keep adding new content/update old ones.
+
+## Markdown PDFs
+
+```sh
+render_md_to_pdf essay document.md
+render_md_to_pdf commodware books/game.md --output books/
+render_md_to_pdf palware analyses/sample.md -o output/
+```
+
+The first argument selects the style and code defaults:
+
+| Style | Cover | Code defaults |
+| --- | --- | --- |
+| `essay` | Green Book, forest green with pale green lettering | Plain text |
+| `commodware` | C64 Blue Book, original C64 blue palette | 6502 assembly |
+| `palware` | Ultraviolet Book, black lettering on an unpainted (transparent) background | x86 assembly |
+
+Most PDF viewers display the transparent background as white. Each style uses the same iPad-sized pages and Helvetica-compatible typography. A leading `# Title` supplies the cover title. A linked contents page is generated from headings through level 3; an existing linked Markdown TOC immediately after the title is replaced rather than printed twice. Local images are resolved relative to the input file and fitted to the page. The input is unchanged.
+
+The output is `INPUT.pdf` beside the Markdown file, or in the existing directory selected by `-o` / `--output`.
+
+Requires Ruby with `kramdown` and `kramdown-parser-gfm` (included in the Gemfile), LuaLaTeX, Nimbus Sans and DejaVu fonts, and the TeX Live packages `fontspec`, `unicode-math`, `float`, `geometry`, `graphicx`, `hyperref`, `listings`, `longtable`, `needspace`, and `xcolor`. On Debian/Ubuntu these are supplied by `texlive-luatex texlive-latex-extra texlive-fonts-recommended fonts-urw-base35 fonts-dejavu-core`. Run `python3 tests/render_md_to_pdf_test.py` for the PDF integration tests; they additionally need Poppler's `pdftotext` and Python's `pypdf`.

@@ -1,6 +1,8 @@
 source 'https://rubygems.org'
 
 gem 'chunky_png'                    # fill_labels
+gem 'kramdown', '~> 2.5'            # render_md_to_pdf
+gem 'kramdown-parser-gfm', '~> 1.1'  # render_md_to_pdf
 gem 'rubyzip', '~> 2.4'             # fill_labels
 gem 'simple_scripting', '~> 0.14.0' # (many)
 gem 'tty-prompt'                    # fill_labels

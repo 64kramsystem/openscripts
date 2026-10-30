@@ -1,0 +1,360 @@
+#!/usr/bin/env ruby
+
+require "fileutils"
+require "open3"
+require "optparse"
+require "tmpdir"
+require "uri"
+require "kramdown"
+require "kramdown-parser-gfm"
+require "kramdown/converter/latex"
+
+class Kramdown::Parser::RenderGFM < Kramdown::Parser::GFM
+  def initialize(source, options)
+    super
+    @block_parsers.insert(@block_parsers.index(:block_math), :latex_block_math)
+    @span_parsers.insert(@span_parsers.index(:escaped_chars_gfm), :latex_inline_math)
+  end
+
+  # Let Markdown handle escaped delimiters; reuse the native math parser for actual formulas.
+  def parse_latex_block_math
+    !@src[1] && parse_block_math
+  end
+
+  define_parser(:latex_block_math, /^ {0,3}(\\)?\\\[(.*?)\\\](\s*?\n)?/m)
+  define_parser(:latex_inline_math, /\\\((.*?)\\\)/m, '\\\\\(', "parse_inline_math")
+end
+
+class MarkdownPDFLatex < Kramdown::Converter::Latex
+  def convert_p(element, options)
+    paragraph = super
+    following = options[:parent].children.drop(options[:index] + 1).find do |child|
+      child.type != :blank
+    end
+    return paragraph unless [:codeblock, :table].include?(following&.type)
+
+    # Leave room for the introduction, block spacing, and the first lines or row.
+    "\\Needspace{6\\baselineskip}\n" + paragraph
+  end
+
+  def convert_header(element, options)
+    if element.options[:document_title]
+      cover = "\\bookcover{#{inner(element, options)}}\n"
+      element.children.unshift(Kramdown::Element.new(:text, "#{element.options[:book_label]}: "))
+      bookmark = "\\pdfbookmark[0]{#{inner(element, options)}}{document-title}\n"
+      return cover + bookmark + super(element, options).sub('\\section{', '\\section*{')
+    end
+    element.children << Kramdown::Element.new(:text, ".") if element.options[:level] == 4
+    header = super(element, options)
+    return header unless element.options[:level] == 3 && @data[:has_toc]
+
+    header.sub('\\subsubsection{', '\\topicheading{')
+  end
+
+  def convert_codeblock(element, _options)
+    options = element.options[:lang] == "text" ? "[language={}]" : ""
+    # Listings only activates 8-bit characters; register each Unicode glyph as a token.
+    characters = element.value.scan(/[^\x00-\x7f]/).uniq
+    glyphs = characters.map do |character|
+      "{#{character}}{{\\char\"#{character.ord.to_s(16).upcase}\\relax}}1"
+    end
+    catcodes = characters.map { |character| "\\catcode\"#{character.ord.to_s(16).upcase}=13\\relax" }.join
+    setup = characters.empty? ? "" : "\\lstset{literate={#{glyphs.join(' ')}}}#{catcodes}\n"
+    "\\begingroup\n#{setup}\\begin{lstlisting}#{options}\n#{element.value}\\end{lstlisting}\n\\endgroup\n\n"
+  end
+
+  def convert_img(element, options)
+    super.sub('\\includegraphics{', '\\includegraphics[width=\\linewidth,height=0.65\\textheight,keepaspectratio]{')
+  end
+
+  def convert_standalone_image(element, options, image)
+    super.sub('\\begin{figure}', '\\begin{figure}[H]')
+  end
+
+  def convert_table(element, options)
+    columns = element.options[:alignment]
+    width = "\\dimexpr(\\linewidth-#{2 * columns.length}\\tabcolsep-#{columns.length + 1}\\arrayrulewidth)/#{columns.length}\\relax"
+    alignment = columns.map do |column|
+      style = {right: "raggedleft", center: "centering"}.fetch(column, "raggedright")
+      ">{\\#{style}\\arraybackslash}p{#{width}}"
+    end.join("|")
+    table = super(element, options.merge(in_table: true))
+    table.sub(/\\begin\{longtable\}\{[^}]+\}/) { "\\begin{longtable}{|#{alignment}|}" }
+  end
+
+  def convert_thead(element, options)
+    super + "\\endhead\n"
+  end
+
+  def convert_codespan(element, options)
+    return super if options[:in_table]
+
+    text = element.value.split(/( +)/).map do |part|
+      if part.start_with?(" ")
+        "\\inlinecodebreak{\\hbox{\\inlinecode{#{part}}}}"
+      else
+        part.split(/(?<=_)|(?<=[a-z])(?=[A-Z])/).map { |word| "\\inlinecode{#{escape(word)}}" }.join('\\inlinecodebreak{}')
+      end
+    end.join
+    rendered = "\\inlinecodepadding{}#{text}\\inlinecodepadding{}"
+    "#{latex_link_target(element)}\\texorpdfstring{#{rendered}}{#{escape(element.value)}}"
+  end
+
+  def convert_a(element, options)
+    target = element.attr.fetch("href")
+    unless target.start_with?("#")
+      # PDF underline borders follow each wrapped line of the link text.
+      return "{\\hypersetup{pdfborder={0 0 1},pdfborderstyle={/S /U /W 0.7}}#{super}}"
+    end
+
+    # Section labels point above the heading; Kramdown's hyperlink targets follow it.
+    "\\hyperref[#{target.delete_prefix('#')}]{#{inner(element, options)}}"
+  end
+end
+
+# Keep document style and assembly dialect together, without exposing architecture
+# as an unrelated positional argument. Essays do not assume an assembly language.
+STYLES = {
+  "essay" => {dialect: nil, label: "Green Book", heading: "ESSAY", banner: "GREEN BOOK",
+              background: "133F2C", foreground: "FFFFFF", accent: "99D0AA", link: "226644",
+              heading_height: "74", title_size: "43", title_leading: "53",},
+  "commodware" => {dialect: "6502", label: "C64 Blue Book", heading: "C64", banner: "BLUE BOOK",
+                   background: "352879", foreground: "FFFFFF", accent: "6C5EB5", link: "0000FF",
+                   heading_height: "110", title_size: "54", title_leading: "65",},
+  "palware" => {dialect: "x86masm", label: "Ultraviolet Book", heading: "PALWARE", banner: "ULTRAVIOLET BOOK",
+                background: nil, foreground: "000000", accent: "000000", link: "303030",
+                heading_height: "74", title_size: "43", title_leading: "53",},
+}.freeze
+
+# Recognize the existing linked Markdown TOC without consuming ordinary opening lists.
+def contents_list?(element)
+  return false unless element
+  return element.attr.fetch("href", "").start_with?("#") if element.type == :a
+  return element.value.strip.empty? if element.type == :text
+  return true if element.type == :blank
+  return false unless [:ul, :li, :p].include?(element.type)
+
+  !element.children.empty? && element.children.all? { |child| contents_list?(child) }
+end
+
+output = nil
+options = OptionParser.new do |parser|
+  parser.banner = "Usage: #{File.basename($PROGRAM_NAME)} (essay|commodware|palware) INPUT.md [-o DIR]"
+  parser.separator ""
+  parser.separator "Render Markdown with a book cover, linked contents, Helvetica prose, math, tables, and local images."
+  parser.separator "Styles: essay = Green Book; commodware = C64 Blue Book / 6502; palware = Ultraviolet Book / x86."
+  parser.separator "Ultraviolet has an unpainted (transparent) cover background and black lettering."
+  parser.separator "A leading level-1 heading supplies the cover title. Contents are generated from headings through level 3."
+  parser.separator "Output defaults to INPUT.pdf beside the Markdown file."
+  parser.separator ""
+  parser.separator "Requires: Ruby gems kramdown and kramdown-parser-gfm, lualatex (texlive-luatex), Nimbus Sans and DejaVu fonts, and TeX Live packages fontspec, unicode-math, float, geometry, graphicx, hyperref, listings, longtable, needspace, and xcolor."
+  parser.separator ""
+  parser.on("-o", "--output DIR", "Output directory") { |path| output = path }
+  parser.on("-h", "--help", "Show this help") { puts parser; exit }
+end
+
+begin
+  options.parse!
+  abort options.to_s unless ARGV.length == 2
+
+  style = STYLES.fetch(ARGV.first) do
+    abort "Unsupported style: #{ARGV.first} (choose #{STYLES.keys.join(', ')})"
+  end
+  input = File.expand_path(ARGV.last)
+  output = File.join(File.expand_path(output || File.dirname(input)), File.basename(input, ".md") + ".pdf")
+  document = Kramdown::Document.new(File.read(input), input: "RenderGFM", syntax_highlighter: nil)
+  title, toc = document.root.children.reject { |element| element.type == :blank }.first(2)
+  title = nil unless title&.type == :header && title.options[:level] == 1
+  if title
+    title.options[:document_title] = true
+    title.options[:book_label] = style[:label]
+  end
+  if title && toc&.type == :ul && contents_list?(toc)
+    toc.options[:ial] = {refs: ["toc"]}
+  elsif document.root.children.any? { |element| element.type == :header && element != title && element.options[:level] <= 3 }
+    toc = Kramdown::Element.new(:ul, nil, {}, {ial: {refs: ["toc"]}})
+    document.root.children.insert(title ? document.root.children.index(title) + 1 : 0, toc)
+  end
+  Dir.mktmpdir("markdown-pdf-", "/tmp") do |directory|
+    image_count = 0
+    prepare_images = lambda do |element|
+      if element.type == :img && !element.attr.fetch("src").match?(/\A(?:\z|(?:https?|ftps?):\/\/)/)
+        source = File.expand_path(URI::DEFAULT_PARSER.unescape(element.attr.fetch("src")), File.dirname(input))
+        name = "figure-#{image_count += 1}#{File.extname(source)}"
+        FileUtils.cp(source, File.join(directory, name))
+        element.attr["src"] = name
+      end
+      prepare_images.call(element.value) if element.type == :footnote
+      element.children.each { |child| prepare_images.call(child) }
+    end
+    prepare_images.call(document.root)
+    body, warnings = MarkdownPDFLatex.convert(document.root, document.options)
+    (document.warnings + warnings).each { |warning| warn warning }
+    substitutions = {
+      "ASSEMBLY_LANGUAGE" => style[:dialect] ? "language={[#{style[:dialect]}]Assembler}" : "language={}",
+      "COVER_BACKGROUND" => style[:background] ? "\\definecolor{coverbackground}{HTML}{#{style[:background]}}\n\\pagecolor{coverbackground}" : "",
+      "COVER_FOREGROUND" => style[:foreground], "COVER_ACCENT" => style[:accent],
+      "LINK_COLOR" => style[:link], "BOOK_LABEL" => style[:label],
+      "COVER_HEADING" => style[:heading], "COVER_BANNER" => style[:banner],
+      "HEADING_HEIGHT" => style[:heading_height], "TITLE_SIZE" => style[:title_size],
+      "TITLE_LEADING" => style[:title_leading],
+    }
+    preamble = DATA.read.gsub(Regexp.union(substitutions.keys)) { |key| substitutions.fetch(key) }
+    File.write(File.join(directory, "analysis.tex"), preamble + body + "\\end{document}\n")
+    # Populate the TOC, then resolve page numbers after it has taken up space.
+    3.times do
+      log, status = Open3.capture2e("lualatex", "-interaction=nonstopmode", "-halt-on-error",
+                                   "-no-shell-escape", "analysis.tex", chdir: directory)
+      abort log unless status.success?
+    end
+    FileUtils.cp(File.join(directory, "analysis.pdf"), output)
+  end
+  puts output
+rescue OptionParser::ParseError, SystemCallError => error
+  abort error.message
+end
+
+__END__
+\documentclass[12pt]{article}
+\usepackage{fontspec}
+\directlua{
+  luaotfload.add_fallback("analysis-sans", {"DejaVu Sans:mode=node;"})
+}
+% Helvetica-compatible prose with Unicode fallback; retain Keen's .95 scale.
+\IfFontExistsTF{Nimbus Sans}
+  {\setsansfont{Nimbus Sans}[Scale=.95,RawFeature={fallback=analysis-sans}]}
+  {\setsansfont{NimbusSanL}[Scale=.95,RawFeature={fallback=analysis-sans}]}
+\setmonofont{DejaVu Sans Mono}
+\tracinglostchars=3
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{amsmath,unicode-math,xcolor,listings,longtable,array,graphicx,float,needspace}
+% Reduce occupied width by 20% with wider margins; retain the original page and code sizes.
+\usepackage[paperwidth=1024bp,paperheight=1366bp,left=123.187401574803bp,right=123.187401574803bp,top=52bp,bottom=52bp]{geometry}
+\usepackage[colorlinks=true,linkcolor=black,bookmarksopen=true]{hyperref}
+% Typographic layout inspired by Fabien Sanglard's Game Engine Black Book cover:
+% https://github.com/fabiensanglard/gebbwolf3/blob/master/src/cover.tex
+% Commodware retains the Pepto C64 palette; Palware deliberately paints no background.
+\definecolor{coverforeground}{HTML}{COVER_FOREGROUND}
+\definecolor{coveraccent}{HTML}{COVER_ACCENT}
+\definecolor{weblink}{HTML}{LINK_COLOR}
+\hypersetup{urlcolor=weblink,filecolor=weblink,
+  urlbordercolor=weblink,filebordercolor=weblink}
+\newcommand{\bookcover}[1]{%
+  \hypersetup{pdftitle={BOOK_LABEL: #1},pageanchor=false}%
+  \begin{titlepage}
+    COVER_BACKGROUND
+    \color{coverforeground}\thispagestyle{empty}%
+    \centering\bfseries
+    \vspace*{95bp}%
+    {\resizebox{!}{HEADING_HEIGHT bp}{COVER_HEADING}\par}%
+    \vspace{20bp}%
+    {\color{coveraccent}\resizebox{\linewidth}{110bp}{COVER_BANNER}\par}%
+    \vspace{225bp}%
+    {\fontsize{TITLE_SIZE bp}{TITLE_LEADING bp}\selectfont\MakeUppercase{#1}\par}%
+    \vfill
+  \end{titlepage}
+  \nopagecolor
+  \hypersetup{pageanchor=true}%
+}
+\setcounter{secnumdepth}{0}
+\setcounter{tocdepth}{3}
+% Match Keen's 1.2 leading and blank-line paragraph separation at our reading size.
+\renewcommand{\normalsize}{\fontsize{18bp}{21.6bp}\selectfont}
+\renewcommand{\large}{\fontsize{21.6bp}{25.92bp}\selectfont}
+\renewcommand{\Large}{\fontsize{25.92bp}{31.104bp}\selectfont}
+% Book title, main sections, and topics use Keen's chapter/section/subsection size ratios.
+\makeatletter
+\renewcommand{\section}{\@startsection{section}{1}{\z@}
+  {-3.5ex \@plus -1ex \@minus -.2ex}{2.3ex \@plus .2ex}
+  {\normalfont\raggedright\hyphenpenalty=10000\fontsize{44.784bp}{53.7408bp}\selectfont\bfseries}}
+\renewcommand{\subsection}{\@startsection{subsection}{2}{\z@}
+  {-3.25ex \@plus -1ex \@minus -.2ex}{1.5ex \@plus .2ex}
+  {\normalfont\raggedright\hyphenpenalty=10000\Large\bfseries}}
+\renewcommand{\subsubsection}{\@startsection{subsubsection}{3}{\z@}
+  {-3.25ex \@plus -1ex \@minus -.2ex}{1.5ex \@plus .2ex}
+  {\normalfont\raggedright\hyphenpenalty=10000\large\bfseries}}
+% Keep TOC entries and bookmarks free of the heading's return link.
+\newcommand{\topicheading}[1]{%
+  \subsubsection[#1]{\hyperlink{toc-\@currentHref}{#1}}}
+% Include all three heading levels; only the document title is starred above.
+% Distinguish chapters, sections and leaves by both size and weight.
+\renewcommand{\l@section}[2]{%
+  \addpenalty{\@secpenalty}\addvspace{14.4bp}%
+  \begingroup\normalfont\fontsize{22bp}{26.4bp}\selectfont\bfseries
+    \@dottedtocline{1}{0bp}{0bp}{#1}{#2}%
+  \endgroup\nopagebreak}
+\renewcommand{\l@subsection}[2]{%
+  \addpenalty{\@secpenalty}\addvspace{7.2bp}%
+  \begingroup\normalfont\fontsize{18bp}{21.6bp}\selectfont\bfseries
+    \@dottedtocline{2}{18bp}{0bp}{#1}{#2}%
+  \endgroup\nopagebreak}
+\renewcommand{\l@subsubsection}[2]{%
+  \begingroup\normalfont\fontsize{16bp}{19.2bp}\selectfont
+    \@dottedtocline{3}{36bp}{0bp}
+      {\Hy@raisedlink{\hypertarget{toc-\Hy@tocdestname}{}}#1}{#2}%
+  \endgroup}
+\renewcommand{\tableofcontents}{%
+  \subsection*{\contentsname}%
+  \begingroup
+    \setlength{\parskip}{0bp}%
+    \@starttoc{toc}%
+  \endgroup
+  \clearpage}
+\makeatother
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{21.6bp}
+% Give tight paragraphs a fallback when normal line breaking cannot fit the text.
+\setlength{\emergencystretch}{18bp}
+\raggedbottom
+% Keep prose inline code distinct with bold type and a pale gray background.
+\definecolor{inlinebackground}{gray}{.94}
+\newcommand{\inlinecode}[1]{%
+  \begingroup
+    \setlength{\fboxsep}{0bp}%
+    % End the rule's dimension scan before inserting a space-only chunk.
+    \colorbox{inlinebackground}{\ttfamily\bfseries
+      \vrule width0bp height\dimexpr\ht\strutbox+1.8bp\relax
+        depth\dimexpr\dp\strutbox+1.8bp\relax{}#1}%
+  \endgroup}
+% Pad the span's ends and both sides of a wrap, without painting over neighboring glyphs.
+\newcommand{\inlinecodepadding}{\leavevmode\hbox{\inlinecode{\kern1.8bp}}}
+\newcommand{\inlinecodebreak}[1]{%
+  \discretionary{\inlinecodepadding}{\inlinecodepadding}{#1}}
+\definecolor{codeblack}{RGB}{18,18,18}
+\definecolor{codegreen}{RGB}{0,158,0}
+\definecolor{codemagenta}{RGB}{255,0,158}
+\definecolor{codebackground}{RGB}{229,229,229}
+\definecolor{coderule}{RGB}{85,85,85}
+\lstdefinelanguage[6502]{Assembler}{
+  morekeywords={ADC,AND,ASL,BCC,BCS,BEQ,BIT,BMI,BNE,BPL,BRK,BVC,BVS,
+    CLC,CLD,CLI,CLV,CMP,CPX,CPY,DEC,DEX,DEY,EOR,INC,INX,INY,JMP,JSR,
+    LDA,LDX,LDY,LSR,NOP,ORA,PHA,PHP,PLA,PLP,ROL,ROR,RTI,RTS,
+    SBC,SEC,SED,SEI,STA,STX,STY,TAX,TAY,TSX,TXA,TXS,TYA},
+  sensitive=false,
+  morecomment=[l];,
+  morestring=[b]",
+  morestring=[b]'
+}
+\lstset{
+  ASSEMBLY_LANGUAGE,
+  % Keep numeric literals whole so suffixes such as Ch are not treated as registers.
+  alsoletter={.0123456789},
+  basicstyle={\fontsize{14.1070416bp}{19.5bp}\selectfont\ttfamily\color{codeblack}},
+  keywordstyle=\color{codemagenta},
+  commentstyle=\color{codegreen},
+  stringstyle=\color{codeblack},
+  backgroundcolor=\color{codebackground},
+  frame=single,
+  framerule=.65bp,
+  rulecolor=\color{coderule},
+  % Keen's 3pt inset, scaled with the prose; the frame extends beyond the text edges.
+  framesep=5.4bp,
+  aboveskip=21.6bp,
+  % The following paragraph already supplies the matching gap through parskip.
+  belowskip=0bp,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  tabsize=8
+}
+\begin{document}
