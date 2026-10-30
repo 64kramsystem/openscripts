@@ -56,7 +56,9 @@ class MarkdownPdfTest(unittest.TestCase):
                     pdf, reader, text = self.render(style, source, directory)
                     self.assertEqual(pdf, pathlib.Path(directory) / "document.pdf")
                     self.assertEqual(reader.metadata.title, f"{label}: Heading regression")
-                    self.assertIn(banner, reader.pages[0].extract_text())
+                    # Extractors may infer spaces from font kerning, e.g. "UL TRAVIOLET".
+                    cover_text = reader.pages[0].extract_text()
+                    self.assertIn("".join(banner.split()), "".join(cover_text.split()))
                     self.assertEqual(tuple(reader.pages[0].mediabox[2:]), (1024, 1366))
                     contents = text.split("Contents", 1)[1].split("\f", 1)[0]
                     self.assertEqual(text.count("Contents"), 1)
