@@ -121,6 +121,15 @@ Plain code: λ → value
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("essay", result.stderr)
 
+    def test_generated_contents_before_opening_prose(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = "Opening paragraph stays intact.\n\n## First section\n\nSection text.\n"
+            _, _, text = self.render("essay", source, directory)
+            self.assertEqual(text.count("Contents"), 1)
+            self.assertIn("First section", text.split("Contents", 1)[1].split("\f", 1)[0])
+            self.assertIn("Opening paragraph stays intact.", text)
+            self.assertIn("Section text.", text)
+
 
 if __name__ == "__main__":
     unittest.main()

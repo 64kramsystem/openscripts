@@ -26,6 +26,12 @@ class Kramdown::Parser::RenderGFM < Kramdown::Parser::GFM
 end
 
 class MarkdownPDFLatex < Kramdown::Converter::Latex
+  def convert_ul(element, options)
+    # Kramdown emits the TOC command without a delimiter; opening prose can
+    # otherwise become part of its name when we insert a TOC before it.
+    super + "\n"
+  end
+
   def convert_p(element, options)
     paragraph = super
     following = options[:parent].children.drop(options[:index] + 1).find do |child|
