@@ -121,6 +121,35 @@ Plain code: λ → value
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("essay", result.stderr)
 
+    def test_matrix_and_standalone_math_environments(self):
+        matrices = []
+        for environment in ("matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "smallmatrix"):
+            for opening, closing in ((r"\[", r"\]"), ("$$", "$$")):
+                matrices.append(
+                    f"{opening}\n\\begin{{{environment}}}\n"
+                    "1 & 2\\\\\n3 & 4\n"
+                    f"\\end{{{environment}}}\n{closing}\n"
+                )
+        source = "# Matrix equations\n\n" + "\n".join(matrices) + r"""
+
+\[
+\begin{equation}
+E = mc^2
+\end{equation}
+\]
+
+\[
+\begin{align}
+x &= 5\\
+y &= 6
+\end{align}
+\]
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, text = self.render(None, source, directory)
+            for expected in ("1", "2", "3", "4", "5", "6"):
+                self.assertIn(expected, text)
+
     def test_generated_contents_before_opening_prose(self):
         with tempfile.TemporaryDirectory() as directory:
             source = "Opening paragraph stays intact.\n\n## First section\n\nSection text.\n"

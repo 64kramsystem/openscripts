@@ -26,6 +26,15 @@ class Kramdown::Parser::RenderGFM < Kramdown::Parser::GFM
 end
 
 class MarkdownPDFLatex < Kramdown::Converter::Latex
+  def convert_math(element, options)
+    rendered = super
+    return rendered unless element.options[:category] == :block &&
+      element.value.match?(/\A\s*\\begin\{(?:[pbBvV]?matrix|smallmatrix)\}/)
+
+    # Kramdown leaves leading environments unwrapped, but matrices require math mode.
+    latex_environment("displaymath", element, rendered)
+  end
+
   def convert_ul(element, options)
     # Kramdown emits the TOC command without a delimiter; opening prose can
     # otherwise become part of its name when we insert a TOC before it.
