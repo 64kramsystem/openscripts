@@ -98,12 +98,12 @@ I keep adding new content/update old ones.
 ## Markdown PDFs
 
 ```sh
-render_md_to_pdf essay document.md
-render_md_to_pdf commodware books/game.md --output books/
-render_md_to_pdf palware analyses/sample.md -o output/
+render_md_to_pdf document.md
+render_md_to_pdf --type commodware books/game.md --output books/
+render_md_to_pdf --type palware analyses/sample.md -o output/
 ```
 
-The first argument selects the style and code defaults:
+The optional `--type` (`-t`) argument selects the style and code defaults; it defaults to `essay`:
 
 | Style | Cover | Code defaults |
 | --- | --- | --- |
@@ -113,6 +113,6 @@ The first argument selects the style and code defaults:
 
 Most PDF viewers display the transparent background as white. Each style uses the same iPad-sized pages and Helvetica-compatible typography. A leading `# Title` supplies the cover title. A linked contents page is generated from headings through level 3; an existing linked Markdown TOC immediately after the title is replaced rather than printed twice. Local images are resolved relative to the input file and fitted to the page. The input is unchanged.
 
-The output is `INPUT.pdf` beside the Markdown file, or in the existing directory selected by `-o` / `--output`.
+The output is `INPUT.pdf` in `MD_TO_PDF_DEFAULT_OUTDIR` when set, otherwise beside the Markdown file. Override the directory with `-o` / `--output`.
 
 Requires Ruby with `kramdown` and `kramdown-parser-gfm` (included in the Gemfile), LuaLaTeX, Nimbus Sans and DejaVu fonts, and the TeX Live packages `fontspec`, `unicode-math`, `float`, `geometry`, `graphicx`, `hyperref`, `listings`, `longtable`, `needspace`, and `xcolor`. On Debian/Ubuntu these are supplied by `texlive-luatex texlive-latex-extra texlive-fonts-recommended fonts-urw-base35 fonts-dejavu-core`. Run `python3 tests/render_md_to_pdf_test.py` for the PDF integration tests; they additionally need Poppler's `pdftotext` and Python's `pypdf`.

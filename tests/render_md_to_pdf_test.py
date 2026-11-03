@@ -37,7 +37,7 @@ class MarkdownPdfTest(unittest.TestCase):
         markdown = pathlib.Path(directory) / "document.md"
         markdown.write_text(source)
         result = subprocess.run(
-            [str(SCRIPT), style, str(markdown), *options],
+            [str(SCRIPT), str(markdown), *(["--type", style] if style else []), *options],
             capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -115,7 +115,7 @@ Plain code: λ → value
             self.assertTrue(any(page.images for page in reader.pages))
 
     def test_cli_rejects_missing_or_unknown_style(self):
-        for args in ([], ["analysis", "document.md"], ["essay"]):
+        for args in ([], ["--type", "analysis", "document.md"], ["--type", "essay"]):
             with self.subTest(args=args):
                 result = subprocess.run([str(SCRIPT), *args], capture_output=True, text=True)
                 self.assertNotEqual(result.returncode, 0)
@@ -124,7 +124,7 @@ Plain code: λ → value
     def test_generated_contents_before_opening_prose(self):
         with tempfile.TemporaryDirectory() as directory:
             source = "Opening paragraph stays intact.\n\n## First section\n\nSection text.\n"
-            _, _, text = self.render("essay", source, directory)
+            _, _, text = self.render(None, source, directory)
             self.assertEqual(text.count("Contents"), 1)
             self.assertIn("First section", text.split("Contents", 1)[1].split("\f", 1)[0])
             self.assertIn("Opening paragraph stays intact.", text)

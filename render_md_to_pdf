@@ -143,10 +143,11 @@ def contents_list?(element)
   !element.children.empty? && element.children.all? { |child| contents_list?(child) }
 end
 
+style_name = "essay"
 output = ENV["MD_TO_PDF_DEFAULT_OUTDIR"]
 output = nil if output&.empty?
 options = OptionParser.new do |parser|
-  parser.banner = "Usage: #{File.basename($PROGRAM_NAME)} (essay|commodware|palware) INPUT.md [-o DIR]"
+  parser.banner = "Usage: #{File.basename($PROGRAM_NAME)} INPUT.md [-t TYPE] [-o DIR]"
   parser.separator ""
   parser.separator "Render Markdown with a book cover, linked contents, Helvetica prose, math, tables, and local images."
   parser.separator "Styles: essay = Green Book; commodware = C64 Blue Book / 6502; palware = Ultraviolet Book / x86."
@@ -156,16 +157,17 @@ options = OptionParser.new do |parser|
   parser.separator ""
   parser.separator "Requires: Ruby gems kramdown and kramdown-parser-gfm, lualatex (texlive-luatex), Nimbus Sans and DejaVu fonts, and TeX Live packages fontspec, unicode-math, float, geometry, graphicx, hyperref, listings, longtable, needspace, and xcolor."
   parser.separator ""
+  parser.on("-t", "--type TYPE", "Document type (essay, commodware, palware; default: essay)") { |name| style_name = name }
   parser.on("-o", "--output DIR", "Output directory") { |path| output = path }
   parser.on("-h", "--help", "Show this help") { puts parser; exit }
 end
 
 begin
   options.parse!
-  abort options.to_s unless ARGV.length == 2
+  abort options.to_s unless ARGV.length == 1
 
-  style = STYLES.fetch(ARGV.first) do
-    abort "Unsupported style: #{ARGV.first} (choose #{STYLES.keys.join(', ')})"
+  style = STYLES.fetch(style_name) do
+    abort "Unsupported style: #{style_name} (choose #{STYLES.keys.join(', ')})"
   end
   input = File.expand_path(ARGV.last)
   output = File.join(File.expand_path(output || File.dirname(input)), File.basename(input, ".md") + ".pdf")
