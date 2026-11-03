@@ -143,7 +143,8 @@ def contents_list?(element)
   !element.children.empty? && element.children.all? { |child| contents_list?(child) }
 end
 
-output = nil
+output = ENV["MD_TO_PDF_DEFAULT_OUTDIR"]
+output = nil if output&.empty?
 options = OptionParser.new do |parser|
   parser.banner = "Usage: #{File.basename($PROGRAM_NAME)} (essay|commodware|palware) INPUT.md [-o DIR]"
   parser.separator ""
@@ -151,7 +152,7 @@ options = OptionParser.new do |parser|
   parser.separator "Styles: essay = Green Book; commodware = C64 Blue Book / 6502; palware = Ultraviolet Book / x86."
   parser.separator "Ultraviolet has an unpainted (transparent) cover background and black lettering."
   parser.separator "A leading level-1 heading supplies the cover title. Contents are generated from headings through level 3."
-  parser.separator "Output defaults to INPUT.pdf beside the Markdown file."
+  parser.separator "Output defaults to MD_TO_PDF_DEFAULT_OUTDIR, or beside the Markdown file when unset."
   parser.separator ""
   parser.separator "Requires: Ruby gems kramdown and kramdown-parser-gfm, lualatex (texlive-luatex), Nimbus Sans and DejaVu fonts, and TeX Live packages fontspec, unicode-math, float, geometry, graphicx, hyperref, listings, longtable, needspace, and xcolor."
   parser.separator ""
