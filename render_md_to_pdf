@@ -164,7 +164,7 @@ options = OptionParser.new do |parser|
   parser.separator "A leading level-1 heading supplies the cover title. Contents are generated from headings through level 3."
   parser.separator "Output defaults to MD_TO_PDF_DEFAULT_OUTDIR, or beside the Markdown file when unset."
   parser.separator ""
-  parser.separator "Requires: Ruby gems kramdown and kramdown-parser-gfm, lualatex (texlive-luatex), Nimbus Sans and DejaVu fonts, and TeX Live packages fontspec, unicode-math, float, geometry, graphicx, hyperref, listings, longtable, needspace, and xcolor."
+  parser.separator "Requires: Ruby gems kramdown and kramdown-parser-gfm, lualatex (texlive-luatex), Nimbus Sans, DejaVu and Noto Color Emoji fonts, and TeX Live packages fontspec, unicode-math, float, geometry, graphicx, hyperref, listings, longtable, needspace, and xcolor."
   parser.separator ""
   parser.on("-t", "--type TYPE", "Document type (essay, commodware, palware; default: essay)") { |name| style_name = name }
   parser.on("-o", "--output DIR", "Output directory") { |path| output = path }
@@ -235,14 +235,18 @@ end
 __END__
 \documentclass[12pt]{article}
 \usepackage{fontspec}
+% HarfBuzz renders Noto's color glyphs; fallbacks only replace missing characters.
 \directlua{
-  luaotfload.add_fallback("analysis-sans", {"DejaVu Sans:mode=node;"})
+  luaotfload.add_fallback("analysis-sans", {
+    "DejaVu Sans:mode=node;", "Noto Color Emoji:mode=harf;"
+  })
+  luaotfload.add_fallback("analysis-mono", {"Noto Color Emoji:mode=harf;"})
 }
 % Helvetica-compatible prose with Unicode fallback; retain Keen's .95 scale.
 \IfFontExistsTF{Nimbus Sans}
   {\setsansfont{Nimbus Sans}[Scale=.95,RawFeature={fallback=analysis-sans}]}
   {\setsansfont{NimbusSanL}[Scale=.95,RawFeature={fallback=analysis-sans}]}
-\setmonofont{DejaVu Sans Mono}
+\setmonofont{DejaVu Sans Mono}[RawFeature={fallback=analysis-mono}]
 \tracinglostchars=3
 \renewcommand{\familydefault}{\sfdefault}
 \usepackage{amsmath,unicode-math,xcolor,listings,longtable,array,graphicx,float,needspace}
