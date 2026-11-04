@@ -13,6 +13,7 @@ class Kramdown::Parser::RenderGFM < Kramdown::Parser::GFM
   def initialize(source, options)
     super
     @block_parsers.insert(@block_parsers.index(:block_math), :latex_block_math)
+    @span_parsers.insert(@span_parsers.index(:inline_math), :dollar_inline_math)
     @span_parsers.insert(@span_parsers.index(:escaped_chars_gfm), :latex_inline_math)
   end
 
@@ -22,6 +23,8 @@ class Kramdown::Parser::RenderGFM < Kramdown::Parser::GFM
   end
 
   define_parser(:latex_block_math, /^ {0,3}(\\)?\\\[(.*?)\\\](\s*?\n)?/m)
+  define_parser(:dollar_inline_math, /\$(?![\s$])((?:\\.|[^\n\\$])+?)(?<!\s)\$(?![\d$])/,
+                '\$', "parse_inline_math")
   define_parser(:latex_inline_math, /\\\((.*?)\\\)/m, '\\\\\(', "parse_inline_math")
 end
 
