@@ -7,7 +7,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
 - concurrency
   - `interruptible_job_scheduler.rb`: a scheduler for interruptible process-based job(s)
 - documents
-  - `render_md_to_pdf`: renders Markdown as a Green Book essay, C64 Blue Book, or Ultraviolet Book, with linked contents, math, tables, images, and assembly highlighting
+  - `render_md_to_pdf`: renders Markdown as a Green Book essay, C64 Blue Book, or Ultraviolet Book, with linked contents, math, tables, images, Mermaid diagrams, and assembly highlighting
   - `generate_wiki_home_toc`: generates the `Home.md` file of a (GitHub) wiki repository, with a table of contents
   - `update_markdown_chapter_references`: generates/updates a Table Of Contents, and navigation links, in a collection of Markdown documents
   - `update_markdown_toc`: generates/updates a Table Of Contents, for a single Markdown document
@@ -112,6 +112,8 @@ The optional `--type` (`-t`) argument selects the style and code defaults; it de
 | `palware` | Ultraviolet Book, black lettering on an unpainted (transparent) background | x86 assembly |
 
 Most PDF viewers display the transparent background as white. Each style uses the same iPad-sized pages and Helvetica-compatible typography. A leading `# Title` supplies the cover title. A linked contents page is generated from headings through level 3; an existing linked Markdown TOC immediately after the title is replaced rather than printed twice. Local images are resolved relative to the input file and fitted to the page. The input is unchanged.
+
+Fenced `mermaid` blocks are rendered as figures during the build, with no separate conversion step. Use one sequence-diagram statement per line; literal semicolons in message and note labels are escaped using Mermaid's `#59;` syntax. Existing Mermaid escapes are preserved and HTML character references in those labels are normalized. Other code blocks and prose are unchanged. Diagrams require `@mermaid-js/mermaid-cli`: install it with `npm install --global @mermaid-js/mermaid-cli`, or use an existing copy in npm's cache. Builds do not download it automatically.
 
 The output is `INPUT.pdf` in `MD_TO_PDF_DEFAULT_OUTDIR` when set, otherwise beside the Markdown file. Override the directory with `-o` / `--output`.
 
