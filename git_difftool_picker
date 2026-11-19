@@ -10,7 +10,8 @@ c_help="Usage: git_difftool_picker [diff options] [revisions] [-- paths...]
        git dt [diff options] [revisions] [-- paths...]
        git dtc [diff options] [revisions] [-- paths...]
 
-Choose a changed file with fzf. Enter opens the configured difftool.
+A single changed file opens directly in the configured difftool.
+For multiple changes, choose a file with fzf and press Enter to open it.
 Esc or Ctrl+C exits the picker. git dtc lists staged changes."
 
 function main {
@@ -43,11 +44,6 @@ function main {
   if [[ -n $native_mode ]]; then
     git difftool "${tool_args[@]}" "${diff_args[@]}" "${path_args[@]}"
     return
-  fi
-
-  if ! command -v fzf >/dev/null; then
-    printf 'The difftool picker requires fzf.\n' >&2
-    return 1
   fi
 
   local -a comparison_args=("${diff_args[@]}")
@@ -92,7 +88,12 @@ function main {
       return 0
     fi
 
-    if row=$(printf '%s\n' "${rows[@]}" | FZF_DEFAULT_OPTS='' FZF_DEFAULT_OPTS_FILE='' fzf \
+    if (( ${#rows[@]} == 1 )); then
+      index=0
+    elif ! command -v fzf >/dev/null; then
+      printf 'The difftool picker requires fzf.\n' >&2
+      return 1
+    elif row=$(printf '%s\n' "${rows[@]}" | FZF_DEFAULT_OPTS='' FZF_DEFAULT_OPTS_FILE='' fzf \
       --sync --layout=reverse --delimiter=$'\t' --with-nth=2.. \
       --prompt='Diff> ' --header='Enter: open diff  Esc / Ctrl+C: exit' \
       --bind='esc:abort,ctrl-c:abort'); then
@@ -110,6 +111,9 @@ function main {
       selected_paths+=(":(top,literal)${new_paths[index]}")
     fi
     git difftool --no-prompt "${tool_args[@]}" "${comparison_args[@]}" -- "${selected_paths[@]}"
+    if (( ${#rows[@]} == 1 )); then
+      return
+    fi
   done
 }
 
