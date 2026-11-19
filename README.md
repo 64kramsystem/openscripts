@@ -34,6 +34,7 @@ OpenScripts is a collection of some of my scripts/generic programs for personal 
   - `texerak`: convenient wrapper around Tesseract, to OCR images/documents
   - `whisp`: convenient wrapper around Whisper.cpp
 - git
+  - `git_difftool_picker`: select a changed file with `fzf` and open it in Git's difftool
   - `git_find_default_branch`: finds and prints the default branch; if 'origin/HEAD' is not present, it sets it
   - `git_maintain_branches`: purge all the branches (local, and their remote tracked) without commits that aren't in the main branch; also syncs with upstream
   - `git_rename_commits`: rename git commits, using the old git (`filter-branch`) method

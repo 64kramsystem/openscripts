@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+set -o errtrace
+shopt -s inherit_errexit
+
+c_help="Usage: git_difftool_picker [diff options] [revisions] [-- paths...]
+       git dt [diff options] [revisions] [-- paths...]
+       git dtc [diff options] [revisions] [-- paths...]
+
+Choose a changed file with fzf. Enter opens the configured difftool.
+Esc or Ctrl+C exits the picker. git dtc lists staged changes."
+
+function main {
+  local -a diff_args=() path_args=() tool_args=()
+  local arg explicit_paths='' native_mode=''
+  while (( $# )); do
+    arg=$1
+    shift
+    case $arg in
+      -h|--help) printf '%s\n' "$c_help"; return ;;
+      --) path_args=(-- "$@"); explicit_paths=1; break ;;
+      -t|--tool|-x|--extcmd)
+        if (( ! $# )); then
+          git difftool "$arg"
+          return
+        fi
+        tool_args+=("$arg" "$1")
+        shift ;;
+      -t?*|-x?*|--tool=*|--extcmd=*|--trust-exit-code|--no-trust-exit-code|--gui|-g|--no-gui|--prompt|-y|--no-prompt)
+        tool_args+=("$arg") ;;
+      --dir-diff|-d|--tool-help|--no-index)
+        native_mode=1
+        diff_args+=("$arg") ;;
+      *) diff_args+=("$arg") ;;
+    esac
+  done
+  # Git runs shell aliases at the repository root.
+  cd -- "${GIT_PREFIX:-.}"
+
+  if [[ -n $native_mode ]]; then
+    git difftool "${tool_args[@]}" "${diff_args[@]}" "${path_args[@]}"
+    return
+  fi
+
+  if ! command -v fzf >/dev/null; then
+    printf 'The difftool picker requires fzf.\n' >&2
+    return 1
+  fi
+
+  local -a comparison_args=("${diff_args[@]}")
+  local implicit_paths
+  if [[ -z $explicit_paths ]]; then
+    # rev-parse quotes implicit path arguments for shell input.
+    implicit_paths=$(git rev-parse --sq --no-revs --no-flags "${diff_args[@]}")
+    eval "set -- $implicit_paths"
+    comparison_args=("${diff_args[@]:0:${#diff_args[@]}-$#}")
+  fi
+
+  changes=$(mktemp)
+  trap 'rm -f -- "$changes"' EXIT
+
+  local -a rows old_paths new_paths selected_paths
+  local status path old_path row index picker_status
+  while true; do
+    # Keep paths repository-relative for the literal pathspecs passed to difftool.
+    git diff --name-status -z --no-ext-diff --no-color \
+      "${comparison_args[@]}" --no-relative "${diff_args[@]:${#comparison_args[@]}}" \
+      "${path_args[@]}" > "$changes"
+
+    rows=() old_paths=() new_paths=()
+    while IFS= read -r -d '' status && IFS= read -r -d '' path; do
+      old_paths+=("$path")
+      old_path=$path
+      case $status in
+        R*|C*) IFS= read -r -d '' path ;;
+      esac
+      new_paths+=("$path")
+
+      if [[ $old_path == "$path" ]]; then
+        printf -v row '%s\t%s  %q' "${#old_paths[@]}" "$status" "$path"
+      else
+        printf -v row '%s\t%s  %q → %q' "${#old_paths[@]}" "$status" "$old_path" "$path"
+      fi
+      rows+=("$row")
+    done < "$changes"
+
+    if (( ! ${#rows[@]} )); then
+      printf 'No changes to diff.\n'
+      return 0
+    fi
+
+    if row=$(printf '%s\n' "${rows[@]}" | FZF_DEFAULT_OPTS='' FZF_DEFAULT_OPTS_FILE='' fzf \
+      --sync --layout=reverse --delimiter=$'\t' --with-nth=2.. \
+      --prompt='Diff> ' --header='Enter: open diff  Esc / Ctrl+C: exit' \
+      --bind='esc:abort,ctrl-c:abort'); then
+      index=${row%%$'\t'*}-1
+    else
+      picker_status=$?
+      case $picker_status in
+        1|130) return 0 ;;
+        *) return "$picker_status" ;;
+      esac
+    fi
+
+    selected_paths=(":(top,literal)${old_paths[index]}")
+    if [[ ${old_paths[index]} != "${new_paths[index]}" ]]; then
+      selected_paths+=(":(top,literal)${new_paths[index]}")
+    fi
+    git difftool --no-prompt "${tool_args[@]}" "${comparison_args[@]}" -- "${selected_paths[@]}"
+  done
+}
+
+main "$@"
