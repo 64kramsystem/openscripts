@@ -8,12 +8,13 @@ set -o nounset
 set -o errtrace
 shopt -s inherit_errexit
 
-c_help="Usage: $(basename "$0") [-h|--help] [-s|--simple] <filename>
+c_help="Usage: $(basename "$0") [-h|--help] [-s|--simple] [-n|--no-open] <filename>
 
-Creates a Bash script template, sets the permissions, and opens it in VSC.
+Creates an executable Bash script template and opens it in VS Code by default.
 
 Options:
-  -s, --simple    Create a simple template without args (only -h/--help)"
+  -s, --simple    Create a simple template without args (only -h/--help)
+  -n, --no-open   Skip opening the script in VS Code"
 
 # The shebang is compatible with Mac (which ships by default an ancient Bash version).
 #
@@ -113,10 +114,11 @@ main'
 
 v_filename=
 v_simple=
+v_no_open=
 
 function decode_cmdline_args {
   local params
-  params=$(getopt --options hs --long help,simple --name "$(basename "$0")" -- "$@")
+  params=$(getopt --options hsn --long help,simple,no-open --name "$(basename "$0")" -- "$@")
 
   eval set -- "$params"
 
@@ -127,6 +129,9 @@ function decode_cmdline_args {
         exit 0 ;;
       -s|--simple)
         v_simple=1
+        shift ;;
+      -n|--no-open)
+        v_no_open=1
         shift ;;
       --)
         shift
@@ -149,7 +154,9 @@ function main {
     echo "$c_template" > "$v_filename"
   fi
   chmod +x "$v_filename"
-  code "$v_filename"
+  if [[ -z $v_no_open ]]; then
+    code "$v_filename"
+  fi
 }
 
 decode_cmdline_args "$@"
