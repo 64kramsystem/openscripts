@@ -60,6 +60,8 @@ function main {
 
   local -a rows old_paths new_paths selected_paths
   local status path old_path row index picker_status
+  # Restore the cursor on the last opened file after returning from the difftool.
+  local last_path='' cursor=1 i
   while true; do
     # Keep paths repository-relative for the literal pathspecs passed to difftool.
     git diff --name-status -z --no-ext-diff --no-color \
@@ -88,6 +90,17 @@ function main {
       return 0
     fi
 
+    if [[ -n $last_path ]]; then
+      # Keep the previous position when the file is no longer listed.
+      (( cursor = cursor > ${#rows[@]} ? ${#rows[@]} : cursor ))
+      for i in "${!new_paths[@]}"; do
+        if [[ ${new_paths[i]} == "$last_path" ]]; then
+          cursor=$(( i + 1 ))
+          break
+        fi
+      done
+    fi
+
     if (( ${#rows[@]} == 1 )); then
       index=0
     elif ! command -v fzf >/dev/null; then
@@ -96,7 +109,7 @@ function main {
     elif row=$(printf '%s\n' "${rows[@]}" | FZF_DEFAULT_OPTS='' FZF_DEFAULT_OPTS_FILE='' fzf \
       --sync --layout=reverse --delimiter=$'\t' --with-nth=2.. \
       --prompt='Diff> ' --header='Enter: open diff  Esc / Ctrl+C: exit' \
-      --bind='esc:abort,ctrl-c:abort'); then
+      --bind='esc:abort,ctrl-c:abort' --bind="load:pos($cursor)"); then
       index=${row%%$'\t'*}-1
     else
       picker_status=$?
@@ -106,6 +119,8 @@ function main {
       esac
     fi
 
+    last_path=${new_paths[index]}
+    cursor=$(( index + 1 ))
     selected_paths=(":(top,literal)${old_paths[index]}")
     if [[ ${old_paths[index]} != "${new_paths[index]}" ]]; then
       selected_paths+=(":(top,literal)${new_paths[index]}")
