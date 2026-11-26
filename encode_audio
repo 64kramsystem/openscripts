@@ -19,15 +19,14 @@ The 'input' values can be either files or directories:
 
 Compressed input audio files which are not flac are copied, without being reencoded.
 
-The codec used is Apple's AAC encoder (afconvert), in TVBR, with a default quality of $c_default_quality.
-
-TVBR quality ranges from 0 to 127, but only 15 values are functional; others are rounded to the nearest one. Approximate stereo bitrates:
+The codec used is Apple's AAC encoder (afconvert), in TVBR.
+Quality ranges from 0 to 127, but only 15 values are functional (others are rounded to the nearest one); approximate stereo bitrates:
 
 - 127: 285
 - 118: 270
 - 109: 250        # iTunes Plus/Apple Digital Masters
 - 100: 215
--  91: 195        # balanced
+-  $c_default_quality: 195        # balanced (default)
 -  82: 165
 -  73: 150
 -  63: 130
